@@ -1,6 +1,6 @@
 # Aetherion — Astrophysics Simulation Suite
 
-[![Version](https://img.shields.io/badge/version-0.0.1--beta1-blue)]
+[![Version](https://img.shields.io/badge/version-0.1.0--beta1-blue)]
 [![Status](https://img.shields.io/badge/status-beta-orange)]
 [![License](https://img.shields.io/badge/license-MIT-green)]
 
@@ -12,7 +12,7 @@ As of 17-04-2026, Aetherion is in active BETA, with core features implemented an
 DO NOT EXPECT PERFECT STABILITY OR COMPLETE FEATURE SET YET!
 
 **Physics Model Limitations:**
-- **Temperature/Sound Speed Model:** The gas temperature calculations assume ideal gas behavior, which is optimistic for hot accreting plasma near black holes where radiation pressure and magnetic effects dominate. This is sufficient for Bondi radius order-of-magnitude estimates but should not be relied upon for precision plasma dynamics.
+- **Temperature/Sound Speed Model:** The gas temperature calculations assume ideal gas behavior, which is optimistic for hot accreting plasma near black holes where radiation pressure and magnetic effects dominate. This is fine for Bondi radius order-of-magnitude estimates but should not be relied upon for precision plasma dynamics.
 ---
 
 ## Table of Contents
@@ -105,7 +105,7 @@ make -j$(nproc)
 ./blackhole-sim
 ```
 
-> **Note:** SFML 3.x is required. Ubuntu 24.04+ provides it via `libsfml-dev`. On older Ubuntu/Debian releases, build SFML 3.0 from source or use the Flatpak distribution.
+> **Note:** SFML 3.x is required. Ubuntu 24.04+ provides it via `libsfml-dev`. On older, moreso legacy Ubuntu/Debian releases, build SFML 3.0 from source or use the Flatpak distr.
 
 ### Linux (Fedora / RHEL)
 
@@ -139,8 +139,8 @@ ctest --output-on-failure -R physics-regression
 
 - SFML 2.x is not supported — 3.x API is required.
 - On Wayland, the app forces X11/XWayland via `QT_QPA_PLATFORM=xcb` (required by SFML). Set `QT_QPA_PLATFORM=xcb` manually if needed.
-- Pulsar and merger objects are not yet implemented (see TODO.md).
-- Windows support is untested but structurally supported.
+- Pulsar and merger objects are still a VERY early WIP, and are not recommended for any serious data compilation (see TODO.md).
+- Windows support is untested and officially unsupported, but structurally supported if you wish to make a Pull request to compile to exe for windows.
 
 ---
 
