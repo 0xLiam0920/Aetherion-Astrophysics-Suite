@@ -1,15 +1,17 @@
 # Aetherion — Astrophysics Simulation Suite
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta1-blue)]
+[![Version](https://img.shields.io/badge/version-0.1.1--beta1-blue)]
 [![Status](https://img.shields.io/badge/status-beta-orange)]
 [![License](https://img.shields.io/badge/license-MIT-green)]
 
-Aetherion is a modular, open source astrophysics simulation and analysis suite designed for precision experimentation, visualization, and reproducible research workflows.
+Aetherion is an open source astrophysics simulation and analysis suite designed for precision experimentation, visualization, and reproducible research around BLACK HOLES.
 
 DISCLAIMER!
                                                        
 As of 17-04-2026, Aetherion is in active BETA, with core features implemented and undergoing testing. 
 DO NOT EXPECT PERFECT STABILITY OR COMPLETE FEATURE SET YET!
+
+SIDE NOTE: Since Apple forces you to pay 100 dollars a year to get your app certified/verified, I had to resort to ad-hoc signing. If you get a pop-up on MACOS saying "Apple cannot verify that this app is free from malware", safely ignore it.
 
 **Physics Model Limitations:**
 - **Temperature/Sound Speed Model:** The gas temperature calculations assume ideal gas behavior, which is optimistic for hot accreting plasma near black holes where radiation pressure and magnetic effects dominate. This is fine for Bondi radius order-of-magnitude estimates but should not be relied upon for precision plasma dynamics.
@@ -18,16 +20,16 @@ DO NOT EXPECT PERFECT STABILITY OR COMPLETE FEATURE SET YET!
 ## Table of Contents
 
 - [About](#about)
-- [Core Features](#core-features)
-- [Architecture](#architecture)
+- [Dependencies](#DEPENDENCIES.md)
+- [FAQ & Troubleshooting guidelines](#FAQ_TROUBLESHOOTING.md)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Data Analysis](#data-analysis)
 - [Configuration](#configuration)
 - [Known Issues](#known-issues)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+- [Roadmap](#Roadmap.md)
+- [Contributing](#contributing.md)
+- [License](#LICENSE.md)
 
 ---
 
