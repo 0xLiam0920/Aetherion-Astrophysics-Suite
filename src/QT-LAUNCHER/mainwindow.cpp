@@ -52,6 +52,7 @@
 #include <QLineSeries>
 #include <QScatterSeries>
 #include <QValueAxis>
+#include <QLogValueAxis>
 #include <QtEndian>
 
 // Returns the Aetherion app-data root, matching simulation.hpp's makeExportDir().
@@ -1123,26 +1124,44 @@ QWidget* MainWindow::createDataAnalysisPage()
         return chart;
     };
 
-    QChartView *orbitView, *consView, *precView, *deflView;
+    QChartView *orbitView, *consView, *precView, *deflView, *accrView, *lcView, *gasView, *sedView;
     QChart *orbitChart = makeChart("Orbit Path",                              &orbitView);
     QChart *consChart  = makeChart("Energy Conservation Drift",               &consView);
     QChart *precChart  = makeChart("Precession per Orbit (degrees)",          &precView);
     QChart *deflChart  = makeChart("Photon Deflection vs. Impact Parameter",  &deflView);
+    QChart *accrChart  = makeChart("Bondi-Hoyle Accretion Rate (Msun/yr)",     &accrView);
+    QChart *lcChart    = makeChart("Bolometric Light Curve  L_bol(t)",         &lcView);
+    QChart *gasChart   = makeChart("Gas Radial Profile (Bondi limit)",         &gasView);
+    QChart *sedChart   = makeChart("Spectral Energy Distribution  \u03bdL\u03bd(\u03bd)",        &sedView);
 
     chartTabs->addTab(orbitView, "Orbit Path");
     chartTabs->addTab(consView,  "Energy Conservation");
     chartTabs->addTab(precView,  "Precession");
     chartTabs->addTab(deflView,  "Photon Deflection");
+    chartTabs->addTab(accrView,  "Accretion");
+    chartTabs->addTab(lcView,    "Light Curve");
+    chartTabs->addTab(gasView,   "Gas Profile");
+    chartTabs->addTab(sedView,   "SED");
 
     // ── Axis styling helper ─────────────────────────────────────────────────
     auto styleAxes = [](QChart *chart) {
         for (auto *axis : chart->axes()) {
-            auto *va = qobject_cast<QValueAxis *>(axis);
-            if (!va) continue;
-            va->setLabelsColor(Qt::white);
-            va->setTitleBrush(QBrush(Qt::white));
-            va->setLinePen(QPen(QColor(0x60, 0x60, 0x80)));
-            va->setGridLinePen(QPen(QColor(0x25, 0x25, 0x38)));
+            axis->setLabelsBrush(QBrush(Qt::white));
+            axis->setTitleBrush(QBrush(Qt::white));
+            axis->setLinePen(QPen(QColor(0x60, 0x60, 0x80)));
+            axis->setGridLinePen(QPen(QColor(0x25, 0x25, 0x38)));
+            if (auto *va = qobject_cast<QValueAxis *>(axis))
+                va->setLabelsColor(Qt::white);
+            if (auto *la = qobject_cast<QLogValueAxis *>(axis))
+                la->setLabelsColor(Qt::white);
+        }
+    };
+
+    // Set axis titles after createDefaultAxes(); horizontal -> X, vertical -> Y.
+    auto setAxisTitles = [](QChart *chart, const QString &xTitle, const QString &yTitle) {
+        for (auto *axis : chart->axes()) {
+            if (axis->orientation() == Qt::Horizontal) axis->setTitleText(xTitle);
+            else                                       axis->setTitleText(yTitle);
         }
     };
 
@@ -1364,6 +1383,78 @@ QWidget* MainWindow::createDataAnalysisPage()
         return {};
     };
 
+    // accretion: [time_M, mdotBondi_kgs, mdotBHL_kgs, Lbol_W] (FITS only — no CSV/bin)
+    auto parseAccretion = [=](const QString &folder) -> QVector<QVector<double>> {
+        if (QFileInfo::exists(folder + "/accretion.fits")) {
+            int nRows = 0;
+            qint64 off = fitsDataOffset(folder + "/accretion.fits", &nRows);
+            QFile f(folder + "/accretion.fits");
+            if (off >= 0 && f.open(QIODevice::ReadOnly) && f.seek(off)) {
+                QVector<QVector<double>> rows;
+                for (int i = 0; i < nRows; ++i) {
+                    char buf[32];   // 4 × double (big-endian)
+                    if (f.read(buf, 32) != 32) break;
+                    auto rd = [&](int o) {
+                        uint64_t t; memcpy(&t, buf + o, 8);
+                        t = qFromBigEndian(t);
+                        double v; memcpy(&v, &t, 8); return v;
+                    };
+                    rows.append({rd(0), rd(8), rd(16), rd(24)});
+                }
+                return rows;
+            }
+        }
+        return {};
+    };
+
+    // gas radial profile: [r_M, rho_kgm3, vRad_ms, cs_ms]  (FITS only)
+    auto parseGasProfile = [=](const QString &folder) -> QVector<QVector<double>> {
+        if (QFileInfo::exists(folder + "/gas_profile.fits")) {
+            int nRows = 0;
+            qint64 off = fitsDataOffset(folder + "/gas_profile.fits", &nRows);
+            QFile f(folder + "/gas_profile.fits");
+            if (off >= 0 && f.open(QIODevice::ReadOnly) && f.seek(off)) {
+                QVector<QVector<double>> rows;
+                for (int i = 0; i < nRows; ++i) {
+                    char buf[32];
+                    if (f.read(buf, 32) != 32) break;
+                    auto rd = [&](int o) {
+                        uint64_t t; memcpy(&t, buf + o, 8);
+                        t = qFromBigEndian(t);
+                        double v; memcpy(&v, &t, 8); return v;
+                    };
+                    rows.append({rd(0), rd(8), rd(16), rd(24)});
+                }
+                return rows;
+            }
+        }
+        return {};
+    };
+
+    // SED: [nu_Hz, Lnu_WHz, nuLnu_W]  (FITS only)
+    auto parseSED = [=](const QString &folder) -> QVector<QVector<double>> {
+        if (QFileInfo::exists(folder + "/sed.fits")) {
+            int nRows = 0;
+            qint64 off = fitsDataOffset(folder + "/sed.fits", &nRows);
+            QFile f(folder + "/sed.fits");
+            if (off >= 0 && f.open(QIODevice::ReadOnly) && f.seek(off)) {
+                QVector<QVector<double>> rows;
+                for (int i = 0; i < nRows; ++i) {
+                    char buf[24];
+                    if (f.read(buf, 24) != 24) break;
+                    auto rd = [&](int o) {
+                        uint64_t t; memcpy(&t, buf + o, 8);
+                        t = qFromBigEndian(t);
+                        double v; memcpy(&v, &t, 8); return v;
+                    };
+                    rows.append({rd(0), rd(8), rd(16)});
+                }
+                return rows;
+            }
+        }
+        return {};
+    };
+
     // ── Load a project folder (CSV / FITS / binary, auto-detected) ───────────
     // Per-body files (orbit_data, conservation, precession) are written into a
     // body_<idx>[_<label>]/ subdirectory by makeBodyExportDir(). Deflection data
@@ -1402,6 +1493,7 @@ QWidget* MainWindow::createDataAnalysisPage()
                 orbitChart->addSeries(s);
                 orbitChart->createDefaultAxes();
                 styleAxes(orbitChart);
+                setAxisTitles(orbitChart, "x  (world units)", "y  (world units)");
             }
         }
 
@@ -1418,22 +1510,237 @@ QWidget* MainWindow::createDataAnalysisPage()
                 consChart->addSeries(s);
                 consChart->createDefaultAxes();
                 styleAxes(consChart);
+                setAxisTitles(consChart, "Proper time  \u03c4  (M)", "\u0394E / E\u2080");
             }
         }
 
         // Precession
         precChart->removeAllSeries();
+        for (auto *a : precChart->axes()) precChart->removeAxis(a);
+        precChart->setTitle("Precession per Orbit (degrees)");
         {
             auto rows = parsePrecession(bodyFolder);
             if (!rows.isEmpty()) {
-                auto *s = new QLineSeries();
-                s->setName("Precession (deg/orbit)");
-                s->setColor(QColor(0x66, 0xff, 0x99));
+                auto *line = new QLineSeries();
+                line->setName("Precession (deg/orbit)");
+                line->setColor(QColor(0x66, 0xff, 0x99));
+                auto *pts = new QScatterSeries();
+                pts->setName("Periapsis samples");
+                pts->setColor(QColor(0x66, 0xff, 0x99));
+                pts->setMarkerSize(9.0);
                 for (const auto &r : rows)
-                    if (r.size() >= 4) s->append(r[0], r[3]);
-                precChart->addSeries(s);
+                    if (r.size() >= 4) {
+                        line->append(r[0], r[3]);
+                        pts->append(r[0], r[3]);
+                    }
+                precChart->addSeries(line);
+                precChart->addSeries(pts);
                 precChart->createDefaultAxes();
                 styleAxes(precChart);
+                setAxisTitles(precChart, "Orbit number", "Periapsis advance  (deg / orbit)");
+                if (rows.size() == 1 && rows.first().size() >= 4) {
+                    precChart->setTitle(QString("Precession per Orbit \u2014 1 sample so far "
+                                                "(\u0394\u03c6 = %1\u00b0). Run longer for a curve.")
+                                        .arg(QString::number(rows.first()[3], 'f', 2)));
+                }
+            } else {
+                // Diagnose why: missing file vs. completed-orbit count.
+                // Need \u22652 periapsis crossings to record any data, so a
+                // short run with <2 orbits produces an empty BINTABLE.
+                const bool hasFile = QFileInfo::exists(bodyFolder + "/precession.fits")
+                                  || QFileInfo::exists(bodyFolder + "/precession.csv")
+                                  || QFileInfo::exists(bodyFolder + "/precession.bin");
+                double orbits = 0.0;
+                {
+                    auto orb = parseOrbit(bodyFolder);
+                    if (!orb.isEmpty() && orb.last().size() >= 4 && orb.first().size() >= 4)
+                        orbits = (orb.last()[3] - orb.first()[3]) / (2.0 * M_PI);
+                }
+                QString why;
+                if (!hasFile)
+                    why = "No precession data exported in this session.";
+                else if (orbits < 2.0)
+                    why = QString("Only %1 orbit%2 completed \u2014 need \u2265 2 "
+                                  "periapsis crossings to measure precession.\n"
+                                  "Let the simulation run longer before exporting.")
+                              .arg(QString::number(orbits, 'f', 2))
+                              .arg(orbits == 1.0 ? "" : "s");
+                else
+                    why = "Precession table is empty (orbit may be circular or captured before periapsis).";
+                precChart->setTitle("Precession per Orbit \u2014 no data\n" + why);
+                styleAxes(precChart);
+            }
+        }
+
+        // Accretion (session-root file, like deflection)
+        accrChart->removeAllSeries();
+        for (auto *a : accrChart->axes()) accrChart->removeAxis(a);
+        {
+            auto rows = parseAccretion(folder);
+            if (!rows.isEmpty()) {
+                constexpr double MSUN_KG = 1.98892e30;
+                constexpr double YEAR_S  = 3.15576e7;
+                const double kgs_to_MsunYr = YEAR_S / MSUN_KG;
+                auto *bondi = new QLineSeries();
+                auto *bhl   = new QLineSeries();
+                bondi->setName("\u1e40 Bondi  (v = 0)");
+                bhl->setName(  "\u1e40 BHL    (v \u2260 0)");
+                bondi->setColor(QColor(0xff, 0xcc, 0x33));
+                bhl->setColor(QColor(0x33, 0xcc, 0xff));
+                double yMin =  1e300, yMax = -1e300, xMin = 1e300, xMax = -1e300;
+                for (const auto &r : rows) {
+                    if (r.size() < 4) continue;
+                    const double t  = r[0];
+                    const double yB = r[1] * kgs_to_MsunYr;
+                    const double yH = r[2] * kgs_to_MsunYr;
+                    bondi->append(t, yB);
+                    bhl->append(  t, yH);
+                    xMin = std::min(xMin, t);
+                    xMax = std::max(xMax, t);
+                    if (yB > 0) { yMin = std::min(yMin, yB); yMax = std::max(yMax, yB); }
+                    if (yH > 0) { yMin = std::min(yMin, yH); yMax = std::max(yMax, yH); }
+                }
+                if (!bondi->points().isEmpty()) accrChart->addSeries(bondi); else delete bondi;
+                if (!bhl->points().isEmpty())   accrChart->addSeries(bhl);   else delete bhl;
+
+                // Log Y axis: values span many decades; linear hides everything at baseline.
+                auto *axX = new QValueAxis();
+                auto *axY = new QLogValueAxis();
+                axX->setTitleText("Simulation time  t  (M)");
+                axY->setTitleText("\u1e40  (M\u2299 / yr)");
+                axY->setBase(10.0);
+                axY->setLabelFormat("%.1e");
+                if (xMax > xMin) axX->setRange(xMin, xMax);
+                if (yMin < yMax && yMin > 0)
+                    axY->setRange(yMin * 0.5, yMax * 2.0);
+                accrChart->addAxis(axX, Qt::AlignBottom);
+                accrChart->addAxis(axY, Qt::AlignLeft);
+                for (auto *s : accrChart->series()) {
+                    s->attachAxis(axX);
+                    s->attachAxis(axY);
+                }
+                styleAxes(accrChart);
+            }
+        }
+
+        // Bolometric light curve  L_bol(t)  — reuses accretion.fits, col 3
+        lcChart->removeAllSeries();
+        for (auto *a : lcChart->axes()) lcChart->removeAxis(a);
+        {
+            auto rows = parseAccretion(folder);
+            if (!rows.isEmpty()) {
+                constexpr double L_SUN_W = 3.828e26;
+                auto *L = new QLineSeries();
+                L->setName("L_bol");
+                L->setColor(QColor(0xff, 0x88, 0x33));
+                double yMin = 1e300, yMax = -1e300, xMin = 1e300, xMax = -1e300;
+                for (const auto &r : rows) {
+                    if (r.size() < 4) continue;
+                    const double t  = r[0];
+                    const double Ly = r[3] / L_SUN_W;
+                    if (Ly <= 0.0) continue;
+                    L->append(t, Ly);
+                    xMin = std::min(xMin, t); xMax = std::max(xMax, t);
+                    yMin = std::min(yMin, Ly); yMax = std::max(yMax, Ly);
+                }
+                if (!L->points().isEmpty()) lcChart->addSeries(L); else delete L;
+
+                auto *axX = new QValueAxis();
+                auto *axY = new QLogValueAxis();
+                axX->setTitleText("Simulation time  t  (M)");
+                axY->setTitleText("L_bol  (L\u2299)");
+                axY->setBase(10.0);
+                axY->setLabelFormat("%.1e");
+                if (xMax > xMin) axX->setRange(xMin, xMax);
+                if (yMin < yMax && yMin > 0)
+                    axY->setRange(yMin * 0.5, yMax * 2.0);
+                lcChart->addAxis(axX, Qt::AlignBottom);
+                lcChart->addAxis(axY, Qt::AlignLeft);
+                for (auto *s : lcChart->series()) { s->attachAxis(axX); s->attachAxis(axY); }
+                styleAxes(lcChart);
+            }
+        }
+
+        // Gas radial profile  ρ(r), |v_rad|(r), c_s(r) on a shared log-r axis
+        gasChart->removeAllSeries();
+        for (auto *a : gasChart->axes()) gasChart->removeAxis(a);
+        {
+            auto rows = parseGasProfile(folder);
+            if (!rows.isEmpty()) {
+                auto *rhoS = new QLineSeries();
+                auto *vS   = new QLineSeries();
+                auto *csS  = new QLineSeries();
+                rhoS->setName("\u03c1  (kg/m\u00b3)");
+                vS  ->setName("|v_rad|  (m/s)");
+                csS ->setName("c_s  (m/s)");
+                rhoS->setColor(QColor(0xff, 0x66, 0x66));
+                vS  ->setColor(QColor(0x66, 0xcc, 0xff));
+                csS ->setColor(QColor(0x99, 0xff, 0x99));
+                double xMin = 1e300, xMax = -1e300, yMin = 1e300, yMax = -1e300;
+                for (const auto &r : rows) {
+                    if (r.size() < 4) continue;
+                    const double rr = r[0];
+                    const double rho = r[1];
+                    const double vr  = std::abs(r[2]);
+                    const double cs  = r[3];
+                    if (rr <= 0) continue;
+                    if (rho > 0) { rhoS->append(rr, rho); yMin = std::min(yMin, rho); yMax = std::max(yMax, rho); }
+                    if (vr  > 0) { vS  ->append(rr, vr ); yMin = std::min(yMin, vr ); yMax = std::max(yMax, vr ); }
+                    if (cs  > 0) { csS ->append(rr, cs ); yMin = std::min(yMin, cs ); yMax = std::max(yMax, cs ); }
+                    xMin = std::min(xMin, rr); xMax = std::max(xMax, rr);
+                }
+                if (!rhoS->points().isEmpty()) gasChart->addSeries(rhoS); else delete rhoS;
+                if (!vS  ->points().isEmpty()) gasChart->addSeries(vS);   else delete vS;
+                if (!csS ->points().isEmpty()) gasChart->addSeries(csS);  else delete csS;
+
+                auto *axX = new QLogValueAxis();
+                auto *axY = new QLogValueAxis();
+                axX->setTitleText("Radius  r  (M)");
+                axY->setTitleText("Profile value  (mixed units; see legend)");
+                axX->setBase(10.0); axY->setBase(10.0);
+                axX->setLabelFormat("%.1e"); axY->setLabelFormat("%.1e");
+                if (xMin < xMax && xMin > 0) axX->setRange(xMin, xMax);
+                if (yMin < yMax && yMin > 0) axY->setRange(yMin * 0.5, yMax * 2.0);
+                gasChart->addAxis(axX, Qt::AlignBottom);
+                gasChart->addAxis(axY, Qt::AlignLeft);
+                for (auto *s : gasChart->series()) { s->attachAxis(axX); s->attachAxis(axY); }
+                styleAxes(gasChart);
+            }
+        }
+
+        // Spectral energy distribution  νLν(ν)  — log-log
+        sedChart->removeAllSeries();
+        for (auto *a : sedChart->axes()) sedChart->removeAxis(a);
+        {
+            auto rows = parseSED(folder);
+            if (!rows.isEmpty()) {
+                auto *nuLnu = new QLineSeries();
+                nuLnu->setName("\u03bd L_\u03bd");
+                nuLnu->setColor(QColor(0xff, 0xaa, 0x55));
+                double xMin = 1e300, xMax = -1e300, yMin = 1e300, yMax = -1e300;
+                for (const auto &r : rows) {
+                    if (r.size() < 3) continue;
+                    const double nu = r[0];
+                    const double y  = r[2];
+                    if (nu <= 0 || y <= 0) continue;
+                    nuLnu->append(nu, y);
+                    xMin = std::min(xMin, nu); xMax = std::max(xMax, nu);
+                    yMin = std::min(yMin, y);  yMax = std::max(yMax, y);
+                }
+                if (!nuLnu->points().isEmpty()) sedChart->addSeries(nuLnu); else delete nuLnu;
+
+                auto *axX = new QLogValueAxis();
+                auto *axY = new QLogValueAxis();
+                axX->setTitleText("Frequency  \u03bd  (Hz)");
+                axY->setTitleText("\u03bd L_\u03bd  (W)");
+                axX->setBase(10.0); axY->setBase(10.0);
+                axX->setLabelFormat("%.1e"); axY->setLabelFormat("%.1e");
+                if (xMin < xMax && xMin > 0) axX->setRange(xMin, xMax);
+                if (yMin < yMax && yMin > 0) axY->setRange(yMin * 0.5, yMax * 2.0);
+                sedChart->addAxis(axX, Qt::AlignBottom);
+                sedChart->addAxis(axY, Qt::AlignLeft);
+                for (auto *s : sedChart->series()) { s->attachAxis(axX); s->attachAxis(axY); }
+                styleAxes(sedChart);
             }
         }
 
@@ -1460,6 +1767,7 @@ QWidget* MainWindow::createDataAnalysisPage()
                 if (!captSeries->points().isEmpty())  deflChart->addSeries(captSeries); else delete captSeries;
                 deflChart->createDefaultAxes();
                 styleAxes(deflChart);
+                setAxisTitles(deflChart, "Impact parameter  b  (M)", "Deflection angle  (deg)");
             }
         }
 

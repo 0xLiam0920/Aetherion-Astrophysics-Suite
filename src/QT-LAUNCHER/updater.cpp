@@ -138,6 +138,17 @@ void Updater::onCheckFinished()
     reply->deleteLater();
 
     if (reply->error() != QNetworkReply::NoError) {
+        // 404 = no published releases yet (may have tags but no GitHub Release).
+        const int httpStatus = reply->attribute(
+            QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (httpStatus == 404) {
+            if (!m_silent)
+                QMessageBox::information(m_parentWidget, "Check for Updates",
+                    "No releases have been published yet for this repository.\n\n"
+                    "Make sure you have published a GitHub Release (not just a git tag).");
+            return;
+        }
+
         if (!m_silent) {
             QMessageBox::warning(m_parentWidget, "Update Check Failed",
                 "Could not reach the update server.\n\n" + reply->errorString());

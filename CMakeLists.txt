@@ -117,12 +117,14 @@ target_link_libraries(blackhole-sim PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Charts Qt6::Network
     SFML::Graphics SFML::Window SFML::System
     OpenGL::GL
+    aetherion_imgui
 )
 
 # ── Application version (must match the GitHub release tag, without 'v') ──
-set(AETHERION_VERSION "0.1.0")
+set(AETHERION_VERSION "0.1.3")
 target_compile_definitions(blackhole-sim PRIVATE
     AETHERION_VERSION="${AETHERION_VERSION}"
+    AETHERION_QT_HOST
 )
 
 # GLEW for non-Apple platforms
@@ -167,6 +169,37 @@ target_include_directories(blackhole-2D PRIVATE
 )
 target_link_libraries(blackhole-2D PRIVATE SFML::Graphics SFML::Window SFML::System)
 
+# ── Dear ImGui static library ─────────────────────────────────────────────
+# Contains imgui core + imgui-SFML (standalone path) + imgui_impl_opengl3
+# (Qt-embedded path). Both backends coexist: the SFML backend is used by
+# blackhole-3D; the raw GL3 backend is used by blackhole-sim (AETHERION_QT_HOST).
+add_library(aetherion_imgui STATIC
+    external/imgui/imgui.cpp
+    external/imgui/imgui_draw.cpp
+    external/imgui/imgui_tables.cpp
+    external/imgui/imgui_widgets.cpp
+    external/imgui-sfml/imgui-SFML.cpp
+    external/imgui/backends/imgui_impl_opengl3.cpp
+)
+# These third-party sources don't use Qt; skip the meta-object compiler.
+set_target_properties(aetherion_imgui PROPERTIES
+    AUTOMOC OFF AUTORCC OFF AUTOUIC OFF
+)
+target_include_directories(aetherion_imgui PUBLIC
+    ${CMAKE_SOURCE_DIR}/external/imgui
+    ${CMAKE_SOURCE_DIR}/external/imgui-sfml
+    ${CMAKE_SOURCE_DIR}/external/imgui/backends
+)
+target_compile_definitions(aetherion_imgui PUBLIC
+    IMGUI_USER_CONFIG="imconfig-SFML.h"
+)
+target_link_libraries(aetherion_imgui PUBLIC
+    SFML::Graphics SFML::Window SFML::System OpenGL::GL
+)
+if(NOT APPLE)
+    target_link_libraries(aetherion_imgui PUBLIC GLEW::GLEW)
+endif()
+
 add_executable(blackhole-3D
     src/3D/BlackHole3D.cpp
     src/3D/shader_utils.cpp
@@ -177,7 +210,10 @@ target_include_directories(blackhole-3D PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}
 )
-target_link_libraries(blackhole-3D PRIVATE SFML::Graphics SFML::Window SFML::System OpenGL::GL)
+target_link_libraries(blackhole-3D PRIVATE
+    SFML::Graphics SFML::Window SFML::System OpenGL::GL
+    aetherion_imgui
+)
 if(NOT APPLE)
     target_link_libraries(blackhole-3D PRIVATE GLEW::GLEW)
 endif()

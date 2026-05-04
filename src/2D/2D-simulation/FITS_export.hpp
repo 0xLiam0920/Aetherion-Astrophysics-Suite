@@ -97,13 +97,53 @@ static std::string keyVal(const std::string& key, const std::string& val, const 
     return result;
 }
 
+// Overload for double values — fixed-width FITS floating-point card.
+// FITS uses ASCII E-notation, right-justified in columns 11–30.
+static std::string keyVal(const std::string& key, double val, const std::string& comment = "") {
+    char buf[81] = {};
+    if (comment.empty())
+        snprintf(buf, 81, "%-8s= %20.12E", key.c_str(), val);
+    else
+        snprintf(buf, 81, "%-8s= %20.12E / %s", key.c_str(), val, comment.c_str());
+    std::string result(buf, 80);
+    for (size_t i = result.find('\0'); i < 80; ++i) {
+        result[i] = ' ';
+    }
+    return result;
+}
+
+/*--------- Simulation metadata baked into PRIMARY HDU ---------*/
+// Research-grade FITS files need the simulation parameters that produced
+// the data attached to the primary HDU header so downstream analysis tools
+// can reconstruct units and physical context without out-of-band metadata.
+struct SimulationMetadata {
+    double M_BH      = 0.0;   // black hole geometric mass [M_sun]
+    double c_s       = 0.0;   // sound speed [units of c]
+    double r_Bondi   = 0.0;   // Bondi radius [units of M = r_g/2 ; equivalently the value reported by Schwarzschild::bondiRadius / M]
+    double beta      = 0.0;   // dimensionless v/c of the exported body (orbital velocity)
+    bool   valid     = false; // when false, only the standard SIMPLE/BITPIX/NAXIS/EXTEND cards are written
+};
+
 /*--------- Primary HDU (mandatory empty image for pure-table FITS) ---------*/
-static int writePrimaryHDU(std::ofstream& f) {
+static int writePrimaryHDU(std::ofstream& f, const SimulationMetadata& meta = {}) {
     int n = 0;
     writeCard(f, "SIMPLE  =                    T / Aetherion Astrophysics Suite"); n++;
     writeCard(f, "BITPIX  =                    8"); n++;
     writeCard(f, "NAXIS   =                    0"); n++;
     writeCard(f, "EXTEND  =                    T"); n++;
+
+    // Bake simulation parameters into the primary header (HIERARCH-style
+    // 8-char keys keep the standard FITS card layout). These are the four
+    // core Bondi-accretion parameters required for research reproducibility.
+    if (meta.valid) {
+        writeCard(f, keyVal("M_BH",    meta.M_BH,    "[Msun] black hole mass"));                 n++;
+        writeCard(f, keyVal("C_S",     meta.c_s,     "[c] gas sound speed"));                    n++;
+        writeCard(f, keyVal("R_BONDI", meta.r_Bondi, "[M] Bondi accretion radius"));             n++;
+        writeCard(f, keyVal("BETA",    meta.beta,    "[c] orbital velocity v/c of exported body")); n++;
+        writeCard(f, "COMMENT Parameters above describe the simulation that produced this HDU.");  n++;
+        writeCard(f, "COMMENT Units: M_BH solar masses; C_S, BETA in units of c; R_BONDI in M.");  n++;
+    }
+
     writeCard(f, "END"); n++;
     writePadBlock(f, n);
     return n;
@@ -178,12 +218,13 @@ static void writeBinTableHDU(
 template<typename TrailContainer>
 inline bool exportOrbitData(
     const std::string& filename,
-    const TrailContainer& trail)
+    const TrailContainer& trail,
+    const SimulationMetadata& meta = {})
 {
     std::ofstream f(filename, std::ios::binary);
     if (!f) return false;
 
-    writePrimaryHDU(f);
+    writePrimaryHDU(f, meta);
 
     int nRows = (int)trail.size();
     // 4 doubles per row = 32 bytes
@@ -206,12 +247,13 @@ inline bool exportOrbitData(
 
 inline bool exportDeflectionTable(
     const std::string& filename,
-    const std::vector<PhotonDeflection>& table)
+    const std::vector<PhotonDeflection>& table,
+    const SimulationMetadata& meta = {})
 {
     std::ofstream f(filename, std::ios::binary);
     if (!f) return false;
 
-    writePrimaryHDU(f);
+    writePrimaryHDU(f, meta);
 
     int nRows = (int)table.size();
     // 3 doubles + 1 int32 = 28 bytes per row
@@ -237,12 +279,13 @@ inline bool exportDeflectionTable(
 
 inline bool exportConservationHistory(
     const std::string& filename,
-    const ConservationTracker& tracker)
+    const ConservationTracker& tracker,
+    const SimulationMetadata& meta = {})
 {
     std::ofstream f(filename, std::ios::binary);
     if (!f) return false;
 
-    writePrimaryHDU(f);
+    writePrimaryHDU(f, meta);
 
     int nRows = (int)tracker.driftHistory.size();
     // 2 doubles = 16 bytes
@@ -264,12 +307,13 @@ inline bool exportConservationHistory(
 
 inline bool exportPrecessionData( // ok so this is just the same as the above but with different columns. I could probably templatize this whole thing but... do I really want to?
     const std::string& filename,
-    const PrecessionTracker& tracker)
+    const PrecessionTracker& tracker,
+    const SimulationMetadata& meta = {})
 {
     std::ofstream f(filename, std::ios::binary);
     if (!f) return false;
 
-    writePrimaryHDU(f); // writes the MPHDU with the standard header cards. This is not the function you're looking for.
+    writePrimaryHDU(f, meta); // writes the MPHDU with the standard header cards. This is not the function you're looking for.
 
     int nRows = (int)tracker.precessionPerOrbit.size(); // number of orbits tracked, which determines the number of rows in the table. This is just the size of the precessionPerOrbit vector, which should have one entry per orbit completed.
     // 1 int32 + 3 doubles = 28 bytes
@@ -290,6 +334,105 @@ inline bool exportPrecessionData( // ok so this is just the same as the above bu
                 out.write(reinterpret_cast<char*>(&phi), 8);
                 out.write(reinterpret_cast<char*>(&pr),  8);
                 out.write(reinterpret_cast<char*>(&pd),  8);
+            }
+        });
+    return true;
+}
+
+/*--------- Bondi-Hoyle accretion history (Ṁ_Bondi, Ṁ_BHL, L_bol) ---------*/
+inline bool exportAccretionHistory(
+    const std::string& filename,
+    const BondiAccretionTracker& tracker,
+    const SimulationMetadata& meta = {})
+{
+    std::ofstream f(filename, std::ios::binary);
+    if (!f) return false;
+
+    writePrimaryHDU(f, meta);
+
+    int nRows = (int)tracker.history.size();
+    // 4 doubles = 32 bytes per row: TIME [M], MDOT_BND [kg/s], MDOT_BHL [kg/s], L_BOL [W]
+    writeBinTableHDU(f, "ACCRETION",
+        {"TIME",   "MDOT_BND",  "MDOT_BHL",  "L_BOL"},
+        {"1D",     "1D",         "1D",         "1D"},
+        {"M",      "kg/s",       "kg/s",       "W"},
+        nRows, 32,
+        [&](std::ofstream& out) {
+            for (const auto& e : tracker.history) {
+                double t  = swapDouble(e.t_M);
+                double m1 = swapDouble(e.mdotBondi_kgs);
+                double m2 = swapDouble(e.mdotBHL_kgs);
+                double L  = swapDouble(e.L_bol_W);
+                out.write(reinterpret_cast<char*>(&t),  8);
+                out.write(reinterpret_cast<char*>(&m1), 8);
+                out.write(reinterpret_cast<char*>(&m2), 8);
+                out.write(reinterpret_cast<char*>(&L),  8);
+            }
+        });
+    return true;
+}
+
+/*--------- Gas radial profile snapshot (Bondi-limit ρ, v_rad, c_s vs r) ---------*/
+inline bool exportGasRadialProfile(
+    const std::string& filename,
+    const GasRadialProfile& prof,
+    const SimulationMetadata& meta = {})
+{
+    if (!prof.valid) return false;
+    std::ofstream f(filename, std::ios::binary);
+    if (!f) return false;
+
+    writePrimaryHDU(f, meta);
+
+    int nRows = (int)GasRadialProfile::N_SAMPLES;
+    // 4 doubles = 32 bytes per row: R [M], RHO [kg/m^3], V_RAD [m/s], C_S [m/s]
+    writeBinTableHDU(f, "GAS_PROF",
+        {"R",      "RHO",       "V_RAD",   "C_S"},
+        {"1D",     "1D",         "1D",      "1D"},
+        {"M",      "kg/m3",      "m/s",     "m/s"},
+        nRows, 32,
+        [&](std::ofstream& out) {
+            for (int i = 0; i < nRows; ++i) {
+                double r  = swapDouble(prof.r_M[i]);
+                double rh = swapDouble(prof.rho_kgm3[i]);
+                double vr = swapDouble(prof.vRad_ms[i]);
+                double cs = swapDouble(prof.cs_ms[i]);
+                out.write(reinterpret_cast<char*>(&r),  8);
+                out.write(reinterpret_cast<char*>(&rh), 8);
+                out.write(reinterpret_cast<char*>(&vr), 8);
+                out.write(reinterpret_cast<char*>(&cs), 8);
+            }
+        });
+    return true;
+}
+
+/*--------- Spectral energy distribution snapshot (multi-color disk) ---------*/
+inline bool exportSED(
+    const std::string& filename,
+    const SEDSnapshot& sed,
+    const SimulationMetadata& meta = {})
+{
+    if (!sed.valid) return false;
+    std::ofstream f(filename, std::ios::binary);
+    if (!f) return false;
+
+    writePrimaryHDU(f, meta);
+
+    int nRows = (int)SEDSnapshot::N_FREQ;
+    // 3 doubles = 24 bytes per row: NU [Hz], LNU [W/Hz], NU_LNU [W]
+    writeBinTableHDU(f, "SED",
+        {"NU",     "LNU",        "NU_LNU"},
+        {"1D",     "1D",          "1D"},
+        {"Hz",     "W/Hz",        "W"},
+        nRows, 24,
+        [&](std::ofstream& out) {
+            for (int i = 0; i < nRows; ++i) {
+                double nu  = swapDouble(sed.nu_Hz[i]);
+                double Lnu = swapDouble(sed.Lnu_WHz[i]);
+                double nL  = swapDouble(sed.nuLnu_W[i]);
+                out.write(reinterpret_cast<char*>(&nu),  8);
+                out.write(reinterpret_cast<char*>(&Lnu), 8);
+                out.write(reinterpret_cast<char*>(&nL),  8);
             }
         });
     return true;

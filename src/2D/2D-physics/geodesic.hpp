@@ -88,3 +88,38 @@ inline TimelikeState stepTimelikeGeodesic(
 
     return result;
 }
+
+// Step a timelike geodesic by proper time dτ using Runge-Kutta-Fehlberg 4(5).
+// Cash-Karp variant — returns the 5th-order result and writes the embedded
+// 4th-vs-5th-order local truncation error estimate into *errOut.
+// Same boundary clamps and NaN guard as the RK4 stepper, since the
+// derivative blows up identically near r=2M regardless of integrator choice.
+inline TimelikeState stepTimelikeGeodesicRKF45(
+    const Schwarzschild& bh,
+    const TimelikeState& state,
+    double L,
+    double dtau,
+    double* errOut)
+{
+    const double rMin = bh.horizon() * 1.01;
+    TimelikeState clamped = state;
+    if (clamped.r < rMin) clamped.r = rMin;
+
+    double err = 0.0;
+    auto result = rkf45_step(clamped, dtau, [&](const TimelikeState& s) -> TimelikeState {
+        double r_safe = std::max(s.r, rMin);
+        return {
+            s.vr,
+            L / (r_safe * r_safe),
+            bh.radialAcceleration(r_safe, L)
+        };
+    }, &err);
+
+    if (!std::isfinite(result.r) || !std::isfinite(result.phi) || !std::isfinite(result.vr)) {
+        if (errOut) *errOut = 0.0;
+        return state;
+    }
+
+    if (errOut) *errOut = err;
+    return result;
+}

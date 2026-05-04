@@ -50,8 +50,10 @@ State rkf45_step(const State& state, double h, DerivFunc f, double* errOut) {
     auto k5 = f(state + k1 * (h * (-11.0/54.0))  + k2 * (h * (5.0/2.0))     + k3 * (h * (-70.0/27.0))  + k4 * (h * (35.0/27.0)));
     auto k6 = f(state + k1 * (h * (1631.0/55296.0)) + k2 * (h * (175.0/512.0)) + k3 * (h * (575.0/13824.0)) + k4 * (h * (44275.0/110592.0)) + k5 * (h * (253.0/4096.0)));
 
-    // 4th-order solution
-    auto y4 = state + (k1 * (2825.0/27648.0) + k3 * (18575.0/48384.0) + k4 * (13525.0/55296.0) + k6 * (0.25)) * h;
+    // 4th-order solution (Cash-Karp b*: 2825/27648, 0, 18575/48384, 13525/55296, -277/14336, 1/4)
+    // NOTE: the k5 term (-277/14336) is required — omitting it makes the error estimate O(h)
+    // instead of O(h^5), which causes the adaptive controller to shrink h to ~1e-14 and stall.
+    auto y4 = state + (k1 * (2825.0/27648.0) + k3 * (18575.0/48384.0) + k4 * (13525.0/55296.0) + k5 * (-277.0/14336.0) + k6 * (0.25)) * h;
     // 5th-order solution
     auto y5 = state + (k1 * (37.0/378.0) + k3 * (250.0/621.0) + k4 * (125.0/594.0) + k6 * (512.0/1771.0)) * h;
 

@@ -172,7 +172,7 @@ int main(int argc, char* argv[]) {
 
     // CLI: --preset <id>  (ton618, sgra, 3c273, j0529, m87, cygnusx1, gw150914, intermediate, primordial,
     //                       gaiabh1, gaiabh2, gaiabh3, v404cyg, a062000, groj165540, ngc1277, oj287)
-    // useful for screenshots and demos — lets you launch directly into a specific black hole without
+    // useful for screenshots and demo, lets you launch directly into a specific black hole without
     // clicking through the menu. the string-to-index mapping below is clunky but there aren't that many
     // presets so I'm not going to build a proper lookup table for it
     for (int i = 1; i < argc - 1; ++i) {
@@ -270,6 +270,38 @@ int main(int argc, char* argv[]) {
         sf::Vector2f center = camera.center();
         double M = sim.bh.metric.M;
 
+        // ── Barycentric binary mode (Gaia BH1 / BH2 / BH3) ────────────────────
+        // For these systems the companion mass is significant enough that the BH
+        // visibly wobbles around the shared center of mass — exactly the signal
+        // Gaia measured astrometrically.  The Schwarzschild physics is still
+        // integrated in BH-centred coords, but at render time we:
+        //   • keep the *barycenter* at screen centre
+        //   • draw the BH offset by  r_BH = -r_comp × q  (q = M_comp/(M_BH+M_comp))
+        //   • draw the companion at   r_comp_bary = r_comp × (1-q)  (= r_comp × M_BH/(M_BH+M_comp))
+        //   • show a "Center of Mass" marker at screen centre
+        bool         barycentricMode = false;
+        float        baryScale       = 1.0f;   // companion world-coord scale factor
+        sf::Vector2f bhCenter        = center; // screen position of the BH (default: screen centre)
+
+        if (ui.presetActive && ui.showGalaxySystem
+            && BH2D_PRESETS[ui.presetIdx].isBinaryWithBarycenter
+            && !sim.bodies.empty())
+        {
+            const auto&  preset  = BH2D_PRESETS[ui.presetIdx];
+            double M_comp = preset.companionMassSolar;
+            double M_bh   = preset.massSolar;
+            double q      = M_comp / (M_bh + M_comp);   // fraction of separation = BH offset
+            baryScale     = (float)(1.0 - q);            // companion scale: M_BH / (M_BH + M_comp)
+
+            // Current companion position in BH-centred world coords
+            double cx = sim.bodies[0].worldX();
+            double cy = sim.bodies[0].worldY();
+
+            // BH sits at -q × (companion vector) in barycenter-centred coords
+            bhCenter = camera.worldToScreen((float)(-cx * q), (float)(-cy * q));
+            barycentricMode = true;
+        }
+
         // Rebuild HUD text only when relevant simulation state changes
         if (hudRefreshAccum >= HUD_REFRESH_SECONDS || hudNeedsRebuild()) {
             cachedHUD = buildHUD(sim, ui);
@@ -295,31 +327,32 @@ int main(int argc, char* argv[]) {
                 float bondiPx = (float)(preset.zones.bondiRadiusM * M * ppm);
                 float tidalPx = (float)(preset.zones.tidalDisruptionM * M * ppm);
 
-                renderer.drawInfluenceZone(center, soiPx,
+                // Influence zones are centred on the BH, not the barycenter
+                renderer.drawInfluenceZone(bhCenter, soiPx,
                     sf::Color(100, 255, 100, 80), "Sphere of Influence");
-                renderer.drawInfluenceZone(center, bondiPx,
+                renderer.drawInfluenceZone(bhCenter, bondiPx,
                     sf::Color(255, 200, 50, 90), "Bondi Radius");
-                renderer.drawInfluenceZone(center, tidalPx,
+                renderer.drawInfluenceZone(bhCenter, tidalPx,
                     sf::Color(255, 80, 80, 120), "Tidal Disruption");
 
                 if (preset.zones.hasJetCones) { // draws relativistic jets if the preset has them (most don't)
                     float jetLen = soiPx * 1.5f;
-                    renderer.drawJetCones(center, jetLen);
+                    renderer.drawJetCones(bhCenter, jetLen);
                 }
             }
         }
 
-        renderer.drawHorizon(center, (float)(sim.bh.metric.horizon() * camera.pixelsPerM));
+        renderer.drawHorizon(bhCenter, (float)(sim.bh.metric.horizon() * camera.pixelsPerM));
 
         if (ui.presetActive) { //  && BH2D_PRESETS[ui.presetIdx].hasAccretionDisk maybe?
             // the accretion disk is just a glowing ring drawn on screen. it's not physically simulated.
             // please do not ask me when I'm adding MHD accretion disk dynamics. the answer is never.
             float diskRadius = (float)(6.0 * M * camera.pixelsPerM);
-            renderer.drawAccretionDisk(center, diskRadius);
+            renderer.drawAccretionDisk(bhCenter, diskRadius);
         }
 
         if (ui.showPhotonSphere)
-            renderer.drawPhotonSphere(center, (float)(sim.bh.metric.photonSphere() * camera.pixelsPerM));
+            renderer.drawPhotonSphere(bhCenter, (float)(sim.bh.metric.photonSphere() * camera.pixelsPerM));
 
         // Rays — visualization layer computes colors
         if (ui.showRays) {
@@ -349,10 +382,17 @@ int main(int argc, char* argv[]) {
         if (ui.showTimeDilationMap)
             renderer.drawTimeDilationMap(center, M, camera.pixelsPerM);
 
+        // Barycenter marker — drawn before bodies so it sits behind them
+        if (barycentricMode)
+            renderer.drawBarycenterMarker(center);
+
         // Bodies + orbit paths
         for (size_t bodyIdx = 0; bodyIdx < sim.bodies.size(); ++bodyIdx) {
             const auto& body = sim.bodies[bodyIdx];
-            auto bodyVis   = OrbitVisualizer::computeBodyVisual(body, sim.bh.metric, camera);
+            // In barycentric mode the companion's world coords are scaled by baryScale
+            // (= M_BH / (M_BH + M_comp)) so both objects orbit screen centre.
+            float scale = (barycentricMode && body.isGalaxyBody) ? baryScale : 1.0f;
+            auto bodyVis = OrbitVisualizer::computeBodyVisual(body, sim.bh.metric, camera, scale);
             renderer.drawBody(bodyVis);
 
             // Pulsar-specific visual decoration (jets, magnetic field lines, LC ring, flux tubes)
@@ -367,12 +407,12 @@ int main(int argc, char* argv[]) {
                     (float)sim.pulsarState.precPhase,
                     lc_px,
                     sim.pulsarData.inLightCylinder,
-                    center,                          // BH screen position (defined at line ~240)
+                    bhCenter,                        // BH screen position
                     sim.pulsarData.magPower_ergs
                 );
             }
 
-            auto orbitPath = OrbitVisualizer::computeOrbitPath(body, sim.bh.metric, camera);
+            auto orbitPath = OrbitVisualizer::computeOrbitPath(body, sim.bh.metric, camera, scale);
             renderer.drawOrbitPath(orbitPath);
 
             // Label galaxy system bodies
@@ -383,6 +423,9 @@ int main(int argc, char* argv[]) {
                     case GalaxyBodyType::GasCloud:       labelColor = sf::Color(255, 150, 100); break;
                     case GalaxyBodyType::StellarCluster:  labelColor = sf::Color(200, 220, 255); break;
                     case GalaxyBodyType::DwarfGalaxy:    labelColor = sf::Color(255, 200, 255); break;
+                    case GalaxyBodyType::NeutronStar:    labelColor = sf::Color(160, 200, 255); break;
+                    case GalaxyBodyType::WhiteDwarf:     labelColor = sf::Color(200, 215, 255); break;
+                    case GalaxyBodyType::CompanionStar:  labelColor = sf::Color(255, 220, 160); break;
                 }
                 renderer.drawBodyLabel(bodyVis.screenPos, body.label, labelColor);
             }

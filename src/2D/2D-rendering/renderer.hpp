@@ -217,6 +217,31 @@ public:
         window_.draw(lbl);
     }
 
+    /*--------- Barycenter / center-of-mass marker ---------*/
+    // Draws a small cross-hair and "Center of Mass" label at the given screen position.
+    // Used for binary presets (Gaia BH1/2/3) where both objects orbit the barycenter.
+    void drawBarycenterMarker(sf::Vector2f pos) {
+        constexpr float ARM = 7.0f;
+        sf::Color col(200, 255, 200, 200);
+
+        sf::RectangleShape h(sf::Vector2f(ARM * 2.0f, 1.5f));
+        h.setOrigin({ARM, 0.75f});
+        h.setPosition(pos);
+        h.setFillColor(col);
+        window_.draw(h);
+
+        sf::RectangleShape v(sf::Vector2f(1.5f, ARM * 2.0f));
+        v.setOrigin({0.75f, ARM});
+        v.setPosition(pos);
+        v.setFillColor(col);
+        window_.draw(v);
+
+        sf::Text lbl(font_, "Center of Mass", 10);
+        lbl.setFillColor(col);
+        lbl.setPosition({pos.x + ARM + 4.0f, pos.y - 7.0f});
+        window_.draw(lbl);
+    }
+
     /*--------- HUD ---------*/
     void drawHUD(const std::string& text) {
         infoText_.setString(text);
@@ -621,7 +646,18 @@ public:
     void drawNotification(const std::string& text, float viewW, float viewH) {
         sf::Text notif(font_, text, 14);
         notif.setFillColor(sf::Color(100, 255, 100));
-        notif.setPosition({viewW * 0.3f, viewH - 30.0f});
+        // Anchor at the left margin so long export-path strings aren't clipped
+        // by the right edge or the HUD panel. If the text is still wider than
+        // the view (very long path + many filenames), shift left so the tail
+        // remains visible.
+        const float margin = 10.0f;
+        const float textW = notif.getLocalBounds().size.x;
+        float x = margin;
+        if (textW + margin * 2.0f > viewW) {
+            x = viewW - textW - margin;
+            if (x < margin) x = margin;
+        }
+        notif.setPosition({x, viewH - 30.0f});
         window_.draw(notif);
     }
 

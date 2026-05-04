@@ -207,11 +207,12 @@ PLIST
 
         if [[ -n "${_QT_PLUGINS_DIR}" ]]; then
             # Only copy plugin categories actually needed by the app.
-            # platforms  – required (Qt cannot start without the cocoa plugin)
-            # styles     – optional but recommended for correct native look
+            # platforms    – required (Qt cannot start without the cocoa plugin)
+            # styles       – optional but recommended for correct native look
             # imageformats – needed for PNG/JPEG icon loading
             # iconengines  – needed for SVG-based icons in Qt widgets
-            for _cat in platforms styles imageformats iconengines; do
+            # tls          – required for HTTPS (network requests, auto-updater)
+            for _cat in platforms styles imageformats iconengines tls; do
                 if [[ -d "${_QT_PLUGINS_DIR}/${_cat}" ]]; then
                     mkdir -p "${CONTENTS}/PlugIns/${_cat}"
                     cp -RL "${_QT_PLUGINS_DIR}/${_cat}/." "${CONTENTS}/PlugIns/${_cat}/" 2>/dev/null || true

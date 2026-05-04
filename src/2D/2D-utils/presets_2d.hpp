@@ -55,6 +55,13 @@ struct BHPreset2D {
     const GalaxySystemBody* galaxyBodies;
     int                     numGalaxyBodies;
     InfluenceZones          zones;
+
+    // Barycentric binary: true when the companion mass is large enough that
+    // both the BH and companion visibly orbit the shared center of mass.
+    // Set for Gaia BH1/BH2/BH3 whose companions were detected via astrometric
+    // wobble — i.e. the BH offset from the barycenter is observable.
+    bool   isBinaryWithBarycenter = false;
+    double companionMassSolar     = 0.0;  // companion mass (Msun) for mass-ratio calc
 };
 
 /*--------- Galaxy system body definitions per preset ---------*/
@@ -201,13 +208,16 @@ inline constexpr BHPreset2D BH2D_PRESETS[] = {
      false, nullptr, 0,    {0, 0, 0, false}},
 
     {"Gaia BH1",          9.62,    "Nearest dormant BH, G-dwarf companion in wide orbit (~9.6 Msun)",
-     true,  GAIABH1_BODIES,     1, {8.0, 12.0, 32.0, false}},
+     true,  GAIABH1_BODIES,     1, {8.0, 12.0, 32.0, false},
+     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/0.93},
 
     {"Gaia BH2",          8.94,    "Dormant BH with red giant companion (~8.9 Msun)",
-     true,  GAIABH2_BODIES,     1, {8.0, 12.0, 35.0, false}},
+     true,  GAIABH2_BODIES,     1, {8.0, 12.0, 35.0, false},
+     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/1.07},
 
     {"Gaia BH3",          32.7,    "Most massive nearby dormant BH, metal-poor giant companion (~33 Msun)",
-     true,  GAIABH3_BODIES,     1, {8.0, 12.0, 28.0, false}},
+     true,  GAIABH3_BODIES,     1, {8.0, 12.0, 28.0, false},
+     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/0.76},
 
     {"V404 Cygni",        9.0,     "X-ray nova microquasar with K-giant companion (~9 Msun)",
      true,  V404CYG_BODIES,     1, {8.0, 12.0, 30.0, true}},

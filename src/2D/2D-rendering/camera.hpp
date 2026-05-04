@@ -12,6 +12,8 @@ struct Camera {
     sf::Vector2f worldToScreen(float wx, float wy) const {
         float cx = viewWidth  * 0.5f;
         float cy = viewHeight * 0.5f;
+        // note the minus on y: SFML draws downward, physics points upward. forget this once and your
+        // black hole accretion disk inverts itself, which is a fun way to learn about screen-space conventions.
         return { cx + (float)(wx * pixelsPerM),
                  cy - (float)(wy * pixelsPerM) };
     }

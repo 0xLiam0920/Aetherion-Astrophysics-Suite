@@ -53,6 +53,17 @@ public:
     ResearchScenario           activeScenario = ResearchScenario::None;
     int                        selectedBodyIdx = 0;
     double                     gasTemperatureK = 1e7;
+    // Ambient gas density used by the Bondi-Hoyle accretion model.
+    // Default ~1.7e-19 kg/m³ ≈ 100 protons/cm³ (typical hot ISM, Sgr A* environment).
+    double                     gasDensity_kgm3 = 1.7e-19;
+    // Running simulation time in geometric units of M; advanced in update(dt).
+    double                     simTime_M       = 0.0;
+    // Bondi-Hoyle-Lyttleton accretion + bolometric luminosity time series.
+    BondiAccretionTracker      accretion;
+    // Snapshot diagnostics rebuilt on export: analytic gas radial profile and
+    // multi-color disk SED. Held here so they can also feed the data panel.
+    GasRadialProfile           gasProfile;
+    SEDSnapshot                sed;
     std::string                exportName      = "untitled_data"; ///< used as export subfolder name
 
     // Pulsar orbital scenario state
@@ -74,6 +85,26 @@ public:
         for (auto& body : bodies)
             body.update(bh.metric, dtSim);
 
+        // Advance simulation clock and update Bondi-Hoyle accretion model.
+        // We feed the analytic BHL formula with the *current* selected body's
+        // orbital v/c so Ṁ and L_bol modulate naturally with the orbit phase
+        // (denominator (v²+c_s²)^(3/2) drops at apoapsis, peaks at periapsis).
+        // simTime_M is in units of M (geometric); divide by M to keep the
+        // FITS time column dimensionless across BH masses.
+        simTime_M += dtSim / std::max(bh.metric.M, 1e-30);
+        {
+            const double M_BH_solar = currentMassSolar();
+            const double cs_over_c  = Schwarzschild::soundSpeedFromTemp(gasTemperatureK);
+            double v_over_c = 0.0;
+            if (!bodies.empty() && selectedBodyIdx >= 0
+                && selectedBodyIdx < (int)bodies.size())
+            {
+                v_over_c = bodies[selectedBodyIdx].measurement.orbitalVelocity;
+            }
+            accretion.update(simTime_M, M_BH_solar, cs_over_c,
+                             gasDensity_kgm3, v_over_c);
+        }
+
         // Update ISCO test results if active
         if (activeScenario == ResearchScenario::ISCOTest)
             updateISCOResults();
@@ -85,6 +116,15 @@ public:
         // Update tidal disruption scenario if active
         if (activeScenario == ResearchScenario::TidalDisruption)
             updateTidalDisruption(dtSim);
+    }
+
+    // Black hole mass in solar masses, derived from the active preset.
+    // Falls back to 0 (which the accretion tracker treats as "no data") when
+    // no preset is selected, so we never feed garbage into the BHL formula.
+    double currentMassSolar() const {
+        if (activePresetIdx >= 0 && activePresetIdx < NUM_BH2D_PRESETS)
+            return BH2D_PRESETS[activePresetIdx].massSolar;
+        return 0.0;
     }
 
     void rebuildPhotons(unsigned int windowHeight, bool highRes = false) {
@@ -590,6 +630,13 @@ public:
         info.gasTemperatureK = gasTemperatureK;
         info.soundSpeed_c = cs;
         info.bondiRadius_M = bh.metric.bondiRadius(cs) / M;
+        info.gasDensity_kgm3   = gasDensity_kgm3;
+        info.mdotBondi_MsunYr  = accretion.last_mdotBondi_kgs
+                                  * BondiAccretionTracker::YEAR_S
+                                  / BondiAccretionTracker::MSUN_KG;
+        info.mdotBHL_MsunYr    = accretion.last_mdotBHL_MsunYr;
+        info.Lbol_W            = accretion.last_Lbol_W;
+        info.Lbol_Lsun         = accretion.last_Lbol_Lsun;
 
         return info;
     }
@@ -646,6 +693,13 @@ public:
         ss << "T_gas:    " << sci(info.gasTemperatureK, 1) << " K\n";
         ss << "c_s:      " << sci(info.soundSpeed_c) << " c\n";
         ss << "r_Bondi:  " << sci(info.bondiRadius_M) << "M\n";
+        ss << "rho_gas:  " << sci(info.gasDensity_kgm3) << " kg/m^3\n";
+
+        ss << "--- ACCRETION ---\n";
+        ss << "Mdot_B:   " << sci(info.mdotBondi_MsunYr) << " Msun/yr\n";
+        ss << "Mdot_BHL: " << sci(info.mdotBHL_MsunYr)   << " Msun/yr\n";
+        ss << "L_bol:    " << sci(info.Lbol_W)    << " W\n";
+        ss << "L_bol:    " << sci(info.Lbol_Lsun) << " Lsun\n";
 
         ss << "--- NUMERICAL ---\n";
         ss << "RK4 last: " << sci(info.rk4LastError) << "\n";
@@ -841,6 +895,24 @@ public:
         std::string msg;
         std::string displayDir;
 
+        // Build the simulation metadata block that gets baked into every
+        // FITS primary HDU we write below. Research-grade FITS requires the
+        // simulation parameters to live in the file header itself so that
+        // downstream tools can recover units and physical context without
+        // any out-of-band sidecar metadata.
+        FITSExport::SimulationMetadata meta;
+        meta.M_BH    = (activePresetIdx >= 0 && activePresetIdx < NUM_BH2D_PRESETS)
+                         ? BH2D_PRESETS[activePresetIdx].massSolar
+                         : 0.0;
+        meta.c_s     = Schwarzschild::soundSpeedFromTemp(gasTemperatureK);
+        meta.r_Bondi = (meta.c_s > 0.0)
+                         ? bh.metric.bondiRadius(meta.c_s) / bh.metric.M
+                         : 0.0;
+        meta.beta    = (!bodies.empty() && selectedBodyIdx >= 0 && selectedBodyIdx < (int)bodies.size())
+                         ? bodies[selectedBodyIdx].measurement.orbitalVelocity
+                         : 0.0;
+        meta.valid   = true;
+
         if (!bodies.empty() && selectedBodyIdx < (int)bodies.size()) {
             if (bodies[selectedBodyIdx].trail.size() <= 1)
                 return "No orbit data yet — let the simulation run first";
@@ -848,17 +920,58 @@ public:
             if (dir.empty()) return "Export failed: could not create directory";
             displayDir = dir;
             const auto& body = bodies[selectedBodyIdx];
-            if (FITSExport::exportOrbitData(dir + "orbit_data.fits", body.trail))
+            if (FITSExport::exportOrbitData(dir + "orbit_data.fits", body.trail, meta))
                 msg += "orbit_data.fits ";
-            if (FITSExport::exportConservationHistory(dir + "conservation.fits", body.conservation))
+            if (FITSExport::exportConservationHistory(dir + "conservation.fits", body.conservation, meta))
                 msg += "conservation.fits ";
-            if (FITSExport::exportPrecessionData(dir + "precession.fits", body.precession))
+            if (FITSExport::exportPrecessionData(dir + "precession.fits", body.precession, meta))
                 msg += "precession.fits ";
+        }
+        // Accretion history is global (not per-body) — export it whenever we
+        // have any sampled entries, regardless of which body is selected.
+        if (!accretion.history.empty()) {
+            std::string base = makeExportDir();
+            if (!base.empty()) {
+                if (FITSExport::exportAccretionHistory(base + "accretion.fits", accretion, meta))
+                    msg += "accretion.fits ";
+                if (displayDir.empty()) displayDir = base;
+            }
+        }
+        // Gas radial profile + SED snapshots — recomputed at export time from
+        // current sim state so the FITS file always reflects the latest values.
+        {
+            const double M_BH_solar = currentMassSolar();
+            const double cs_over_c  = Schwarzschild::soundSpeedFromTemp(gasTemperatureK);
+            const double cs_ms      = cs_over_c * 2.99792458e8;
+            if (M_BH_solar > 0.0 && cs_ms > 0.0 && gasDensity_kgm3 > 0.0) {
+                GasRadialProfile prof;
+                prof.snapshot(M_BH_solar, gasDensity_kgm3, cs_ms);
+                SEDSnapshot sedSnap;
+                // Use the latest BHL rate (orbit-modulated). Fall back to pure
+                // Bondi if the orbit hasn't accumulated yet.
+                const double mdot = (accretion.last_mdotBHL_kgs > 0.0)
+                                  ? accretion.last_mdotBHL_kgs
+                                  : accretion.last_mdotBondi_kgs;
+                if (mdot > 0.0) sedSnap.snapshot(M_BH_solar, mdot);
+
+                if (prof.valid || sedSnap.valid) {
+                    std::string base = makeExportDir();
+                    if (!base.empty()) {
+                        if (prof.valid &&
+                            FITSExport::exportGasRadialProfile(base + "gas_profile.fits", prof, meta))
+                            msg += "gas_profile.fits ";
+                        if (sedSnap.valid &&
+                            FITSExport::exportSED(base + "sed.fits", sedSnap, meta))
+                            msg += "sed.fits ";
+                        if (displayDir.empty()) displayDir = base;
+                    }
+                }
+            }
         }
         if (!lensingData.deflectionTable.empty()) {
             std::string base = makeExportDir();
             if (!base.empty()) {
-                if (FITSExport::exportDeflectionTable(base + "deflection.fits", lensingData.deflectionTable))
+                if (FITSExport::exportDeflectionTable(base + "deflection.fits", lensingData.deflectionTable, meta))
                     msg += "deflection.fits ";
                 if (displayDir.empty()) displayDir = base;
             }

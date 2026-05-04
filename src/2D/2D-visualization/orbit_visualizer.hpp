@@ -11,14 +11,18 @@
 class OrbitVisualizer {
 public:
     // Compute the body's visual appearance (tidal stretch + redshift color).
+    // baryScale: multiply world coords by this factor to convert from BH-centred
+    // to barycenter-centred space (= M_BH / (M_BH + M_comp); default 1.0 = no shift).
     static BodyVisual computeBodyVisual(
         const OrbitingBody& body,
         const Schwarzschild& bh,
-        const Camera& cam)
+        const Camera& cam,
+        float baryScale = 1.0f)
     {
         BodyVisual vis;
         double r_current = body.radius();
-        vis.screenPos = cam.worldToScreen((float)body.worldX(), (float)body.worldY());
+        vis.screenPos = cam.worldToScreen((float)body.worldX() * baryScale,
+                                          (float)body.worldY() * baryScale);
 
         // Tidal stretching from geodesic deviation
         double tidal_factor = 2.0 * bh.M / std::pow(r_current, 3);
@@ -81,10 +85,12 @@ public:
 
     // Draw orbit trail from numerically integrated geodesic history.
     // This naturally shows GR precession as the trail accumulates.
+    // baryScale: same scaling as computeBodyVisual (default 1.0 = no shift).
     static sf::VertexArray computeOrbitPath(
         const OrbitingBody& body,
         const Schwarzschild& /*bh*/,
-        const Camera& cam)
+        const Camera& cam,
+        float baryScale = 1.0f)
     {
         const auto& trail = body.trail;
         if (trail.size() < 2)
@@ -93,8 +99,8 @@ public:
         sf::VertexArray orbitLine(sf::PrimitiveType::LineStrip, trail.size());
 
         for (size_t i = 0; i < trail.size(); ++i) {
-            float wx = (float)trail[i].first;
-            float wy = (float)trail[i].second;
+            float wx = (float)trail[i].first  * baryScale;
+            float wy = (float)trail[i].second * baryScale;
             orbitLine[i].position = cam.worldToScreen(wx, wy);
 
             // Gradient: recent positions brighter, older positions fade

@@ -15,6 +15,7 @@ inline double solarMassToGeomMeters(double msun) {
 
 inline double metersToGeometric(double x) {
     return x;  // Already in geometric units when G=c=1, so this is a no-op.
+    // yes, this function exists purely so future-me doesn't forget that and silently double-convert. 
 }
 
 } // namespace units

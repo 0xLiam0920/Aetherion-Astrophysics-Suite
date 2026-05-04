@@ -155,7 +155,7 @@ struct OrbitingBody {
         if (fr <= 1e-10) { captured = true; return; }
 
         // Precession detection (before integration step)
-        precession.detectPeriapsis(vr, phi);
+        precession.detectPeriapsis(r, vr, phi);
 
         // Convert coordinate time dt → proper time dτ:  dτ = dt·f(r)/E
         double dtau_total = dt * fr / E;
@@ -174,20 +174,16 @@ struct OrbitingBody {
 
         TimelikeState state = { r, phi, vr };
         for (int i = 0; i < nSteps; ++i) {
-            // RK4 error estimation via step-doubling (periodically)
-            // step-doubling: take one full step, then two half-steps, compare results.
-            // error ≈ (single - double_half) / 15, where the /15 comes from Richardson extrapolation for a 4th-order method.
-            // we only do this every checkInterval steps because it's essentially 3x the normal computation cost —
-            // doing it every step would tank performance for no real gain
+            // RKF45 (Cash-Karp) with embedded 4(5) error estimate.
+            // Every step gets a free O(h^5) local truncation error from the
+            // difference between the 4th- and 5th-order Butcher tableau rows,
+            // so we no longer need step-doubling Richardson extrapolation.
+            // The errorTracker.shouldCheck() throttle is kept only to avoid
+            // updating the displayed error histogram every single sub-step.
+            double rkfErr = 0.0;
+            state = stepTimelikeGeodesicRKF45(bh, state, L, h, &rkfErr);
             if (errorTracker.shouldCheck()) {
-                auto singleStep = stepTimelikeGeodesic(bh, state, L, h);
-                auto halfStep1  = stepTimelikeGeodesic(bh, state, L, h * 0.5);
-                auto halfStep2  = stepTimelikeGeodesic(bh, halfStep1, L, h * 0.5);
-                double error = std::abs(singleStep.r - halfStep2.r) / 15.0;
-                errorTracker.recordError(error);
-                state = singleStep;  // keep standard result
-            } else {
-                state = stepTimelikeGeodesic(bh, state, L, h);
+                errorTracker.recordError(rkfErr);
             }
 
         // Capture detection: crossed or touched the horizon

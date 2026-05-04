@@ -2,7 +2,9 @@
 /*---------- Header declarations for main ----------*/
 #include <QApplication>
 #include <QByteArray>
+#include <QLibraryInfo>
 #include "mainwindow.h"
+#include "updater.h"   // for AETHERION_VERSION compile definition
 
 /*---------- Main function ----------*/
 int main(int argc, char *argv[]) // these vars are imported from the OS, I think.
@@ -25,10 +27,15 @@ int main(int argc, char *argv[]) // these vars are imported from the OS, I think
 
 /* ---------- QApplication parameters ----------*/
     QApplication app(argc, argv);
+
+    // Ensure Qt can locate its plugins (TLS backend, image formats, etc.) when
+    // running from a build directory or a bundle not yet processed by macdeployqt.
+    // QLibraryInfo::path() returns the Qt installation's plugin dir at compile time.
+    QCoreApplication::addLibraryPath(QLibraryInfo::path(QLibraryInfo::PluginsPath));
     
     // Set application style and palette
     app.setApplicationName("Aetherion");
-    app.setApplicationVersion("0.4.2");
+    app.setApplicationVersion(AETHERION_VERSION);
     
     MainWindow window;
     window.show();

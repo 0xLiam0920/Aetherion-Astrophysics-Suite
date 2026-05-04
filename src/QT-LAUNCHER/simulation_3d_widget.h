@@ -5,6 +5,12 @@
 #include "custom_bh_dialog.h"  // for CustomBH3DConfig
 #include <memory>
 
+#ifdef AETHERION_QT_HOST
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
+#endif
+
 // Pimpl: all GL / simulation state lives in this struct, defined in the .cpp.
 // This keeps all GL headers out of the Qt header.
 struct Sim3DState;
@@ -35,10 +41,25 @@ protected:
     void onMouseReleased(sf::Mouse::Button button, float x, float y) override;
     void onMouseWheelScrolled(float delta, float x, float y) override;
 
+#ifdef AETHERION_QT_HOST
+    // Override Qt-level events to feed raw input into ImGui before the
+    // QSFMLCanvas base converts them to SFML key/button codes.
+    void keyPressEvent(QKeyEvent* ev) override;
+    void keyReleaseEvent(QKeyEvent* ev) override;
+    void mouseMoveEvent(QMouseEvent* ev) override;
+    void mousePressEvent(QMouseEvent* ev) override;
+    void mouseReleaseEvent(QMouseEvent* ev) override;
+    void wheelEvent(QWheelEvent* ev) override;
+#endif
+
 private:
     std::unique_ptr<Sim3DState> state_;
     bool              hasPendingConfig_ = false;
     CustomBH3DConfig  pendingConfig_;
+
+#ifdef AETHERION_QT_HOST
+    bool imguiReady_ = false;   ///< true once imgui_qt::init() succeeded in onInit()
+#endif
 };
 
 #endif // SIMULATION_3D_WIDGET_H
