@@ -57,17 +57,20 @@ struct PhysicsSnapshot {
     float blrInnerRadius;
     float blrOuterRadius;
     float blrThickness;
+    float blrStrength;   // [0,1] cloud opacity scaler
 
     /*--------- Orbital body ---------*/
     std::vector<glm::vec3> orbBodyPositions;
     std::vector<float>     orbBodyRadii;
     std::vector<glm::vec3> orbBodyColors;
+    std::vector<int>       orbBodyTypes;     // GalaxyBody3DType enum value per body
+    std::vector<std::string> orbBodyLabels;  // Display name per body (label-view mode)
     bool                   orbBodyEnabled;
 
     /*--------- Large-scale structures ---------*/
-    bool hostGalaxyEnabled;
-    bool labEnabled;
-    bool cgmEnabled;
+    bool hostGalaxyEnabled; // the galaxy itself, wowie :))))))))
+    bool labEnabled;        // broad-line region label overlay, not a literal lab (unfortunately)
+    bool cgmEnabled;        // circumgalactic medium — basically the galaxy's personal bubble of gas nobody talks about
 
     /*--------- Render settings (more steps = prettier, slower, warmer laptop) ---------*/
     int maxSteps;
@@ -75,10 +78,25 @@ struct PhysicsSnapshot {
     /*--------- Profile metadata (for HUD) ---------*/
     std::string profileName;
 
+    /*--------- Barycentric binary mode (Gaia BH1/2/3) ---------*/
+    // When true, bhPosition is offset from origin and the barycenter sits at
+    // world origin (= screen centre).  The HUD draws a "Center of Mass" marker.
+    bool      barycentricMode = false;
+    glm::vec3 barycenterPos   = glm::vec3(0.0f); // always world origin when active
+
     /*--------- Window ---------*/
     int windowW;
     int windowH;
 
     /*--------- Performance ---------*/
     float fps; // TODO: expose frame time (ms) alongside FPS for more useful profiling
+    // pro tip: if this drops below 10, you probably enabled every feature at once. Best of luck with that.
+
+    /*--------- Tidal disruption event (3D overlay) ---------*/
+    bool                   tdeActive      = false;
+    float                  tdeFlashAlpha  = 0.0f;   // 0..1
+    glm::vec3              tdeEventPos    = glm::vec3(0.0f); // world position
+    std::vector<glm::vec3> tdeDebrisPos;             // world positions
+    std::vector<float>     tdeDebrisLifeF;           // lifetime fraction [0,1]
+    std::vector<bool>      tdeDebrisIsFallback;      // gas-stream vs debris
 };

@@ -199,6 +199,11 @@ void QSFMLCanvas::keyPressEvent(QKeyEvent *event)
     if (!event->isAutoRepeat()) {
         sf::Keyboard::Key key = qtKeyToSFML(event->key());
         onKeyPressed(key);
+        // Also fire onTextEntered for printable characters and control chars used for text editing
+        const QString text = event->text();
+        if (!text.isEmpty()) {
+            onTextEntered(static_cast<char32_t>(text.at(0).unicode()));
+        }
     }
     QWidget::keyPressEvent(event);
 }

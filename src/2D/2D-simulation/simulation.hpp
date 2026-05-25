@@ -14,6 +14,8 @@
 #include <iomanip>
 #include <algorithm>
 #include <cstdlib>
+#include <cstdint>
+#include <cmath>
 #include <filesystem>
 
 // TODO: pack all viable headers into single header hpp files for 2d, 3d, and launcher
@@ -71,6 +73,57 @@ public:
     PulsarOrbitalData  pulsarData;
     bool               tidalDisrupted = false; // set when tidal test body crosses disruption threshold
 
+    // ── Tidal disruption event state ─────────────────────────────────────────
+    struct TidalDebrisParticle {
+        double x, y;           // world position (geometric units, BH at origin)
+        double vx, vy;         // velocity (geometric units / wall-second)
+        double lifetime;       // remaining lifetime (wall-seconds)
+        double maxLifetime;
+        float  size;           // base radius in pixels (at reference zoom)
+        bool   isFallback;     // true = inward gas-stream particle
+    };
+
+    struct TidalEvent {
+        bool   active         = false;
+        double flashTimer     = 0.0;   // seconds remaining for the localised flash
+        double eventX         = 0.0;   // disruption world X (geometric units)
+        double eventY         = 0.0;   // disruption world Y (geometric units)
+        std::vector<TidalDebrisParticle> particles;
+        static constexpr double FLASH_DURATION  = 0.45;  // seconds
+        static constexpr double DEBRIS_LIFETIME = 5.0;   // seconds
+        static constexpr double STREAM_LIFETIME = 8.0;   // seconds (fallback gas)
+    } tidalEvent;
+
+    // Tidal disruption threshold in units of M.
+    // Set from the active preset's zones.tidalDisruptionM; default matches the
+    // startTidalDisruption() initial orbit so the scenario always triggers cleanly.
+    double tidalRadiusM = 8.0;
+
+    // ── Merger event state ───────────────────────────────────────────────────
+    struct MergerState {
+        bool   active          = false;
+        bool   completed       = false;
+        double r_M             = 40.0;   // separation in units of primary M (scales with M)
+        double phi             = 0.0;    // orbital angle (radians)
+        double massSolar       = 0.0;    // incoming BH mass in solar masses
+        double secondaryMassGeom = 0.0;  // precomputed geometric mass of secondary
+        double flashTimer      = 0.0;
+        double preMergeMassSolar = 0.0;
+        // Mass ratio q = M2/(M1+M2) ∈ [0,0.5].
+        // q > 0.1 → both BHs visibly orbit the common barycenter ("death spiral").
+        double massRatioQ      = 0.0;
+        // Death-spiral trail: world-space positions of the SECONDARY in BH-centred
+        // coords, accumulated at ~30 fps to draw the fading streak.
+        static constexpr int MAX_TRAIL = 400;
+        std::deque<std::pair<double,double>> trail2;  // secondary trail
+        std::deque<std::pair<double,double>> trail1;  // primary barycentric wobble trail
+        // Inspiral coefficient tuned for ~15s from r=40 to r=3.5.
+        static constexpr double INSPIRAL_K    = 42670.0;
+        static constexpr double OMEGA_K       = 12.0;
+        static constexpr double FLASH_DURATION = 0.6;
+        static constexpr double MERGE_RADIUS_M = 3.5;
+    } merger;
+
     Simulation() {
         bodies.emplace_back(bh.metric, 10.0 * bh.metric.M, 0.3);
     }
@@ -116,6 +169,13 @@ public:
         // Update tidal disruption scenario if active
         if (activeScenario == ResearchScenario::TidalDisruption)
             updateTidalDisruption(dtSim);
+
+        // Advance tidal event particle system (always, even after scenario completes)
+        updateTidalEvent(dt);
+
+        // Advance merger inspiral if active
+        if (merger.active)
+            updateMerger(dt); // wall-clock dt, not dtSim — so the animation plays at a fixed visual rate
     }
 
     // Black hole mass in solar masses, derived from the active preset.
@@ -171,8 +231,278 @@ public:
         buildLensingData();
     }
 
-    void reinitBodies() {
-        double M = bh.metric.M;
+    /*--------- Black hole merger event ---------*/
+    void startMerger(double massSolar, unsigned int /*windowHeight*/) {
+        merger.active          = true;
+        merger.completed       = false;
+        merger.massSolar       = massSolar;
+        merger.r_M             = 40.0;
+        merger.phi             = M_PI / 4.0;  // start offset so it’s immediately visible
+        merger.flashTimer      = 0.0;
+        merger.preMergeMassSolar = 0.0;
+        merger.secondaryMassGeom  = units::solarMassToGeomMeters(massSolar);
+        merger.trail2.clear();
+        merger.trail1.clear();
+        // Mass ratio q = M2/(M1+M2). For q > 0.1 both BHs visibly orbit the
+        // barycenter — the death spiral.
+        const double m1Sol = currentMassSolar();
+        const double totM  = m1Sol + massSolar;
+        merger.massRatioQ = (totM > 0.0) ? massSolar / totM : 0.0;
+    }
+
+    // Apply gravitational perturbation from the in-spiraling secondary BH onto all
+    // orbiting bodies. Uses Newtonian tidal acceleration (M2/d²) in geometric units,
+    // applied as a proper-time-scaled impulse to vr and L, then E is recomputed.
+    // The perturbation is physically negligible for large mass-ratio mergers (e.g.,
+    // Sgr A* into TON 618) and dramatic for equal-mass mergers (TON 618 + TON 618).
+    void applyMergerPerturbation(double dt) {
+        const double M2 = merger.secondaryMassGeom;
+        if (M2 < 1e-30) return;
+
+        // Secondary BH world position (geometric units, BH at origin)
+        const double r_BH = merger.r_M * bh.metric.M;
+        const double bx   = r_BH * std::cos(merger.phi);
+        const double by   = r_BH * std::sin(merger.phi);
+
+        for (auto& body : bodies) {
+            if (body.captured) continue;
+
+            const double px = body.r * std::cos(body.phi);
+            const double py = body.r * std::sin(body.phi);
+
+            const double dx = px - bx;  // vector from secondary to body
+            const double dy = py - by;
+            const double d2 = dx*dx + dy*dy;
+            const double d  = std::sqrt(d2);
+
+            // Skip bodies too close to the secondary (they'd be "captured" by it)
+            if (d < bh.metric.M * 0.5) {
+                body.captured = true;
+                continue;
+            }
+
+            // Gravitational acceleration toward secondary (geometric units, G=1)
+            const double inv_d3 = 1.0 / (d2 * d);
+            const double ax = -M2 * dx * inv_d3;  // attraction toward secondary
+            const double ay = -M2 * dy * inv_d3;
+
+            // Resolve into body's radial (outward) and tangential (CCW) components
+            const double cos_p = std::cos(body.phi);
+            const double sin_p = std::sin(body.phi);
+            const double ar =  ax * cos_p + ay * sin_p;
+            const double at = -ax * sin_p + ay * cos_p;
+
+            // Approximate proper-time step for this body
+            const double fr   = bh.metric.f(body.r);
+            const double dtau = dt * std::max(fr, 1e-10) / std::max(body.E, 1e-10);
+
+            // Apply impulse to geodesic state
+            body.vr += ar * dtau;
+            body.L  += at * body.r * dtau;
+
+            // Recompute specific energy from updated (r, vr, L) in current metric.
+            // E² = vr² + f(r)·(1 + L²/r²)
+            const double new_E2 = body.vr * body.vr
+                                 + fr * (1.0 + body.L * body.L / (body.r * body.r));
+            if (new_E2 > 0.0)
+                body.E = std::sqrt(new_E2);
+
+            // Bodies perturbed into escape trajectories during inspiral fly off screen —
+            // that's the point. Don't silently delete them, let them streak away.
+            if (body.E > 1.2)
+                body.markEjected();
+        }
+    }
+
+    // Post-merger body update.
+    // Galaxy bodies keep their current perturbed (r, phi, vr, L) and have E recomputed
+    // under the new combined metric. Unbound bodies get ejected and streak off screen.
+    // A GW recoil kick is applied to surviving bodies (the merged BH "jumps" due to
+    // asymmetric GW emission; in the BH frame this appears as a sudden velocity shift
+    // on all remaining matter). Finally a ring of particles is spawned to represent
+    // the expanding EM / gravitational wave pulse.
+    void reinitBodiesPostMerger() {
+        const double newM    = bh.metric.M;
+        const double newISCO = bh.metric.isco();
+
+        // Reset the primary (non-galaxy) test body to a clean orbit
+        for (auto& body : bodies) {
+            if (body.isGalaxyBody) continue;
+            body.initFromKeplerian(bh.metric, 10.0 * newM, body.nominalEcc);
+            break;
+        }
+
+        // Galaxy bodies: recompute E under new metric, eject the unbound ones
+        for (auto& body : bodies) {
+            if (!body.isGalaxyBody || body.captured || body.ejected) continue;
+            const double fr_new = bh.metric.f(body.r);
+            const double new_E2 = body.vr * body.vr
+                                 + fr_new * (1.0 + body.L * body.L / (body.r * body.r));
+            body.E = (new_E2 > 0.0) ? std::sqrt(new_E2) : 1e-3;
+
+            if (body.E >= 1.0) {
+                // The instantaneous mass increase unbound this body — it’s being
+                // flung into intergalactic space. Let it visibly streak away.
+                body.markEjected();
+            } else if (body.r < newISCO * 1.05 && body.vr >= 0.0) {
+                body.vr = -0.01 * newM;  // nudge inward so geodesic integrator lets it plunge
+            }
+        }
+
+        // GW recoil kick: the merged BH recoils due to asymmetric gravitational wave
+        // emission. In the BH-centred frame all surviving bodies receive the opposite
+        // velocity impulse (−v_kick). For equal-mass mergers this represents the
+        // spin-induced “superkick”; for unequal masses it scales with the asymmetry.
+        // Magnitude: ~1% of c at q=1 (equal mass), fading toward zero for extreme q.
+        {
+            const double m1 = merger.preMergeMassSolar;
+            const double m2 = merger.massSolar;
+            const double q  = (m1 > 0.0 && m2 > 0.0)
+                            ? std::min(m1, m2) / std::max(m1, m2)
+                            : 0.0;   // mass ratio [0,1]; 1 = equal mass
+            // visual kick speed in geometric units; 0.01*newM puts it at ~1% c
+            const double v_kick = 0.01 * q * newM;
+            // deterministic random direction from mass parameters
+            uint32_t seed = (static_cast<uint32_t>(m1) ^ 0xA5A5A5A5u)
+                          + static_cast<uint32_t>(m2 * 7919.0);
+            seed = seed * 1664525u + 1013904223u;
+            const double kick_angle = 2.0 * M_PI * (seed >> 8) / double(1 << 24);
+            const double kvx = v_kick * std::cos(kick_angle);
+            const double kvy = v_kick * std::sin(kick_angle);
+
+            for (auto& body : bodies) {
+                if (body.captured || body.ejected || !body.isGalaxyBody) continue;
+                const double cos_p = std::cos(body.phi);
+                const double sin_p = std::sin(body.phi);
+                body.vr += kvx * cos_p + kvy * sin_p;
+                body.L  += body.r * (-kvx * sin_p + kvy * cos_p);
+                const double fr2 = bh.metric.f(body.r);
+                const double e2  = body.vr * body.vr
+                                 + fr2 * (1.0 + body.L * body.L / (body.r * body.r));
+                if (e2 > 0.0) body.E = std::sqrt(e2);
+                if (body.E >= 1.0) body.markEjected();
+            }
+        }
+
+        // GW / EM shockwave ring: spawn an outward ring of debris particles centered
+        // on the merged BH. This represents the expanding gravitational wave and
+        // quasar-level electromagnetic burst that a real ultramassive merger would
+        // produce. Reuses the tidal event particle system so no extra rendering needed.
+        {
+            tidalEvent.active     = true;
+            tidalEvent.flashTimer = TidalEvent::FLASH_DURATION * 2.0;  // longer flash for a merger
+            tidalEvent.eventX     = 0.0;
+            tidalEvent.eventY     = 0.0;
+
+            uint32_t rng = 0xDEADBEEFu ^ static_cast<uint32_t>(newM * 1e-6);
+            auto rand01 = [&]() -> double {
+                rng = rng * 1664525u + 1013904223u;
+                return (rng >> 8) / double(1 << 24);
+            };
+
+            // Fast outward ring — the “shockwave” expanding at a large fraction of c
+            const double V_RING = 0.5 * newM;
+            for (int i = 0; i < 72; ++i) {
+                const double angle = 2.0 * M_PI * i / 72.0 + rand01() * 0.08;
+                const double speed = V_RING * (0.9 + 0.2 * rand01());
+                TidalDebrisParticle p;
+                p.x          = 0.0;  p.y = 0.0;
+                p.vx         = std::cos(angle) * speed;
+                p.vy         = std::sin(angle) * speed;
+                p.maxLifetime = 3.5 + 2.0 * rand01();
+                p.lifetime    = p.maxLifetime;
+                p.size        = 3.5f + (float)(2.0 * rand01());
+                p.isFallback  = false;
+                tidalEvent.particles.push_back(p);
+            }
+            // Slower inward-then-outward fallback debris — accretion disk splashback
+            for (int i = 0; i < 24; ++i) {
+                const double angle = 2.0 * M_PI * rand01();
+                const double speed = V_RING * (0.15 + 0.25 * rand01());
+                TidalDebrisParticle p;
+                p.x          = newM * (rand01() - 0.5) * 4.0;
+                p.y          = newM * (rand01() - 0.5) * 4.0;
+                p.vx         = std::cos(angle) * speed;
+                p.vy         = std::sin(angle) * speed;
+                p.maxLifetime = 5.0 + 3.0 * rand01();
+                p.lifetime    = p.maxLifetime;
+                p.size        = 2.0f + (float)(1.5 * rand01());
+                p.isFallback  = true;
+                tidalEvent.particles.push_back(p);
+            }
+        }
+    }
+
+    void updateMerger(double dt) {
+        if (!merger.active) return;
+
+        // Flash phase: wait for the white flash to finish, then finalize
+        if (merger.flashTimer > 0.0) {
+            merger.flashTimer -= dt;
+            if (merger.flashTimer <= 0.0) {
+                merger.flashTimer = 0.0;
+                merger.completed  = true;
+                merger.active     = false;
+            }
+            return;
+        }
+
+        applyMergerPerturbation(dt);
+
+        // GW inspiral: Peters-formula shape — separation shrinks as r^{-3}
+        double r3 = merger.r_M * merger.r_M * merger.r_M;
+        if (r3 < 1e-30) r3 = 1e-30;
+        merger.r_M -= (MergerState::INSPIRAL_K * dt) / r3;
+
+        // Angular advance — spin up as separation closes (Ω ∝ r^{-3/2})
+        double r_safe = std::max(merger.r_M, 0.1);
+        merger.phi += (MergerState::OMEGA_K * dt) / std::pow(r_safe, 1.5);
+
+        // Record trail positions in BH-centred geometric units.
+        // For similar-mass mergers (q > 0.1), apply barycentric correction:
+        //   secondary orbits at  r2 = r * (1 - q)  from the CoM
+        //   primary   orbits at  r1 = r * q         from the CoM (opposite side)
+        // For extreme mass ratios (q ≈ 0) this reduces to the old behaviour.
+        {
+            const double q   = merger.massRatioQ;   // M2/(M1+M2) in [0,0.5]
+            const double sep = merger.r_M * bh.metric.M;  // geometric separation
+            // Secondary position (from BH origin = total-mass centroid)
+            const double r2 = sep * (1.0 - q);
+            const double sx  =  r2 * std::cos(merger.phi);
+            const double sy  =  r2 * std::sin(merger.phi);
+            merger.trail2.emplace_back(sx, sy);
+            if ((int)merger.trail2.size() > MergerState::MAX_TRAIL)
+                merger.trail2.pop_front();
+
+            // Primary barycentric wobble (only visible for q > 0.1)
+            if (q > 0.01) {
+                const double r1 = sep * q;
+                const double px  = -r1 * std::cos(merger.phi);  // opposite side
+                const double py  = -r1 * std::sin(merger.phi);
+                merger.trail1.emplace_back(px, py);
+                if ((int)merger.trail1.size() > MergerState::MAX_TRAIL)
+                    merger.trail1.pop_front();
+            }
+        }
+
+        // Merge trigger
+        if (merger.r_M <= MergerState::MERGE_RADIUS_M) {
+            double m1Solar = bh.metric.M / units::solarMassToGeomMeters(1.0);
+            double mFinalSolar = m1Solar + merger.massSolar;
+            merger.preMergeMassSolar = m1Solar;
+
+            double oldM = bh.metric.M;
+            bh.metric.M = units::solarMassToGeomMeters(mFinalSolar);
+            params.pixelsPerM *= oldM / bh.metric.M;
+
+            activeScenario = ResearchScenario::None;
+            reinitBodiesPostMerger();
+
+            merger.flashTimer = MergerState::FLASH_DURATION;
+        }
+    }
+
+    void reinitBodies() {        double M = bh.metric.M;
         if (!bodies.empty()) {
             auto& b = bodies[0];
             b.initFromKeplerian(bh.metric, 10.0 * M, b.nominalEcc);
@@ -186,10 +516,9 @@ public:
     }
 
     void spawnGalaxySystem(int presetIdx) {
-        bodies.erase(
-            std::remove_if(bodies.begin(), bodies.end(),
-                [](const OrbitingBody& b){ return b.isGalaxyBody; }),
-            bodies.end());
+        // Remove all bodies (including the default test body) — it doesn't belong
+        // in a galaxy preset and would just orbit with no physical context.
+        bodies.clear();
 
         if (presetIdx < 0 || presetIdx >= NUM_BH2D_PRESETS) return;
         const auto& preset = BH2D_PRESETS[presetIdx];
@@ -213,10 +542,9 @@ public:
     }
 
     void clearGalaxySystem() {
-        bodies.erase(
-            std::remove_if(bodies.begin(), bodies.end(),
-                [](const OrbitingBody& b){ return b.isGalaxyBody; }),
-            bodies.end());
+        bodies.clear();
+        // Restore the default single test body now that we're back in free-orbit mode.
+        bodies.emplace_back(bh.metric, 10.0 * bh.metric.M, 0.3);
         galaxySystemActive = false;
     }
 
@@ -575,14 +903,102 @@ public:
             tidalDisrupted = true;
             return;
         }
-        // Tidal disruption threshold: ~8 M is where tidal stress overwhelms
-        // self-gravity for a solar-type star around a typical BH.  This is a
-        // first-order approximation — real r_tidal depends on stellar density.
-        double r_tidal = 8.0 * bh.metric.M;
+        double r_tidal = tidalRadiusM * bh.metric.M;
         if (body.r < r_tidal) {
             tidalDisrupted = true;
-            bodies[0].label = "!! TIDAL DISRUPTION !!";
+            triggerTidalDisruption(0);
         }
+    }
+
+    // Spawn a visible tidal disruption event for the body at bodyIdx, then
+    // remove it from the bodies list.
+    // Velocities are in geometric units / wall-second, scaled by M so that
+    // visual drift rate (≈ M * 0.3 / ppm) stays ~18 px/s across BH masses
+    // because default ppm = 60/M.
+    void triggerTidalDisruption(int bodyIdx) {
+        if (bodyIdx < 0 || bodyIdx >= (int)bodies.size()) return;
+        const auto& body = bodies[bodyIdx];
+
+        const double M  = bh.metric.M;
+        const double cx = body.r * std::cos(body.phi);
+        const double cy = body.r * std::sin(body.phi);
+
+        tidalEvent.active     = true;
+        tidalEvent.flashTimer = TidalEvent::FLASH_DURATION;
+        tidalEvent.eventX     = cx;
+        tidalEvent.eventY     = cy;
+        tidalEvent.particles.clear();
+
+        // Prograde tangential direction and inward radial direction
+        const double tang_x   = -std::sin(body.phi);
+        const double tang_y   =  std::cos(body.phi);
+        const double inward_x = -std::cos(body.phi);
+        const double inward_y = -std::sin(body.phi);
+
+        // Simple deterministic LCG seeded from the disruption position
+        uint32_t rng = 0x12345678u ^ static_cast<uint32_t>(std::abs(cx + cy) * 1000.0);
+        auto rand01 = [&]() -> double {
+            rng = rng * 1664525u + 1013904223u;
+            return (rng >> 8) / double(1 << 24);
+        };
+
+        const double V_OUT  = 0.30 * M;  // geometric units / wall-second
+        const double V_FALL = 0.14 * M;
+
+        // 20 outward debris fragments
+        for (int i = 0; i < 20; ++i) {
+            const double angle = 2.0 * M_PI * rand01();
+            const double speed = V_OUT * (0.7 + 0.6 * rand01());
+            TidalDebrisParticle p;
+            p.x   = cx;  p.y   = cy;
+            p.vx  = std::cos(angle) * speed + tang_x * V_OUT * 0.4;
+            p.vy  = std::sin(angle) * speed + tang_y * V_OUT * 0.4;
+            p.maxLifetime = TidalEvent::DEBRIS_LIFETIME * (0.6 + 0.4 * rand01());
+            p.lifetime    = p.maxLifetime;
+            p.size        = 2.5f + (float)(1.5 * rand01());
+            p.isFallback  = false;
+            tidalEvent.particles.push_back(p);
+        }
+
+        // 10 inward fallback gas-stream particles
+        for (int i = 0; i < 10; ++i) {
+            const double jitter = (rand01() - 0.5) * 0.8;
+            const double speed  = V_FALL * (0.8 + 0.4 * rand01());
+            TidalDebrisParticle p;
+            p.x   = cx + tang_x * M * 0.5 * (rand01() - 0.5);
+            p.y   = cy + tang_y * M * 0.5 * (rand01() - 0.5);
+            p.vx  = (inward_x + tang_x * jitter) * speed;
+            p.vy  = (inward_y + tang_y * jitter) * speed;
+            p.maxLifetime = TidalEvent::STREAM_LIFETIME * (0.7 + 0.3 * rand01());
+            p.lifetime    = p.maxLifetime;
+            p.size        = 2.0f + (float)(rand01());
+            p.isFallback  = true;
+            tidalEvent.particles.push_back(p);
+        }
+
+        bodies.erase(bodies.begin() + bodyIdx);
+    }
+
+    // Advance the tidal particle system using wall-clock dt.
+    void updateTidalEvent(double dt) {
+        if (!tidalEvent.active) return;
+
+        if (tidalEvent.flashTimer > 0.0)
+            tidalEvent.flashTimer = std::max(0.0, tidalEvent.flashTimer - dt);
+
+        for (auto& p : tidalEvent.particles) {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.lifetime -= dt;
+        }
+
+        tidalEvent.particles.erase(
+            std::remove_if(tidalEvent.particles.begin(), tidalEvent.particles.end(),
+                [](const TidalDebrisParticle& p){ return p.lifetime <= 0.0; }),
+            tidalEvent.particles.end());
+
+        if (tidalEvent.particles.empty() && tidalEvent.flashTimer <= 0.0)
+            tidalEvent.active = false;
     }
 
     /*--------- Data panel info builder ---------*/

@@ -80,9 +80,19 @@ const int MAX_ORB_BODIES = 10;
 uniform vec3  orbBodyPos[MAX_ORB_BODIES];      // Positions of orbiting bodies [Rs units]
 uniform float orbBodyRadius[MAX_ORB_BODIES];   // Radii of the bodies [Rs units]
 uniform vec3  orbBodyColor[MAX_ORB_BODIES];    // Base colors of the bodies
+uniform int   orbBodyType[MAX_ORB_BODIES];     // Visual archetype (see BODY_* constants)
 uniform int   numOrbBodies;                    // Number of active orbiting bodies
 uniform int   showOrbBody;                     // Toggle body visibility
 uniform int   maxStepsOverride; // Runtime step limit (200=fast, 300=cinematic)
+
+// Body type constants — must mirror profiles::GalaxyBody3DType (presets.hpp).
+#define BODY_STAR      0
+#define BODY_GASCLOUD  1
+#define BODY_CLUSTER   2
+#define BODY_DGAL      3
+#define BODY_NEUTRON   4
+#define BODY_WDWARF    5
+#define BODY_COMPANION 6
 
 // Large-scale structures
 uniform int   showHostGalaxy;                  // Toggle host galaxy visibility
@@ -126,30 +136,215 @@ float intersectSphere(vec3 ro, vec3 rd, vec3 center, float radius) {
     return -1.0;
 }
 
-// Shade the orbiting body surface
-vec3 shadeOrbBody(vec3 hitPos, vec3 normal, vec3 bodyCenter, vec3 bodyColor) {
-    // Distance from BH for gravitational redshift
-    float rBH = length(hitPos - blackHolePos);
-    float rs = blackHoleRadius;
+// Forward declaration: defined further down (depends on noise utilities).
+float fbm3D(vec3 p, int octaves);
+float hash13(vec3 p);
+
+// True for body archetypes that have a hard photospheric surface and
+// occlude what's behind them. Diffuse / extended objects (gas clouds,
+// star clusters, dwarf galaxies) are rendered as additive volumes
+// instead — they don't block anything behind them.
+bool isOpaqueBody(int t) {
+    return t == BODY_STAR     || t == BODY_COMPANION
+        || t == BODY_NEUTRON  || t == BODY_WDWARF;
+}
+
+// Shared helper: classic Eddington-style photosphere shading used for any
+// body that is essentially a star with limb darkening + granulation.
+// `granScale` controls cell size (smaller = bigger cells), `granAmp` the
+// brightness mottling, `tintHot/tintLimb` the centre/limb colour mix, and
+// `bright` the HDR multiplier feeding bloom.
+vec3 shadeStarSurface(vec3 hitPos, vec3 normal, vec3 bodyCenter,
+                      vec3 bodyColor, float granScale, float granAmp,
+                      vec3 tintHot, vec3 tintLimb, float bright)
+{
+    float rBH  = length(hitPos - blackHolePos);
+    float rs   = blackHoleRadius;
     float grav = sqrt(max(1.0 - rs / rBH, 0.05));
-    
-    // Simple diffuse shading from the accretion disk glow (disk center = BH pos)
-    // Light comes from the hot inner disk — approximate as point light at BH
-    vec3 lightDir = normalize(blackHolePos - hitPos);
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    
-    // Additional illumination from the disk plane (broad area light)
-    float diskLight = max(dot(normal, vec3(0.0, -sign(hitPos.y - blackHolePos.y), 0.0)), 0.0) * 0.3;
-    
-    // Tidal stretching indicator: redden when close to BH (spaghettification zone)
-    float tidalFactor = smoothstep(3.0, 1.5, rBH / rs);
-    vec3 tidalColor = mix(bodyColor, vec3(1.0, 0.3, 0.1), tidalFactor * 0.6);
-    
-    // Base illumination + disk-lit + ambient
-    float lighting = NdotL * 0.7 + diskLight + 0.15;
-    vec3 color = tidalColor * lighting * grav;
-    
-    return color;
+
+    vec3  viewDir = normalize(hitPos - cameraPos);
+    float mu      = max(dot(normal, -viewDir), 0.0);
+    float limb    = 0.4 + 0.6 * mu;                       // Eddington
+
+    vec3  surfP = (hitPos - bodyCenter) * granScale;
+    float gran  = fbm3D(surfP, 3);
+    float granMod = (1.0 - granAmp) + (2.0 * granAmp) * gran;
+
+    vec3 hot  = mix(bodyColor, tintHot,  0.55);
+    vec3 limT = mix(bodyColor, tintLimb, 0.35);
+    vec3 photo = mix(limT, hot, mu);
+
+    // Tidal reddening near the BH
+    float tidal = smoothstep(3.0, 1.5, rBH / rs);
+    photo = mix(photo, vec3(1.0, 0.3, 0.1), tidal * 0.6);
+
+    return photo * (limb * granMod * bright) * grav;
+}
+
+// Type-aware surface shading. Dispatches to the right archetype renderer.
+// Only called for bodies that actually have a hard surface (see isOpaqueBody).
+vec3 shadeOrbBody(int type, vec3 hitPos, vec3 normal,
+                  vec3 bodyCenter, vec3 bodyColor)
+{
+    if (type == BODY_NEUTRON) {
+        // Neutron star surface: ultra-hot fluid crust, sharp limb, no
+        // granulation. We keep a hot core glow but let the body's tint
+        // dominate so identifying colors (e.g. magenta BLPSR) read clearly.
+        vec3  view = normalize(hitPos - cameraPos);
+        float mu   = max(dot(normal, -view), 0.0);
+        float limb = 0.55 + 0.45 * mu;
+        // Soft white core, falling off toward the limb where the body
+        // colour saturates — gives a glowing-but-coloured pulsar look.
+        vec3  hot  = mix(bodyColor, vec3(1.0), pow(mu, 2.0) * 0.6);
+        return hot * limb * 14.0;
+    }
+    if (type == BODY_WDWARF) {
+        // White dwarf: very small, intense blue-white photosphere with
+        // mild limb darkening, no visible granulation.
+        vec3  view = normalize(hitPos - cameraPos);
+        float mu   = max(dot(normal, -view), 0.0);
+        float limb = 0.5 + 0.5 * mu;
+        vec3  hot  = mix(bodyColor, vec3(1.0), 0.7);
+        return hot * limb * 10.0;
+    }
+    if (type == BODY_COMPANION) {
+        // Companion stars: typical late-type giant — bigger granules,
+        // stronger limb reddening, slightly cooler.
+        return shadeStarSurface(hitPos, normal, bodyCenter, bodyColor,
+                                3.0, 0.20,
+                                vec3(1.0, 0.95, 0.85),
+                                vec3(1.0, 0.55, 0.20),
+                                5.0);
+    }
+    // Default: BODY_STAR — Sun-like main-sequence photosphere.
+    return shadeStarSurface(hitPos, normal, bodyCenter, bodyColor,
+                            4.0, 0.15,
+                            vec3(1.0),
+                            vec3(1.0, 0.55, 0.20),
+                            6.0);
+}
+
+// Additive volumetric / glow contribution from one orbiting body for the
+// current ray. Used for both opaque and extended bodies — opaque ones get
+// a corona halo, extended ones get a soft Gaussian volume in place of a
+// surface. Returns RGB to add to the scene.
+vec3 orbBodyEmission(int idx, vec3 ro, vec3 rd) {
+    int   type = orbBodyType[idx];
+    vec3  c    = orbBodyPos[idx];
+    float r    = orbBodyRadius[idx];
+    vec3  col  = orbBodyColor[idx];
+
+    // Closest approach of the ray to the body centre.
+    vec3  toBody   = c - ro;
+    float sClosest = max(dot(toBody, rd), 0.0);
+    vec3  closestP = ro + rd * sClosest;
+    vec3  delta    = closestP - c;
+    float dPerp    = length(delta);
+
+    if (type == BODY_GASCLOUD) {
+        // Diffuse, billowy emission. Soft Gaussian envelope, no hard edge.
+        // Modulate by 3D fbm sampled at the closest-approach point so the
+        // cloud looks turbulent rather than uniform.
+        float sigma = 1.5 * r;
+        float env   = exp(-dPerp * dPerp / (2.0 * sigma * sigma));
+        float turb  = 0.55 + 0.9 * fbm3D(closestP * 0.6, 4);
+        vec3  tint  = mix(col, vec3(1.0, 0.85, 0.7), 0.25);
+        return tint * env * turb * 2.2;
+    }
+    if (type == BODY_CLUSTER) {
+        // Stellar cluster: faint diffuse halo + bright sparkle stars
+        // sampled stochastically inside the cluster radius.
+        float sigma  = 1.2 * r;
+        float halo   = exp(-dPerp * dPerp / (2.0 * sigma * sigma));
+        // Resolve a few brighter point sources inside the cluster.
+        float sparkle = 0.0;
+        for (int k = 0; k < 6; ++k) {
+            // Pseudo-random offset inside a unit ball, scaled by r.
+            vec3 seed = c + vec3(float(k) * 7.13, float(k) * 3.47, float(k));
+            vec3 off  = (vec3(hash13(seed),
+                              hash13(seed + 11.7),
+                              hash13(seed + 23.1)) - 0.5) * 1.6 * r;
+            vec3 starPos = c + off;
+            vec3 toStar  = starPos - ro;
+            float ss     = max(dot(toStar, rd), 0.0);
+            float ds     = length(ro + rd * ss - starPos);
+            // Tight Gaussian per micro-star.
+            float w = 0.18 * r;
+            sparkle += exp(-ds * ds / (2.0 * w * w));
+        }
+        vec3 haloTint    = mix(col, vec3(1.0), 0.4);
+        vec3 sparkleTint = vec3(1.0, 0.95, 0.85);
+        return haloTint * halo * 0.9 + sparkleTint * sparkle * 2.5;
+    }
+    if (type == BODY_DGAL) {
+        // Dwarf galaxy: oblate (flattened) diffuse smudge with a brighter
+        // core. Approximate flattening by squashing along an arbitrary
+        // axis derived from the position (deterministic per body).
+        vec3 axis = normalize(vec3(0.3, 1.0, 0.2)
+                              + 0.4 * vec3(hash13(c),
+                                           hash13(c + 5.0),
+                                           hash13(c + 11.0)) - 0.2);
+        float along = dot(delta, axis);
+        vec3  perp  = delta - along * axis;
+        float dEff  = sqrt(dot(perp, perp) + (along * along) * 6.0);
+        float sigma = 1.4 * r;
+        float env   = exp(-dEff * dEff / (2.0 * sigma * sigma));
+        // Brighter compact core
+        float core  = exp(-dEff * dEff / (2.0 * (0.35 * r) * (0.35 * r)));
+        vec3  tint  = mix(col, vec3(0.85, 0.9, 1.0), 0.35);
+        return tint * (env * 0.7 + core * 1.6);
+    }
+
+    // ── Opaque body types: stellar corona halo ──
+    // Inverse-square halo outside the body, soft cutoff at ~6r.
+    float halo = r / max(dPerp, 0.5 * r);
+    halo = halo * halo;
+    halo *= smoothstep(6.0 * r, 1.0 * r, dPerp);
+
+    if (type == BODY_NEUTRON) {
+        // Neutron star: tighter, much brighter blue corona, plus a pulsar
+        // lighthouse beam aligned with a tilted spin axis.
+        // Spin axis is deterministic per body (hash on position) so it
+        // doesn't flicker as the body orbits.
+        vec3 axis = normalize(vec3(0.3 + 0.7 * hash13(c),
+                                   0.2 + 0.6 * hash13(c + 7.1),
+                                   0.5 + 0.5 * hash13(c + 13.3)) - 0.5);
+        // Magnetic axis tilted from spin axis by ~15°, sweeping with time.
+        float spin = uTime * 6.0 + 6.2831 * hash13(c + 19.0);
+        vec3  perpA = normalize(cross(axis, vec3(1.0, 0.0, 0.0)
+                                        + 0.01 * axis));
+        vec3  perpB = normalize(cross(axis, perpA));
+        vec3  mag   = normalize(axis * cos(0.26)
+                              + (perpA * cos(spin) + perpB * sin(spin)) * sin(0.26));
+        // Vector from body to closest-approach point.
+        vec3 toClosest = closestP - c;
+        float lenC = length(toClosest);
+        float beam = 0.0;
+        if (lenC > 1e-4) {
+            vec3 dirC = toClosest / lenC;
+            float ang = abs(dot(dirC, mag));         // 0..1 along axis
+            // Two-sided narrow cone (both magnetic poles)
+            beam = pow(smoothstep(0.985, 1.0, ang), 2.0);
+            // Falloff with distance — beam stays visible far from the star.
+            beam *= exp(-lenC * lenC / (60.0 * r * r));
+        }
+        vec3 coronaCol = mix(col, vec3(1.0), 0.5) * 4.0;
+        vec3 beamCol   = vec3(0.7, 0.85, 1.0) * 8.0;
+        return coronaCol * halo + beamCol * beam;
+    }
+    if (type == BODY_WDWARF) {
+        vec3 coronaCol = mix(col, vec3(1.0), 0.7) * 2.4;
+        return coronaCol * halo;
+    }
+    if (type == BODY_COMPANION) {
+        // Wider, redder corona for a giant.
+        halo *= 1.3;
+        vec3 coronaCol = mix(col, vec3(1.0, 0.85, 0.55), 0.5) * 2.0;
+        return coronaCol * halo;
+    }
+    // Default: BODY_STAR
+    vec3 coronaCol = mix(col, vec3(1.0), 0.6) * 1.8;
+    return coronaCol * halo;
 }
 
 // ============================================================================
@@ -847,13 +1042,42 @@ void traceRay(
     float orbBodyHitAlpha = 0.0;
     bool orbBodyHit = false;
     int hitBodyIndex = -1;
+    // Stellar corona accumulation (additive, applied even when the ray misses
+    // the body's geometric disk). This is what makes a star actually look
+    // like a star instead of a flat-shaded sphere.
+    vec3 coronaAcc = vec3(0.0);
     if (showOrbBody != 0) {
         for (int i = 0; i < numOrbBodies; ++i) {
-            float t = intersectSphere(ro, rd, orbBodyPos[i], orbBodyRadius[i]);
-            if (t > 0.0 && (orbBodyDist < 0.0 || t < orbBodyDist)) {
-                orbBodyDist = t;
-                hitBodyIndex = i;
+            // Opaque body types occlude what's behind them — test the
+            // straight ray for a hard surface hit. Extended types (gas
+            // clouds, clusters, dwarf galaxies) skip this and contribute
+            // purely additively below.
+            if (isOpaqueBody(orbBodyType[i])) {
+                float t = intersectSphere(ro, rd, orbBodyPos[i], orbBodyRadius[i]);
+                if (t > 0.0 && (orbBodyDist < 0.0 || t < orbBodyDist)) {
+                    orbBodyDist  = t;
+                    hitBodyIndex = i;
+                }
             }
+
+            // Per-type additive emission (corona for stars, volumetric
+            // glow for clouds/clusters/galaxies, lighthouse beam for
+            // neutron stars).
+            coronaAcc += orbBodyEmission(i, ro, rd);
+        }
+        // Pre-shade the nearest opaque body using the straight-ray hit. The
+        // straight ray is what determines screen-space visibility from the
+        // camera — gravitational lensing of the body itself is a secondary
+        // effect we ignore here so the body never appears transparent
+        // through lensed disk/photon-ring features.
+        if (hitBodyIndex >= 0) {
+            vec3 bodyHitPos = ro + rd * orbBodyDist;
+            vec3 bodyNormal = normalize(bodyHitPos - orbBodyPos[hitBodyIndex]);
+            orbBodyHitColor = shadeOrbBody(orbBodyType[hitBodyIndex],
+                                           bodyHitPos, bodyNormal,
+                                           orbBodyPos[hitBodyIndex],
+                                           orbBodyColor[hitBodyIndex]);
+            orbBodyHitAlpha = 1.0;
         }
     }
     float totalDist = 0.0;  // Track total ray distance marched
@@ -903,19 +1127,14 @@ void traceRay(
         if (abs(rBH - PHOTON_SPHERE) < 0.3)
             stepLen *= 0.5;
         
-        // Check if we've reached the orbiting body depth
-        if (orbBodyDist > 0.0 && !orbBodyHit && totalDist + stepLen >= orbBodyDist * 0.85) {
-            // Re-test from current (lensed) position for accurate hit
-            float tBody = intersectSphere(pos, dir, orbBodyPos[hitBodyIndex], orbBodyRadius[hitBodyIndex]);
-            if (tBody > 0.0 && tBody < stepLen * 5.0 + orbBodyRadius[hitBodyIndex] * 2.0) {
-                vec3 bodyHitPos = pos + dir * tBody;
-                vec3 bodyNormal = normalize(bodyHitPos - orbBodyPos[hitBodyIndex]);
-                orbBodyHitColor = shadeOrbBody(bodyHitPos, bodyNormal, orbBodyPos[hitBodyIndex], orbBodyColor[hitBodyIndex]);
-                orbBodyHitAlpha = 1.0;
-                orbBodyHit = true;
-            } else if (totalDist > orbBodyDist * 1.5) {
-                orbBodyDist = -1.0;  // Missed due to lensing, stop checking
-            }
+        // Check if we've reached the orbiting body depth.
+        // The body has already been pre-shaded from the straight-ray hit;
+        // here we just stop the march so nothing behind it (including
+        // strongly-lensed disk emission and the photon ring) gets
+        // composited on top.
+        if (orbBodyDist > 0.0 && !orbBodyHit && totalDist + stepLen >= orbBodyDist) {
+            orbBodyHit = true;
+            break;
         }
         totalDist += stepLen;
         
@@ -1113,22 +1332,29 @@ void traceRay(
         }
     }
 
-    // Composite layers: BLR behind disk, disk on top, body on top, jets additive
+    // Composite layers: body acts as opaque "background" when hit (the
+    // ray-march already stopped at the body, so BLR/disk/jet accumulators
+    // only contain emission BETWEEN camera and body — i.e. in front of it).
     vec3 result = bgColor;
-    
-    // Layer BLR storm clouds (behind/around the thin disk)
-    if (blrAlphaAcc > 0.0) {
-        result = result * (1.0 - blrAlphaAcc) + blrAcc;
-    }
-    
-    // Layer orbiting body (behind or in front of disk depending on depth)
+
+    // Layer opaque orbiting body over the sky/BH background first
     if (orbBodyHit) {
         result = mix(result, orbBodyHitColor, orbBodyHitAlpha);
     }
-    
+
+    // Stellar corona — additive halo around every body, visible whether or
+    // not the ray hits the body's surface. This is what gives stars their
+    // characteristic glow and makes them readable as suns rather than spheres.
+    result += coronaAcc;
+
+    // Layer BLR storm clouds (in front of body, behind the thin disk)
+    if (blrAlphaAcc > 0.0) {
+        result = result * (1.0 - blrAlphaAcc) + blrAcc;
+    }
+
     // Layer primary thin accretion disk over
     result = mix(result, accumulatedColor, accumulatedAlpha);
-    
+
     // Add jets on top (additive)
     result += jetAcc;
     

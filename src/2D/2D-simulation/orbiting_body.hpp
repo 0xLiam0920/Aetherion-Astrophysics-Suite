@@ -44,6 +44,27 @@ struct OrbitingBody {
     Measurement measurement;
     bool captured = false;
 
+    // When true the body has been flung free of the BH system and moves in a
+    // straight line (Cartesian) — no more geodesic integration.
+    bool   ejected   = false;
+    double x_eject   = 0.0;   // world position (geometric units) at ejection
+    double y_eject   = 0.0;
+    double vx_eject  = 0.0;   // world velocity (geometric units / wall-second)
+    double vy_eject  = 0.0;
+
+    // Convert current geodesic state → Cartesian ejection velocity and mark body ejected.
+    // Uses proper-velocity components (dx/dτ) which are good enough for visual linear flight.
+    void markEjected() {
+        if (ejected || captured) return;
+        double cos_p = std::cos(phi), sin_p = std::sin(phi);
+        double v_tan = L / r;  // tangential proper-speed = r·(dφ/dτ) = L/r
+        vx_eject = vr * cos_p - v_tan * sin_p;
+        vy_eject = vr * sin_p + v_tan * cos_p;
+        x_eject  = worldX();
+        y_eject  = worldY();
+        ejected  = true;
+    }
+
     // Research tracking
     PrecessionTracker      precession;
     ConservationTracker    conservation;
@@ -63,6 +84,7 @@ struct OrbitingBody {
         nominalA = a;
         nominalEcc = ecc;
         captured = false;
+        ejected  = false;
         bool clamped = false;
 
         double r_peri = a * (1.0 - ecc);
@@ -98,7 +120,6 @@ struct OrbitingBody {
     // Init for circular orbit at exact radius (for ISCO tests)
     // "exact" is doing some heavy lifting here, we give it the exactly correct E and L for a circular orbit,
     // then immediately kick vr by a tiny amount in startISCOTest() to see what happens.
-    // spoiler: the unstable one falls in. every single time. It's 3am, but goddamn that's satisfying...
     void initCircularOrbit(const Schwarzschild& bh, double r0) {
         auto params = bh.circularOrbitEL(r0);
         E = params.E;
@@ -109,6 +130,7 @@ struct OrbitingBody {
         nominalA = r0;
         nominalEcc = 0.0;
         captured = false;
+        ejected  = false;
         measurement = Measurement{};
         trail.clear();
         trail.emplace_back(worldX(), worldY());
@@ -121,7 +143,7 @@ struct OrbitingBody {
     // Init for radial infall from rest at r0 (L=0)
     void initRadialInfall(const Schwarzschild& bh, double r0) {
         // E = sqrt(f(r0)) is the specific energy for an object at rest at r0.
-        // dropping from rest at finite r rather than infinity means E < 1, which is correct —
+        // dropping from rest at finite r rather than infinity means E < 1, which is correct
         // it takes energy to have been assembled at r0 against gravity.
         // L=0 means pure radial infall — no angular momentum, just falls straight in.
         // this is one of those cases where the GR result is genuinely different from Newtonian:
@@ -135,6 +157,7 @@ struct OrbitingBody {
         nominalA = r0;
         nominalEcc = 1.0;
         captured = false;
+        ejected  = false;
         measurement = Measurement{};
         trail.clear();
         trail.emplace_back(worldX(), worldY());
@@ -150,6 +173,21 @@ struct OrbitingBody {
 
     void update(const Schwarzschild& bh, double dt) {
         if (captured) return;
+
+        // Ejected bodies fly in a straight line — no more geodesic pull.
+        if (ejected) {
+            x_eject += vx_eject * dt;
+            y_eject += vy_eject * dt;
+            r   = std::sqrt(x_eject * x_eject + y_eject * y_eject);
+            phi = std::atan2(y_eject, x_eject);
+            trailCounter++;
+            if (trailCounter % 2 == 0) {
+                trail.emplace_back(x_eject, y_eject);
+                if (trail.size() > MAX_TRAIL) trail.pop_front();
+            }
+            return;
+        }
+
 
         double fr = bh.f(r);
         if (fr <= 1e-10) { captured = true; return; }

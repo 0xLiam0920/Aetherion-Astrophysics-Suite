@@ -32,7 +32,7 @@ struct KeyState {
         }
     }
 
-    void onKeyReleased(sf::Keyboard::Key code) {
+    void onKeyReleased(sf::Keyboard::Key code) { // nobody pressed anything. noted.
         switch (code) {
             case sf::Keyboard::Key::W:        w = false;    break;
             case sf::Keyboard::Key::A:        a = false;    break;
@@ -47,4 +47,3 @@ struct KeyState {
         }
     }
 };
-// fun fact: I think this is the shortest file in my entire repo!

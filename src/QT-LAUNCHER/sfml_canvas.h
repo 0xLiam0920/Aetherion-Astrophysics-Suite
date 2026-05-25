@@ -39,6 +39,7 @@ public:
     virtual void onKeyPressed(sf::Keyboard::Key code) {}
     virtual void onKeyReleased(sf::Keyboard::Key code) {}
     virtual void onMouseWheelScrolled(float delta, float x, float y) {}
+    virtual void onTextEntered(char32_t unicode) {}
 
 protected:
     QPaintEngine *paintEngine() const override { return nullptr; }

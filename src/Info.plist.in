@@ -8,3 +8,5 @@
     <string>1</string>
 </dict>
 </plist>
+
+<!--  this file exists for the sole purpose of setting LSUIElement to 1, which makes the app run without a dock icon or menu bar.  -->

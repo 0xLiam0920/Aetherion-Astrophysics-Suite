@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-    <id>io.github.ArandomHitman.AetherionSuite</id>
+    <id>io.github.0xLiam0920.AetherionSuite</id>
     <metadata_license>CC0-1.0</metadata_license>
     <project_license>GPL-3.0-or-later</project_license>
 
@@ -26,10 +26,10 @@
         </ul>
     </description>
 
-    <launchable type="desktop-id">io.github.ArandomHitman.AetherionSuite.desktop</launchable>
+    <launchable type="desktop-id">io.github.0xLiam0920.AetherionSuite.desktop</launchable>
 
-    <url type="homepage">https://github.com/ArandomHitman/Aetherion-Astrophysics-Suite</url>
-    <url type="bugtracker">https://github.com/ArandomHitman/Aetherion-Astrophysics-Suite/issues</url>
+    <url type="homepage">https://github.com/0xLiam0920/Aetherion-Astrophysics-Suite</url>
+    <url type="bugtracker">https://github.com/0xLiam0920/Aetherion-Astrophysics-Suite/issues</url>
 
     <provides>
         <binary>blackhole-sim</binary>

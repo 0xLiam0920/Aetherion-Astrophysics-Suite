@@ -4,8 +4,8 @@ set -euo pipefail
 cd ~/Aetherion-Astrophysics-Suite-git
 git pull
 flatpak-builder --user --install --force-clean build-flatpak \
-    flatpak/io.github.ArandomHitman.AetherionSuite.json
-flatpak run io.github.ArandomHitman.AetherionSuite
+    flatpak/io.github.0xLiam0920.AetherionSuite.json
+flatpak run io.github.0xLiam0920.AetherionSuite
 
 
 # For lazy people who don't wanna type everything line by line (me fr)

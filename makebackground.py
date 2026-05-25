@@ -13,7 +13,6 @@
 from PIL import Image, ImageFilter, ImageDraw
 import numpy as np
 import random, math
-
 ## ---------------- Main code ---------------- ##
 random.seed(99)
 np.random.seed(99)

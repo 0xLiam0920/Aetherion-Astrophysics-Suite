@@ -3,7 +3,7 @@
 # ============================================================
 # Downloads the three source archives used in the Flatpak manifest
 # and prints their sha256 checksums.  Also patches them directly
-# into io.github.ArandomHitman.AetherionSuite.json.
+# into io.github.0xLiam0920.AetherionSuite.json.
 #
 # Run this whenever you update a dependency URL or version:
 #
@@ -17,10 +17,10 @@ TMPDIR_WORK="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_WORK"' EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MANIFEST="$SCRIPT_DIR/io.github.ArandomHitman.AetherionSuite.json"
+MANIFEST="$SCRIPT_DIR/io.github.0xLiam0920.AetherionSuite.json"
 
 declare -A URLS=(
-    ["glew"]="https://github.com/nigels-com/glew/releases/download/glew-2.2.0/glew-2.2.0.tgz"
+    ["glew"]="https://github.com/nigels-com/glew/releases/download/glew-2.2.0/glew-2.2.0.tgz" # do not change these please, the URLs must point to the exact same versions as in the manifest
     ["glm"]="https://github.com/g-truc/glm/archive/refs/tags/1.0.1.tar.gz"
     ["sfml"]="https://github.com/SFML/SFML/archive/refs/tags/3.0.0.tar.gz"
 )
@@ -42,7 +42,7 @@ for NAME in glew glm sfml; do
     fi
     SUMS[$NAME]="$SUM"
     echo "  sha256 ($NAME): $SUM"
-    echo ""
+    echo "" # you know, I wish there was a \n for shell syntax.
 done
 
 # Patch the manifest in-place using Python for reliable JSON editing
@@ -66,7 +66,7 @@ with open(manifest_path, "w") as f:
     json.dump(data, f, indent=4)
     f.write("\n")
 
-print(f"Manifest patched: {manifest_path}")
+print(f"Manifest patched: {manifest_path}") 
 PYEOF
 
 echo "-------------------------------------------------------------"

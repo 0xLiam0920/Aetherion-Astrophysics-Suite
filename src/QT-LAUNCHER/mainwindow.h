@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QJsonObject>
+#include <QList>
 #include "custom_bh_dialog.h"
 #include "updater.h"
 
@@ -13,6 +14,8 @@ class QListWidget;
 class QListWidgetItem;
 class QStackedWidget;
 class QTabWidget;
+class QChart;
+class QChartView;
 class QLineEdit;
 class QComboBox;
 class QDoubleSpinBox;
@@ -44,6 +47,7 @@ private slots:
     void onRecentItemContextMenu(const QPoint &pos);
     void updateMemoryDisplay();
     void checkForUpdatesManual();
+    void toggleTheme(bool lightMode);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -52,6 +56,7 @@ protected:
 private:
     void setupUI();
     void applyStyles();
+    void applyChartTheme();
     void loadSettings();
     void saveSettings();
     void openSimulationTab2D(const QString &tabTitle, const QJsonObject &state = {});
@@ -64,6 +69,7 @@ private:
     QWidget *createObjectLibraryPage();
     QWidget *createExportPage();
     QWidget *createSettingsPage();
+    QWidget *createBreakdownPage();
 
     // Workspace persistence
     QString workspacesDir() const;
@@ -73,6 +79,8 @@ private:
 
     // Data analysis
     QString exportsBaseDir() const;
+    QList<QChart *>     m_dataCharts;     // all 8 analysis charts
+    QList<QChartView *> m_dataChartViews; // corresponding views
 
     // Core layout
     QWidget        *centralWidget;
@@ -91,11 +99,13 @@ private:
     // Settings page widgets (populated in createSettingsPage, read in saveSettings)
     QCheckBox  *showTooltipsCheck  = nullptr;
     QCheckBox  *memoryDisplayCheck = nullptr;
+    QCheckBox  *lightModeCheck     = nullptr;
     QLineEdit  *exportFolderEdit   = nullptr;
     QComboBox  *exportTypeCombo    = nullptr;
 
     // Runtime state loaded from QSettings
     bool memoryDisplayEnabled = true;
+    bool lightModeEnabled     = false;
 
     Updater *m_updater = nullptr;
 };

@@ -201,6 +201,7 @@ int main(int argc, char* argv[]) {
                 ui.presetIdx    = idx;
                 sim.bh.metric.M   = units::solarMassToGeomMeters(BH2D_PRESETS[idx].massSolar);
                 sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
+                sim.tidalRadiusM  = BH2D_PRESETS[idx].zones.tidalDisruptionM;
                 sim.reinitBodies();
                 if (ui.showGalaxySystem && BH2D_PRESETS[idx].isGalacticCenter)
                     sim.spawnGalaxySystem(idx);
@@ -426,11 +427,17 @@ int main(int argc, char* argv[]) {
                     case GalaxyBodyType::NeutronStar:    labelColor = sf::Color(160, 200, 255); break;
                     case GalaxyBodyType::WhiteDwarf:     labelColor = sf::Color(200, 215, 255); break;
                     case GalaxyBodyType::CompanionStar:  labelColor = sf::Color(255, 220, 160); break;
+                    /*
+                    case GalaxyBodyType::Blanet:         labelColor = sf::Color(100, 100, 100); break; // WILL COME BACK TO THESE AT ANOTHER TIME
+                    case GalaxyBodyType::BrownDwarf:     labelColor = sf::Color(); break;
+                    case GalaxyBodyType::G-Body:         labelColor = sf::Color(180, 255, 180); break;
+                    case GalaxyBodyType::SecondaryBH:    labelColor = sf::Color(); break;
+                    */ 
                 }
                 renderer.drawBodyLabel(bodyVis.screenPos, body.label, labelColor);
             }
 
-            // Label research scenario bodies
+            // Label research scenario bodies, makes things a lot less confusing
             if (!body.isGalaxyBody && !body.label.empty() &&
                 sim.activeScenario != ResearchScenario::None) {
                 renderer.drawBodyLabel(bodyVis.screenPos, body.label,
@@ -438,9 +445,35 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // ---- Tidal disruption event overlay ----
+        if (sim.tidalEvent.active) {
+            sf::Vector2f flashPos = {
+                bhCenter.x + static_cast<float>(sim.tidalEvent.eventX * camera.pixelsPerM),
+                bhCenter.y - static_cast<float>(sim.tidalEvent.eventY * camera.pixelsPerM)
+            };
+            float flashAlpha = (sim.tidalEvent.flashTimer > 0.0)
+                ? static_cast<float>(sim.tidalEvent.flashTimer /
+                                     Simulation::TidalEvent::FLASH_DURATION)
+                : 0.0f;
+            bool showLabel = flashAlpha > 0.0f || !sim.tidalEvent.particles.empty();
+            std::vector<Renderer::TidalParticleVis> pvis;
+            pvis.reserve(sim.tidalEvent.particles.size());
+            for (const auto& p : sim.tidalEvent.particles) {
+                float lifeF = static_cast<float>(p.lifetime / p.maxLifetime);
+                pvis.push_back({
+                    bhCenter.x + static_cast<float>(p.x * camera.pixelsPerM),
+                    bhCenter.y - static_cast<float>(p.y * camera.pixelsPerM),
+                    p.size * lifeF,
+                    lifeF,
+                    p.isFallback
+                });
+            }
+            renderer.drawTidalEvent(flashPos, flashAlpha, pvis, showLabel);
+        }
+
         renderer.drawHUD(cachedHUD);
 
-        // Controls panel (left side, toggleable with /)
+        // Controls panel (left side, toggleable with / or ? symbol)
         if (ui.showControlsPanel)
             renderer.drawControlsPanel(camera.viewHeight);
 
@@ -448,6 +481,74 @@ int main(int argc, char* argv[]) {
         if (ui.showDataPanel)
             renderer.drawDataPanel(sim.formatDataPanel(),
                                    camera.viewWidth, camera.viewHeight);
+
+        // Merger: draw death-spiral trails and incoming BH during inspiral
+        if (sim.merger.active && sim.merger.flashTimer <= 0.0) {
+            const double q   = sim.merger.massRatioQ;
+            const double sep = sim.merger.r_M * sim.bh.metric.M;
+
+            // Secondary position — orbits at r2 = sep*(1-q) from origin (CoM)
+            const double r2   = sep * (1.0 - q);
+            const double sx2  = r2 * std::cos(sim.merger.phi);
+            const double sy2  = r2 * std::sin(sim.merger.phi);
+            sf::Vector2f secPos = {
+                bhCenter.x + (float)(sx2 * camera.pixelsPerM),
+                bhCenter.y - (float)(sy2 * camera.pixelsPerM)
+            };
+
+            // Draw secondary death-spiral trail (purple)
+            renderer.drawMergerTrail(sim.merger.trail2, bhCenter,
+                                     camera.pixelsPerM,
+                                     sf::Color(180, 100, 255));
+
+            // Primary barycentric wobble trail (cyan) — only for similar-mass mergers
+            if (q > 0.01) {
+                renderer.drawMergerTrail(sim.merger.trail1, bhCenter,
+                                         camera.pixelsPerM,
+                                         sf::Color(100, 220, 255));
+            }
+
+            // Incoming BH disk
+            double m2_geom = units::solarMassToGeomMeters(sim.merger.massSolar);
+            float horizonPx2 = (float)(m2_geom * camera.pixelsPerM);
+            float minPx = 4.0f;
+            renderer.drawMergerBH(secPos, std::max(minPx, horizonPx2));
+
+            // Primary barycentric wobble — shift the drawn BH center slightly
+            // for equal-mass mergers so both BHs visibly orbit the common center.
+            // (The actual simulation BH metric stays at the origin; this is display only.)
+            if (q > 0.01) {
+                const double r1  = sep * q;
+                sf::Vector2f primOffset = {
+                    bhCenter.x - (float)(r1 * std::cos(sim.merger.phi) * camera.pixelsPerM),
+                    bhCenter.y + (float)(r1 * std::sin(sim.merger.phi) * camera.pixelsPerM)
+                };
+                // Draw a subtle cyan glow at the primary's displaced position
+                float gR = std::max(4.0f, (float)(sim.bh.metric.M * 2.0 * camera.pixelsPerM));
+                sf::CircleShape primGlow(gR);
+                primGlow.setOrigin({gR, gR});
+                primGlow.setPosition(primOffset);
+                primGlow.setFillColor(sf::Color(100, 220, 255, 40));
+                primGlow.setOutlineThickness(1.5f);
+                primGlow.setOutlineColor(sf::Color(100, 220, 255, 120));
+                // (draw via the window directly isn't possible here — use renderer)
+                // Instead, we use the existing drawMergerBH with a tiny radius to
+                // represent the primary wobble as a highlight ring:
+                renderer.drawMergerBH(primOffset,
+                    std::max(2.0f, (float)(sim.bh.metric.M * camera.pixelsPerM)));
+            }
+        }
+
+        // Merger: white flash at coalescence
+        if (sim.merger.active && sim.merger.flashTimer > 0.0) {
+            float alpha = (float)(sim.merger.flashTimer / Simulation::MergerState::FLASH_DURATION);
+            renderer.drawMergeFlash(alpha, camera.viewWidth, camera.viewHeight);
+        }
+
+        // Merger menu overlay (drawn on top of everything)
+        if (ui.mergerMenu.open)
+            renderer.drawMergerMenu(ui.mergerMenu, BH2D_PRESETS, NUM_BH2D_PRESETS,
+                                    camera.viewWidth, camera.viewHeight);
 
         // Notification (bottom)
         if (ui.notificationTimer > 0) {

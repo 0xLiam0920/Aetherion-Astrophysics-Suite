@@ -121,6 +121,8 @@ struct KeyConfig2D {
     sf::Keyboard::Key testInfall         = sf::Keyboard::Key::Num3;
     sf::Keyboard::Key testTidal          = sf::Keyboard::Key::Num4;
     sf::Keyboard::Key testPulsar         = sf::Keyboard::Key::Num5;
+    // ── Merger menu ─────────────────────────────────────────────────────────
+    sf::Keyboard::Key mergerMenu         = sf::Keyboard::Key::Num6;
 };
 
 // ── Load from .cfg file ──────────────────────────────────────────────────────
@@ -188,6 +190,7 @@ inline KeyConfig2D loadKeyConfig2D(const std::string &path)
         else if (action == "test_infall")     cfg.testInfall     = k;
         else if (action == "test_tidal")      cfg.testTidal      = k;
         else if (action == "test_pulsar")     cfg.testPulsar     = k;
+        else if (action == "merger_menu")      cfg.mergerMenu     = k;
     }
     return cfg;
 }

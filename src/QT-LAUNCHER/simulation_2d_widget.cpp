@@ -399,11 +399,61 @@ void Simulation2DWidget::onUpdate()
 
     renderer_->drawHUD(buildHUD(*sim_, *ui_));
 
+    // ---- Tidal disruption event overlay ----
+    if (sim_->tidalEvent.active) {
+        sf::Vector2f center = camera_->center();
+        sf::Vector2f flashPos = {
+            center.x + static_cast<float>(sim_->tidalEvent.eventX * camera_->pixelsPerM),
+            center.y - static_cast<float>(sim_->tidalEvent.eventY * camera_->pixelsPerM)
+        };
+        float flashAlpha = (sim_->tidalEvent.flashTimer > 0.0)
+            ? static_cast<float>(sim_->tidalEvent.flashTimer /
+                                 Simulation::TidalEvent::FLASH_DURATION)
+            : 0.0f;
+        bool showLabel = flashAlpha > 0.0f || !sim_->tidalEvent.particles.empty();
+        std::vector<Renderer::TidalParticleVis> pvis;
+        pvis.reserve(sim_->tidalEvent.particles.size());
+        for (const auto& p : sim_->tidalEvent.particles) {
+            float lifeF = static_cast<float>(p.lifetime / p.maxLifetime);
+            pvis.push_back({
+                center.x + static_cast<float>(p.x * camera_->pixelsPerM),
+                center.y - static_cast<float>(p.y * camera_->pixelsPerM),
+                p.size * lifeF,
+                lifeF,
+                p.isFallback
+            });
+        }
+        renderer_->drawTidalEvent(flashPos, flashAlpha, pvis, showLabel);
+    }
+
     if (ui_->showControlsPanel)
         renderer_->drawControlsPanel(camera_->viewHeight);
 
     if (ui_->showDataPanel)
         renderer_->drawDataPanel(sim_->formatDataPanel(), camera_->viewWidth, camera_->viewHeight);
+
+    // Merger BH (inspiral body)
+    if (sim_->merger.active && sim_->merger.flashTimer <= 0.0) {
+        sf::Vector2f center = camera_->center();
+        double r_world = sim_->merger.r_M * sim_->bh.metric.M;
+        float sx = center.x + (float)(r_world * std::cos(sim_->merger.phi) * camera_->pixelsPerM);
+        float sy = center.y - (float)(r_world * std::sin(sim_->merger.phi) * camera_->pixelsPerM);
+        double m2_geom = units::solarMassToGeomMeters(sim_->merger.massSolar);
+        float horizonPx2 = (float)(m2_geom * camera_->pixelsPerM);
+        float minPx = 4.0f;
+        renderer_->drawMergerBH({sx, sy}, std::max(minPx, horizonPx2));
+    }
+
+    // Merger white flash
+    if (sim_->merger.active && sim_->merger.flashTimer > 0.0) {
+        float alpha = (float)(sim_->merger.flashTimer / Simulation::MergerState::FLASH_DURATION);
+        renderer_->drawMergeFlash(alpha, camera_->viewWidth, camera_->viewHeight);
+    }
+
+    // Merger menu overlay
+    if (ui_->mergerMenu.open)
+        renderer_->drawMergerMenu(ui_->mergerMenu, BH2D_PRESETS, NUM_BH2D_PRESETS,
+                                   camera_->viewWidth, camera_->viewHeight);
 
     if (ui_->notificationTimer > 0) {
         renderer_->drawNotification(ui_->notification, camera_->viewWidth, camera_->viewHeight);
@@ -427,6 +477,14 @@ void Simulation2DWidget::onKeyPressed(sf::Keyboard::Key code)
 void Simulation2DWidget::onKeyReleased(sf::Keyboard::Key /*code*/)
 {
     // 2D controls only act on KeyPressed; nothing to do here
+}
+
+void Simulation2DWidget::onTextEntered(char32_t unicode)
+{
+    if (!sim_ || !ui_ || !camera_) return;
+    if (!ui_->mergerMenu.open || !ui_->mergerMenu.inputtingCustom) return;
+    sf::Event ev{ sf::Event::TextEntered{ unicode } };
+    handleInput(ev, *sim_, *ui_, static_cast<unsigned int>(camera_->viewHeight), keyConfig_);
 }
 
 void Simulation2DWidget::onMouseMoved(float /*x*/, float /*y*/)

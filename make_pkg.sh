@@ -174,7 +174,7 @@ else
     cat > "${RESOURCES_DIR}/LICENSE.txt" <<'LICENSE'
 MIT License
 
-Copyright (c) 2026 ArandomHitman
+Copyright (c) 2026 0xLiam0920
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

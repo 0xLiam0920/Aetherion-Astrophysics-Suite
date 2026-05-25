@@ -12,7 +12,7 @@
 ## Beta release 3: Finishing the 3d simulation program.
 - [ ] (bugfix) - Fix low quality model and simulation parameters
 - [ ] (bugfix) - Fixup the orbiting body/objects (everything)
-- [ ] Add more objects to the 3d sim (i.e, star being consumed, pulsar, etc)
+- [ ] Add more objects to the 3d sim (i.e, star being consumed, pulsar, etc) ## kinda done..?
 - [ ] Add custom menu for creating simulative objects and storing new objects in the object database
 - [ ] (bugfix) - Fix the rendering of orbiting objects rendering transparent when in front of the black hole
 - [x] Add Gaia BH1, and other BHX candidates to option database

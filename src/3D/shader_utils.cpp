@@ -1,6 +1,6 @@
 #include "shader_utils.hpp"
 
-// If something in here is returning 0, a shader exploded somewhere above you.
+// If something in here is returning 0, the shader crapped itself.
 // Good luck.
 
 #include <fstream>
@@ -19,7 +19,7 @@ std::string readFile(const char* path) {
     return contents;
 }
 
-void printShaderLog(GLuint shader) {
+void printShaderLog(GLuint shader) { // always call this after compiling a shader, even if it succeeded, because some drivers print warnings that are useful to see
     GLint success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success) {
@@ -31,7 +31,7 @@ void printShaderLog(GLuint shader) {
     }
 }
 
-void printProgramLog(GLuint program) {
+void printProgramLog(GLuint program) { // always call this after linking a program, even if it succeeded, because some drivers print warnings that are useful to see
     GLint success = 0;
     glGetProgramiv(program, GL_LINK_STATUS, &success);
     if (!success) {
@@ -43,14 +43,14 @@ void printProgramLog(GLuint program) {
     }
 }
 
-GLuint compileShader(GLenum type, const char* src) {
+GLuint compileShader(GLenum type, const char* src) { 
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &src, nullptr);
     glCompileShader(shader);
     printShaderLog(shader);
 
     GLint success = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success); 
     if (!success) {
         glDeleteShader(shader);
         return 0;

@@ -36,14 +36,64 @@ uniform int   showBLR;           // Toggle Broad Line Region          [ADDED 202
 uniform float blrInnerRadius;    // BLR inner edge (world units)     [ADDED 2026-04-24]
 uniform float blrOuterRadius;    // BLR outer edge (world units)     [ADDED 2026-04-24]
 uniform float blrThickness;      // BLR vertical half-thickness      [ADDED 2026-04-24]
+uniform float blrStrength;       // [0,1] cloud opacity scaler per black hole
+uniform int   maxStepsOverride;  // Runtime step limit [ADDED 2026-05-25: was previously dead]
+
+// ============================================================================
+// NOISE UTILITIES
+// ============================================================================
+// Value hash — maps a vec3 lattice point to a pseudo-random float [0,1].
+// Classic permutation-free hash from Dave Hoskins.
+float hash31(vec3 p) {
+    p = fract(p * vec3(443.897, 441.423, 437.195));
+    p += dot(p, p.yzx + 19.19);
+    return fract((p.x + p.y) * p.z);
+}
+
+float hash11(float p) {
+    return fract(sin(p * 127.1) * 43758.5453);
+}
+
+// Smooth 3-D value noise — trilinear interpolation of random lattice values.
+float valueNoise3(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f); // smoothstep curve
+
+    float v000 = hash31(i + vec3(0,0,0));
+    float v100 = hash31(i + vec3(1,0,0));
+    float v010 = hash31(i + vec3(0,1,0));
+    float v110 = hash31(i + vec3(1,1,0));
+    float v001 = hash31(i + vec3(0,0,1));
+    float v101 = hash31(i + vec3(1,0,1));
+    float v011 = hash31(i + vec3(0,1,1));
+    float v111 = hash31(i + vec3(1,1,1));
+
+    return mix(
+        mix(mix(v000, v100, u.x), mix(v010, v110, u.x), u.y),
+        mix(mix(v001, v101, u.x), mix(v011, v111, u.x), u.y),
+        u.z);
+}
+
+// Fractional Brownian Motion — 4 octaves of value noise.
+// Gives the clumpy, self-similar structure of turbulent astrophysical gas.
+float fbm(vec3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    vec3  shift = vec3(100.0);
+    for (int o = 0; o < 4; ++o) {
+        v += a * valueNoise3(p);
+        p  = p * 2.1 + shift;
+        a *= 0.5;
+    }
+    return v;
+}
 
 // Constants
-const int MAX_STEPS = 140; // FIXME: This is quite possibly the WORST way to do this.
-// MAX_DIST was hardcoded 140.0 — REMOVED 2026-04-24. Scene radius is now computed dynamically
-// from diskOuterRadius/jetLength inside traceBentRay and main() so large configs (e.g. outer=200 Rs)
-// no longer clip the outer disk or jet tips. The maxStepsOverride uniform still does nothing
-// (it's declared on the CPU and sent every frame but never read here — see the original sin above).
-// Fixing that is left as an exercise for a future, more caffeinated author.
+// [FIXED 2026-05-25] MAX_STEPS is now the hard upper bound for the GLSL loop; the actual
+// per-frame iteration count is clamped from maxStepsOverride (CPU side sends 200 for FAST,
+// 300 for CINEMATIC). Early-break keeps perf identical to old 140 when override is low.
+const int MAX_STEPS = 320;
 const float EPSILON = 1e-4;
 const float PI = 3.14159265359;
 
@@ -106,6 +156,27 @@ vec4 sampleDiskRGBA(vec3 pos, vec3 bhPos) {
     float radFade = smoothstep(diskOuterRadius, diskOuterRadius * 0.92, r) *
                     smoothstep(diskInnerRadius, diskInnerRadius * 1.10, r);
     d.a *= radFade;
+
+    // ── Magnetic instability / MRI turbulence knots ────────────────────────
+    // The magnetorotational instability (MRI) creates clumpy density structures
+    // in the disk. Model them as animated fBm noise co-rotating with the disk.
+    // Noise is evaluated in a frame that rotates with the local Keplerian speed
+    // so knots appear stationary in the disk (not in the lab frame).
+    float phi_rot = atan(rotXZ.y, rotXZ.x); // azimuth in co-rotating frame
+    vec3 noiseCoord = vec3(
+        r * cos(phi_rot + uTime * 0.03),
+        r * sin(phi_rot + uTime * 0.03),
+        uTime * 0.07            // slow vertical shimmer
+    ) * 0.55;                   // scale: controls knot spatial frequency
+    float turb = fbm(noiseCoord);
+    // Shape: bright knots (turb > 0.55) pop out against a dimmer average disk.
+    // The 2x factor keeps average brightness neutral; clamp prevents blow-out.
+    float knotBright = clamp(turb * 2.0 - 0.5, 0.5, 2.5);
+    // Knots are hotter — bias color toward blue-white at peak intensity
+    vec3 knotTint = mix(vec3(1.0, 0.85, 0.6), vec3(1.1, 1.05, 1.3),
+                        smoothstep(0.55, 1.0, turb));
+    d.rgb *= knotBright * knotTint;
+
     return d;
 }
 
@@ -196,21 +267,111 @@ vec3 applyDoppler(vec3 color, vec3 rel, vec3 viewDir) {
     return applyFrequencyShift(color, freqShift);
 }
 
-vec3 jetEmission(vec3 pos, vec3 bhPos) {
-    // Jets along +Y and -Y.
+// ============================================================================
+// JET EMISSION
+// ============================================================================
+// Volumetric relativistic jets along ±Y with:
+//   • Noise knots (MHD shocks) animated outward at ~0.9c
+//   • Relativistic Doppler beaming: jet aimed toward viewer appears longer/brighter
+//
+// Doppler beaming derivation:
+//   β = jet speed / c (0.9)
+//   cosθ = dot(jetDir, -viewDir)   (positive when jet points toward viewer)
+//   D = 1 / (γ(1 − βcosθ))        (relativistic Doppler factor)
+//   I_obs ∝ D^3                    (Liouville's theorem for a continuous jet)
+// The counter-jet (pointing away) has cosθ < 0 → D < 1 → dimmer / shorter apparent length.
+//
+vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
     vec3 rel = pos - bhPos;
-    float y = rel.y;
+    float y  = rel.y;
     float ay = abs(y);
     if (ay < diskHalfThickness) return vec3(0.0);
-    if (ay > jetLength) return vec3(0.0);
+    if (ay > jetLength)         return vec3(0.0);
 
-    float radial = length(rel.xz);
-    if (radial > jetRadius) return vec3(0.0);
+    // ── Relativistic Doppler beaming ──────────────────────────────────────
+    // Use D^2 (brightness modulation) rather than D^3 (specific intensity)
+    // because in this ray-marcher each step already accumulates depth; D^3
+    // per-step would compound and blow out entirely when the jet faces us.
+    // D^2 still gives a dramatic approaching/receding asymmetry while keeping
+    // structure visible.  Cap is tight (6×) so knot detail isn't washed out.
+    const float BETA    = 0.92;
+    float gamma_rel     = 1.0 / sqrt(1.0 - BETA * BETA);   // ≈ 2.55
+    vec3  jetDir        = vec3(0.0, sign(y), 0.0);
+    float cosTheta      = dot(jetDir, -viewDir);
+    float D             = 1.0 / max(gamma_rel * (1.0 - BETA * cosTheta), 0.05);
+    float beaming       = clamp(D * D, 0.05, 6.0);
+    float effectiveLength = jetLength * clamp(D * 0.5 + 0.5, 0.2, 2.0);
+    if (ay > effectiveLength) return vec3(0.0);
 
-    float core = exp(-radial * radial / max(jetRadius * jetRadius * 0.25, EPSILON));
+    // ── Episodic accretion bursts ─────────────────────────────────────────
+    // Accretion onto a SMBH like TON 618 is wildly variable — the disk is
+    // magnetically unstable and dumps clumps of material onto the jet base
+    // on timescales of minutes to hours (compressed here for visibility).
+    // Model as a smooth low-frequency noise (≈0.07 Hz) so the whole jet
+    // occasionally surges then dims, with no two cycles identical.
+    float burstNoise = valueNoise3(vec3(uTime * 0.07, 3.7, 1.2));
+    // Map [0,1] → [0.25, 1.8] so dim troughs are still visible but peaks blaze
+    float burstPulse = 0.25 + 1.55 * burstNoise;
+
+    // ── Kelvin-Helmholtz helical wobble ───────────────────────────────────
+    // Shear between the jet and surrounding gas drives KHI, which manifests
+    // as a slow helical/sinusoidal oscillation of the jet spine.
+    // Amplitude grows with distance from the BH (jets widen and destabilise).
+    // KHI helical wobble — amplitude 40% of jet radius, grows toward tip
+    float wobbleAmp   = 0.40 * jetRadius * (ay / jetLength);
+    float wobbleFreq  = 4.0 / max(jetLength, EPSILON);
+    float wobbleSpeed = 0.35;
+    float wobblePhase = ay * wobbleFreq - uTime * wobbleSpeed;
+    vec2  wobble      = wobbleAmp * vec2(sin(wobblePhase), cos(wobblePhase * 0.71));
+
+    vec2 coreOffset = rel.xz - wobble;
+    float radial    = length(coreOffset);
+    if (radial > jetRadius * 2.0) return vec3(0.0);
+
+    float core  = exp(-radial * radial / max(jetRadius * jetRadius * 0.25, EPSILON));
     float along = smoothstep(jetLength, jetLength * 0.2, ay);
-    float flicker = 0.85 + 0.15 * sin(ay * 12.0);
-    return jetColor * core * along * flicker;
+
+    // ── Shock knots: advected outward at β ~ 0.9c ────────────────────────
+    const float BETA_KNOT = 0.90;
+    float travelOffset    = uTime * BETA_KNOT;
+
+    float scaleCoarse = 2.5  / max(jetLength, EPSILON);
+    float scaleFine   = 13.0 / max(jetLength, EPSILON);
+
+    // Stochastic knot injection: the rate at which new knots are launched
+    // varies over time. We discretise time into ~4-second "episodes" and
+    // assign each a random injection strength, then smoothly interpolate.
+    // This creates clusters of knots followed by quiet spells.
+    float episodeLen = 4.0;
+    float epIdx      = floor(uTime / episodeLen);
+    float epFrac     = fract(uTime / episodeLen);
+    float injCurrent = hash11(epIdx);
+    float injNext    = hash11(epIdx + 1.0);
+    // Smoothstep so injection ramps up/down rather than snapping
+    float injRate    = mix(injCurrent, injNext, smoothstep(0.0, 1.0, epFrac));
+    // Low-injection episodes: faint, sparse knots. High-injection: dense bright chain.
+    float knotScale  = 0.3 + injRate * 1.4;
+
+    vec3 knotPosCoarse = vec3(coreOffset * scaleCoarse,
+                              (ay - travelOffset) * scaleCoarse);
+    vec3 knotPosFine   = vec3(coreOffset * scaleFine,
+                              (ay - travelOffset * 1.15) * scaleFine);
+
+    float knotCoarse = valueNoise3(knotPosCoarse);
+    float knotFine   = fbm(knotPosFine);
+    float knot       = (knotCoarse * 0.65 + knotFine * 0.35) * knotScale;
+
+    // High contrast: dark lanes (knot < 0.4) are near-black, bright shocks pop
+    float shockIntensity  = smoothstep(0.40, 0.68, knot);
+    // baseEmission is low so inter-knot regions are genuinely dim
+    float baseEmission    = 0.08 + 0.12 * knot;
+    float emissionProfile = (baseEmission + shockIntensity * 2.2) * burstPulse * 0.55;
+
+    vec3 knotColor = mix(jetColor,
+                         jetColor * vec3(0.8, 0.92, 1.5),
+                         shockIntensity * 0.8);
+
+    return knotColor * core * along * emissionProfile * beaming;
 }
 
 void traceBentRay(
@@ -235,15 +396,28 @@ void traceBentRay(
     // Scene radius scales with the largest user-configured feature so the full disk/jets are always reached.
     // [FIXED 2026-04-24: was hardcoded MAX_DIST=140.0, which clipped outer disk/jets on large configs]
     float sceneRadius = max(max(diskOuterRadius, jetLength) * 1.5, 140.0);
-    float baseStep = sceneRadius / float(MAX_STEPS);
-    // Strength factor tuned by hand; scale by bhRadius so users can tweak via uniform.
-    float k = bhRadius * bhRadius * 1;
+    // [FIXED 2026-05-25] Step count now driven by CPU-side maxStepsOverride (200=fast, 300=cinematic).
+    // Clamped to [80, MAX_STEPS] for safety against unset/garbage uniform values.
+    int   nSteps   = clamp(maxStepsOverride, 80, MAX_STEPS);
+    float baseStep = sceneRadius / float(nSteps);
+    // [FIXED 2026-05-25] Deflection strength bumped 1.0→1.5 so grazing rays actually wrap the
+    // shadow instead of producing a Newtonian-looking ring with a giant empty gap.
+    float k = bhRadius * bhRadius * 1.5;
 
     float lastDiskSide = (pos - bhPos).y;
+    vec3  prevPos      = pos;
 
     for (int i = 0; i < MAX_STEPS; ++i) {
+        if (i >= nSteps) break;
         vec3 toBH = bhPos - pos;
         float r = length(toBH);
+
+        // [FIXED 2026-05-25] Adaptive step size: shrink to ~35% of baseStep within 3 Rs of the
+        // event horizon, ramping back to full baseStep by 20 Rs. This gives the integrator
+        // enough resolution near the BH to bend grazing rays around the shadow (Interstellar
+        // top-arc lensing) without paying the cost in the empty regions far from the hole.
+        float stepLen = baseStep * mix(0.35, 1.0,
+                                       smoothstep(3.0 * bhRadius, 20.0 * bhRadius, r));
 
         // Exact EH absorption: check if this step segment intersects the event horizon sphere.
         // [FIXED 2026-04-24: replaced the old 'r < bhRadius + EPSILON' point-check, which missed
@@ -256,7 +430,7 @@ void traceBentRay(
             if (d2 < bhRadius * bhRadius) {
                 float thc = sqrt(bhRadius * bhRadius - d2);
                 float tHit = tca - thc;     // entry intersection along ray
-                if (tHit >= 0.0 && tHit <= baseStep) {
+                if (tHit >= 0.0 && tHit <= stepLen) {
                     absorbed = true;
                     break;
                 }
@@ -264,20 +438,39 @@ void traceBentRay(
         }
 
         // Jet emission — gated by showJets toggle.
-        // [FIXED 2026-04-24: was unconditional; showJets uniform was declared on CPU but never read here]
+        // Pass the original ray direction (rd) for Doppler beaming calculations;
+        // the bent 'dir' at this sample point would give incorrect beaming angles.
         if (showJets != 0)
-            outJet += jetEmission(pos, bhPos) * baseStep;
+            outJet += jetEmission(pos, bhPos, rd) * stepLen;
 
-        // BLR volumetric fog — gated by showBLR toggle.
-        // [ADDED 2026-04-24: showBLR/blrInnerRadius/blrOuterRadius/blrThickness uniforms were sent
-        //  from CPU every frame but never declared in the shader, so BLR was always invisible]
-        if (showBLR != 0) {
+        // BLR cloud field — discrete gas blobs orbiting at high speed.
+        // Controlled by blrStrength [0,1]: TON 618 densest, non-AGN zero.
+        if (showBLR != 0 && blrStrength > 0.0) {
             float blrAbsY = abs((pos - bhPos).y);
             if (r > blrInnerRadius && r < blrOuterRadius && blrAbsY < blrThickness) {
-                float radFade = smoothstep(blrInnerRadius, blrInnerRadius * 1.2, r)
-                              * smoothstep(blrOuterRadius, blrOuterRadius * 0.85, r);
+                float radFade  = smoothstep(blrInnerRadius, blrInnerRadius * 1.2, r)
+                               * smoothstep(blrOuterRadius, blrOuterRadius * 0.85, r);
                 float vertFade = smoothstep(blrThickness, blrThickness * 0.4, blrAbsY);
-                outBLR += vec3(0.65, 0.82, 1.0) * 0.012 * radFade * vertFade * baseStep;
+
+                // Clouds are fast-moving: use angle + time to scatter them.
+                // azimuth φ changes with 1/r^0.5 (Keplerian tangential speed)
+                vec3 rel = pos - bhPos;
+                float phi = atan(rel.z, rel.x) + uTime * 0.18 / sqrt(max(r, 0.1));
+
+                // Three octaves of 3-D value noise to break up the ribbon.
+                vec3 cloudP = vec3(phi * 3.5, r * 0.22, rel.y * 0.35 + uTime * 0.04);
+                float cloud = valueNoise3(cloudP * 1.0)
+                            + 0.50 * valueNoise3(cloudP * 2.1)
+                            + 0.25 * valueNoise3(cloudP * 4.3);
+                cloud = cloud / 1.75;          // normalise to [0,1]
+                cloud = pow(cloud, 1.4);        // mild sharpening — keeps dense filling
+                cloud *= radFade * vertFade * blrStrength;
+
+                // BLR line emission: Hα red core → blue-shifted CIV outer wing
+                vec3 blrColor = mix(vec3(1.0, 0.45, 0.2),   // bright Hα orange-red
+                                    vec3(0.6, 0.82, 1.0),    // blue CIV wing
+                                    smoothstep(blrInnerRadius, blrOuterRadius, r));
+                outBLR += blrColor * 0.22 * cloud * stepLen;
             }
         }
 
@@ -286,7 +479,9 @@ void traceBentRay(
         if (sign(diskSide) != sign(lastDiskSide)) {
             // Approximate intersection point at the plane.
             float t = lastDiskSide / max(lastDiskSide - diskSide, EPSILON);
-            vec3 hitPos = mix(pos - dir * baseStep, pos, clamp(t, 0.0, 1.0));
+            // [FIXED 2026-05-25] Use prevPos (true previous sample) instead of pos - dir*baseStep,
+            // since stepLen is now adaptive and dir has been updated by the bend at this iteration.
+            vec3 hitPos = mix(prevPos, pos, clamp(t, 0.0, 1.0));
             vec4 d = sampleDiskRGBA(hitPos, bhPos);
             if (d.a > 0.001) {
                 outDisk = d;
@@ -300,8 +495,9 @@ void traceBentRay(
         vec3 pullDir = toBH / max(r, EPSILON);
         // Inverse-square-ish pull; softened for stability
         float strength = k / (r * r + bhRadius * bhRadius);
-        dir = normalize(dir + pullDir * strength * baseStep);
-        pos += dir * baseStep;
+        dir = normalize(dir + pullDir * strength * stepLen);
+        prevPos = pos;
+        pos += dir * stepLen;
     }
 
     outPos = pos;

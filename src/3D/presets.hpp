@@ -6,6 +6,30 @@
 #include "config.hpp"
 #include <string>
 #include <array>
+#include <vector>
+
+// Body archetypes for systems orbiting the black hole.
+// Mirrors the 2D simulator's GalaxyBodyType so that the same astrophysical
+// systems (companion stars in HMXBs, S-cluster stars around Sgr A*, etc.)
+// can be visualized in 3D.
+enum class GalaxyBody3DType {
+    Star,           // Generic star
+    GasCloud,       // Gas/accretion clump
+    StellarCluster, // Dense star cluster
+    DwarfGalaxy,    // Dwarf-galaxy / satellite remnant
+    NeutronStar,    // Compact remnant
+    WhiteDwarf,     // Compact remnant
+    CompanionStar   // Stellar binary companion
+};
+
+// A single orbiting member, in 3D-shader units (Rs).
+struct GalaxyBody3D {
+    GalaxyBody3DType type;
+    float            semiMajorRs;   // Semi-major axis [Rs]
+    float            eccentricity;
+    float            inclination;   // Radians
+    std::string      label;         // Optional display name for label-view mode (empty = derive from type)
+};
 
 // A complete black hole profile: config + metadata + default feature flags.
 struct BlackHoleProfile {
@@ -20,9 +44,65 @@ struct BlackHoleProfile {
     bool              defaultHostGalaxy; // Whether host galaxy is visible by default
     bool              defaultLAB;    // Whether Lyman-alpha Blob is visible by default
     bool              defaultCGM;    // Whether Circumgalactic Medium is visible by default
+
+    // Orbiting bodies (stars / clouds / clusters / companions). When non-empty,
+    // these REPLACE the legacy single config.orbital body for this profile.
+    std::vector<GalaxyBody3D> galaxyBodies;
+
+    // Barycentric binary: true when the companion mass is significant enough
+    // that both the BH and companion visibly orbit the shared centre of mass.
+    // Set for Gaia BH1/BH2/BH3 — the astrometric wobble these systems were
+    // discovered through IS the BH's displacement from the barycenter.
+    bool   isBinaryWithBarycenter = false;
+    double companionMassSolar     = 0.0;   // companion mass [Msun] for mass-ratio calc
 };
 
 namespace profiles {
+
+/*--------- Type → visual archetype mapping ---------*/
+// Returns a fully-populated OrbitalConfig with type-appropriate radius/color
+// for use with the OrbitalBody Keplerian integrator.
+inline cfg::OrbitalConfig makeOrbitalBody(const GalaxyBody3D& b) {
+    cfg::OrbitalConfig oc;
+    oc.semiMajor    = b.semiMajorRs;
+    oc.eccentricity = b.eccentricity;
+    oc.inclination  = b.inclination;
+    oc.bodyType     = static_cast<int>(b.type);
+    switch (b.type) {
+        case GalaxyBody3DType::Star:
+            oc.bodyRadius = 0.8f;
+            oc.bodyColor  = glm::vec3(1.00f, 0.93f, 0.78f);  // Yellow-white star
+            break;
+        case GalaxyBody3DType::CompanionStar:
+            oc.bodyRadius = 1.4f;
+            oc.bodyColor  = glm::vec3(1.00f, 0.85f, 0.55f);  // Warm K/G companion
+            break;
+        case GalaxyBody3DType::GasCloud:
+            oc.bodyRadius = 1.2f;
+            oc.bodyColor  = glm::vec3(0.95f, 0.55f, 0.30f);  // Hot ionised gas
+            break;
+        case GalaxyBody3DType::StellarCluster:
+            oc.bodyRadius = 2.0f;
+            oc.bodyColor  = glm::vec3(0.90f, 0.80f, 0.65f);  // Mixed stellar pop
+            break;
+        case GalaxyBody3DType::DwarfGalaxy:
+            oc.bodyRadius = 2.5f;
+            oc.bodyColor  = glm::vec3(0.70f, 0.72f, 0.95f);  // Distant bluish smudge
+            break;
+        case GalaxyBody3DType::NeutronStar:
+            oc.bodyRadius = 0.40f;
+            // Vivid magenta — physically a pulsar is blue-white, but here we
+            // tint it for at-a-glance identification against nearby S-stars.
+            oc.bodyColor  = glm::vec3(1.00f, 0.35f, 0.90f);
+            break;
+        case GalaxyBody3DType::WhiteDwarf:
+            oc.bodyRadius = 0.50f;
+            oc.bodyColor  = glm::vec3(1.00f, 1.00f, 0.95f);  // Pale white
+            break;
+    }
+    return oc;
+}
+
 
 /*--------- TON 618 — Most massive known quasar ---------*/
 inline BlackHoleProfile ton618() {
@@ -40,6 +120,7 @@ inline BlackHoleProfile ton618() {
     // Orbiting body at larger distance for quasar scale
     p.config.orbital.semiMajor = 100.0f;  // Further out for quasar
     p.config.orbital.bodyRadius = 1.5f;   // Larger body for visibility
+    p.config.blr.strength = 1.0f;  // TON 618: strongest observed BLR
     p.defaultJets    = true;
     p.defaultBLR     = true;
     p.defaultOrbBody = true;
@@ -47,6 +128,15 @@ inline BlackHoleProfile ton618() {
     p.defaultHostGalaxy = true;
     p.defaultLAB = true;
     p.defaultCGM = false;  // Diffuse fog off by default
+    // 6-body galactic-nuclear environment (mirrors 2D TON618_BODIES)
+    p.galaxyBodies = {
+        {GalaxyBody3DType::GasCloud,        8.0f,  0.15f, -0.40f},
+        {GalaxyBody3DType::Star,           15.0f,  0.55f, -0.22f},
+        {GalaxyBody3DType::GasCloud,       25.0f,  0.30f, -0.04f},
+        {GalaxyBody3DType::Star,           12.0f,  0.80f,  0.14f},
+        {GalaxyBody3DType::Star,           50.0f,  0.20f,  0.32f},
+        {GalaxyBody3DType::StellarCluster, 80.0f,  0.10f,  0.50f}
+    };
     return p;
 }
 
@@ -78,6 +168,7 @@ inline BlackHoleProfile sgrAstar() {
     c.blr.innerRadius = 8.0f;
     c.blr.outerRadius = 14.0f;
     c.blr.thickness   = 2.0f;
+    c.blr.strength    = 0.0f;  // Sgr A*: RIAF — no detectable BLR
 
     // Camera closer — smaller object
     c.camera.initialPos = glm::vec3(0.0f, 4.0f, 18.0f);
@@ -97,11 +188,25 @@ inline BlackHoleProfile sgrAstar() {
     p.config = c;
     p.defaultJets    = false;  // Sgr A* has no prominent jets
     p.defaultBLR     = false;  // No BLR in a low-luminosity AGN
-    p.defaultOrbBody = false;  // No orbiting bodies for Sgr A*
+    p.defaultOrbBody = true;   // S-cluster + circumnuclear gas orbit Sgr A*
     p.defaultDoppler = true;
     p.defaultHostGalaxy = false;
     p.defaultLAB = false;
     p.defaultCGM = false;
+    // S-cluster stars + circumnuclear gas (mirrors 2D SGRA_BODIES) + the
+    // 8.19 ms pulsar discovered in tight orbit around Sgr A*.
+    p.galaxyBodies = {
+        {GalaxyBody3DType::Star,        20.0f, 0.88f, -0.35f, "S2"},
+        {GalaxyBody3DType::Star,        10.0f, 0.95f, -0.15f, "S14"},
+        {GalaxyBody3DType::Star,        40.0f, 0.30f,  0.05f, "IRS 16"},
+        {GalaxyBody3DType::GasCloud,    60.0f, 0.15f,  0.25f, "Circumnuclear Gas"},
+        {GalaxyBody3DType::Star,        30.0f, 0.50f,  0.45f, "S-cluster"},
+        // BLPSR — 8.19 ms pulsar in tight relativistic orbit around Sgr A*.
+        // Compact, fast-spinning recycled neutron star; emits a coherent
+        // radio/X-ray beam every 8.19 ms (~122 Hz). Coloured magenta in-sim
+        // purely as a visual identifier against the surrounding S-cluster.
+        {GalaxyBody3DType::NeutronStar,  6.5f, 0.72f, -0.55f, "BLPSR"}
+    };
     return p;
 }
 
@@ -132,6 +237,7 @@ inline BlackHoleProfile qso3c273() {
     c.blr.innerRadius = 16.0f;
     c.blr.outerRadius = 38.0f;
     c.blr.thickness   = 7.0f;
+    c.blr.strength    = 0.75f;  // 3C 273: bright quasar BLR
 
     c.camera.initialPos = glm::vec3(0.0f, 7.0f, 28.0f);
 
@@ -155,6 +261,13 @@ inline BlackHoleProfile qso3c273() {
     p.defaultHostGalaxy = true;
     p.defaultLAB = true;
     p.defaultCGM = false;
+    // Quasar environment (mirrors 2D QSO3C273_BODIES)
+    p.galaxyBodies = {
+        {GalaxyBody3DType::GasCloud,    10.0f, 0.20f, -0.30f},  // Inner jet-base cloud
+        {GalaxyBody3DType::GasCloud,    20.0f, 0.40f, -0.10f},  // BLR cloud
+        {GalaxyBody3DType::DwarfGalaxy, 70.0f, 0.25f,  0.10f},  // Stripped dwarf remnant
+        {GalaxyBody3DType::Star,        35.0f, 0.60f,  0.30f}   // Close stellar orbit
+    };
     return p;
 }
 
@@ -185,6 +298,7 @@ inline BlackHoleProfile j0529() {
     c.blr.innerRadius = 20.0f;
     c.blr.outerRadius = 42.0f;
     c.blr.thickness   = 8.0f;
+    c.blr.strength    = 0.90f;  // J0529-4351: hyperluminous, near-maximal BLR
 
     // Pull camera back — big object
     c.camera.initialPos = glm::vec3(0.0f, 8.0f, 32.0f);
@@ -210,6 +324,14 @@ inline BlackHoleProfile j0529() {
     p.defaultHostGalaxy = true;
     p.defaultLAB = true;
     p.defaultCGM = false;
+    // Hyperluminous quasar environment (mirrors 2D J0529_BODIES)
+    p.galaxyBodies = {
+        {GalaxyBody3DType::GasCloud,        9.0f, 0.10f, -0.40f},  // Fast accretion blob
+        {GalaxyBody3DType::GasCloud,       18.0f, 0.35f, -0.20f},  // UV-bright clump
+        {GalaxyBody3DType::Star,           14.0f, 0.70f,  0.00f},  // Tidally disrupting star
+        {GalaxyBody3DType::GasCloud,       45.0f, 0.20f,  0.20f},  // Outer gas stream
+        {GalaxyBody3DType::StellarCluster, 65.0f, 0.15f,  0.40f}   // Infalling cluster
+    };
     return p;
 }
 
@@ -254,6 +376,13 @@ inline BlackHoleProfile gaiaBH1() {
     p.defaultHostGalaxy  = false;
     p.defaultLAB         = false;
     p.defaultCGM         = false;
+    // G-dwarf binary companion. Real measured eccentricity e ≈ 0.451
+    // (Gaia DR3) — the visual focus of this dormant BH system.
+    p.galaxyBodies = {
+        {GalaxyBody3DType::CompanionStar, 28.0f, 0.45f, 0.10f}
+    };
+    p.isBinaryWithBarycenter = true;
+    p.companionMassSolar     = 0.93;   // G-dwarf, Gaia DR3
     return p;
 }
 
@@ -298,6 +427,12 @@ inline BlackHoleProfile gaiaBH2() {
     p.defaultHostGalaxy  = false;
     p.defaultLAB         = false;
     p.defaultCGM         = false;
+    // Red giant companion. Real measured eccentricity e ≈ 0.518 (Gaia DR3).
+    p.galaxyBodies = {
+        {GalaxyBody3DType::CompanionStar, 30.0f, 0.52f, 0.12f}
+    };
+    p.isBinaryWithBarycenter = true;
+    p.companionMassSolar     = 1.07;   // Red giant, Gaia DR3
     return p;
 }
 
@@ -330,7 +465,7 @@ inline BlackHoleProfile gaiaBH3() {
     c.jet.color  = glm::vec3(0.1f, 0.35f, 0.7f);
     c.orbital.semiMajor  = 22.0f;
     c.orbital.bodyRadius = 1.6f;    // Metal-poor giant companion
-    c.camera.initialPos  = glm::vec3(0.0f, 3.5f, 15.0f);
+    c.camera.initialPos  = glm::vec3(0.0f, 4.0f, 22.0f);
     c.bloom.threshold    = 4.0f;
     c.bloom.intensity    = 0.04f;
     c.bloom.exposure     = 0.40f;
@@ -342,6 +477,13 @@ inline BlackHoleProfile gaiaBH3() {
     p.defaultHostGalaxy  = false;
     p.defaultLAB         = false;
     p.defaultCGM         = false;
+    // Metal-poor giant companion. Real measured eccentricity e ≈ 0.729
+    // (Gaia DR3, 2024) — a dramatic wide-binary swing from periapsis to apoapsis.
+    p.galaxyBodies = {
+        {GalaxyBody3DType::CompanionStar, 38.0f, 0.73f, 0.08f}
+    };
+    p.isBinaryWithBarycenter = true;
+    p.companionMassSolar     = 0.76;   // Metal-poor giant, Gaia DR3 2024
     return p;
 }
 
@@ -352,7 +494,7 @@ inline BlackHoleProfile gaiaBH3() {
 inline BlackHoleProfile v404Cyg() {
     BlackHoleProfile p;
     p.name        = "V404 Cygni";
-    p.description = "X-ray nova microquasar (~9 Msun) — outburst state, K-giant";
+    p.description = "Triple system: ~9 Msun BH + K-giant donor + distant tertiary (V404 Cyg C)";
     p.massSolar   = 9.0;
 
     cfg::SimConfig c;
@@ -385,6 +527,16 @@ inline BlackHoleProfile v404Cyg() {
     p.defaultHostGalaxy  = false;
     p.defaultLAB         = false;
     p.defaultCGM         = false;
+    // Triple system:
+    //   • Donor (K-giant, ~0.7 Msun) on the close 6.47-day orbit being stripped
+    //     into the disk — modelled as the inner CompanionStar.
+    //   • V404 Cyg C — distant tertiary (~3500 AU, ~70 000-yr period, evolved
+    //     star / future red giant) discovered 2024. Compressed to a far orbit
+    //     in simulation units so it stays visible alongside the inner pair.
+    p.galaxyBodies = {
+        {GalaxyBody3DType::CompanionStar, 26.0f,  0.034f,  0.05f, "K-giant donor"},
+        {GalaxyBody3DType::Star,          95.0f,  0.30f,  -0.18f, "V404 Cyg C"}
+    };
     return p;
 }
 
@@ -427,6 +579,10 @@ inline BlackHoleProfile a062000() {
     p.defaultHostGalaxy  = false;
     p.defaultLAB         = false;
     p.defaultCGM         = false;
+    // K-dwarf companion (circular orbit)
+    p.galaxyBodies = {
+        {GalaxyBody3DType::CompanionStar, 24.0f, 0.0f, 0.04f}
+    };
     return p;
 }
 
@@ -471,6 +627,10 @@ inline BlackHoleProfile groJ165540() {
     p.defaultHostGalaxy  = false;
     p.defaultLAB         = false;
     p.defaultCGM         = false;
+    // F-star companion (circular orbit)
+    p.galaxyBodies = {
+        {GalaxyBody3DType::CompanionStar, 22.0f, 0.0f, 0.06f}
+    };
     return p;
 }
 
@@ -505,6 +665,7 @@ inline BlackHoleProfile ngc1277() {
     c.blr.innerRadius = 13.0f;
     c.blr.outerRadius = 28.0f;
     c.blr.thickness   = 5.0f;
+    c.blr.strength    = 0.55f;  // NGC 1277: compact SMBH, moderate BLR
     c.orbital.semiMajor  = 80.0f;
     c.orbital.bodyRadius = 1.5f;
     c.camera.initialPos  = glm::vec3(0.0f, 6.0f, 24.0f);
@@ -519,6 +680,13 @@ inline BlackHoleProfile ngc1277() {
     p.defaultHostGalaxy  = true;
     p.defaultLAB         = false;
     p.defaultCGM         = false;
+    // NGC 1277 nuclear environment (mirrors 2D NGC1277_BODIES)
+    p.galaxyBodies = {
+        {GalaxyBody3DType::Star,           12.0f, 0.30f, -0.25f},  // Inner stellar orbit A
+        {GalaxyBody3DType::Star,           20.0f, 0.45f, -0.05f},  // Inner stellar orbit B
+        {GalaxyBody3DType::GasCloud,       30.0f, 0.20f,  0.15f},  // Gas cloud
+        {GalaxyBody3DType::StellarCluster, 75.0f, 0.10f,  0.35f}   // Stellar cluster
+    };
     return p;
 }
 
@@ -552,6 +720,7 @@ inline BlackHoleProfile oj287() {
     c.blr.innerRadius = 17.0f;
     c.blr.outerRadius = 36.0f;
     c.blr.thickness   = 7.0f;
+    c.blr.strength    = 0.65f;  // OJ 287: blazar-class BLR, variable
     c.orbital.semiMajor  = 14.0f;    // Secondary SMBH in tight orbit
     c.orbital.bodyRadius = 2.2f;
     c.camera.initialPos  = glm::vec3(0.0f, 7.0f, 27.0f);
@@ -567,18 +736,113 @@ inline BlackHoleProfile oj287() {
     p.defaultHostGalaxy  = true;
     p.defaultLAB         = true;
     p.defaultCGM         = false;
+    // OJ 287 binary system (mirrors 2D OJ287_BODIES)
+    // Secondary SMBH represented as a bright star — the famous ~12yr periodic
+    // disk-piercing companion that triggers optical outbursts.
+    p.galaxyBodies = {
+        {GalaxyBody3DType::Star,     15.0f, 0.66f, -0.20f},  // Secondary SMBH (~1.5e8 Msun)
+        {GalaxyBody3DType::GasCloud, 22.0f, 0.30f,  0.05f},  // Accretion blob
+        {GalaxyBody3DType::GasCloud, 40.0f, 0.20f,  0.30f}   // Outer gas cloud
+    };
+    return p;
+}
+
+/*--------- Phoenix A — Largest known black hole ---------*/
+// Ultramassive BH in the BCG of the Phoenix Cluster (SPT-CLJ2344-4243), z = 0.597.
+// Mass ~1.0×10¹¹ Msun — the largest known black hole, ~1.52× TON 618.
+// Schwarzschild radius Rs ≈ 1970 AU ≈ 6.4 light-days (~50× Pluto's orbital radius).
+// Spin unconstrained; ultramassive BHs grown partly via mergers of randomly-aligned
+// spins tend toward lower net spin → conservative a* = 0.35.
+// The Phoenix Cluster hosts one of the highest BCG star-formation rates ever observed
+// (~740 Msun/yr), driven by a prodigious cooling flow that also feeds the AGN.
+// Jet cavities ~200 kpc across in the cluster ICM confirm past extreme jet activity.
+// Disk is slightly cooler than TON 618: T_inner ∝ M^{-1/4} at comparable Eddington
+// fraction → amber-gold (4800 K) vs TON 618's warm-white (5500 K).
+inline BlackHoleProfile phoenixA() {
+    BlackHoleProfile p;
+    p.name        = "Phoenix A";
+    p.description = "Largest known BH (~1.0e11 Msun) — Rs~1970 AU, Phoenix Cluster BCG";
+    p.massSolar   = 1.0e11;
+
+    cfg::SimConfig c;
+    // Suppressed spin: mergers of randomly-oriented progenitors tend to cancel.
+    c.blackHole.spinParameter = 0.35f;
+    c.blackHole.radius        = 1.0f;
+
+    // At a*=0.35, ISCO ≈ 5.3 Rs. Larger outer disk than TON 618 to convey extra scale.
+    c.disk.innerRadius   = 5.0f;
+    c.disk.outerRadius   = 30.0f;
+    c.disk.halfThickness = 0.010f;  // Thin efficient Shakura-Sunyaev disk
+    // kelvinToRGB(4800) → amber-gold (cooler than TON 618's 5500 K warm-white).
+    // kelvinToRGB(1900) → deep crimson-orange outer rim — visually distinct from all others.
+    c.disk.peakTemp             = 26000.0f;
+    c.disk.displayTempInner     = 4800.0f;   // Amber-gold AGN inner disk
+    c.disk.displayTempOuter     = 1900.0f;   // Deep crimson-orange outer rim
+    c.disk.saturationBoostInner = 2.4f;      // Rich amber saturation
+    c.disk.saturationBoostOuter = 1.6f;      // Warm crimson glow at the rim
+
+    // Powerful relativistic jets — X-ray cavities ~200 kpc wide confirmed.
+    // Longer than TON 618 jets; wide radius befitting the extreme jet power.
+    c.jet.radius = 0.50f;
+    c.jet.length = 55.0f;
+    c.jet.color  = glm::vec3(0.30f, 0.72f, 1.50f);   // Synchrotron blue-white
+
+    // Broad-line region: powerful cooling-flow-fed AGN
+    c.blr.innerRadius = 16.0f;
+    c.blr.outerRadius = 35.0f;
+    c.blr.thickness   = 7.0f;
+    c.blr.strength    = 0.70f;  // Phoenix A: ultramassive, luminous BLR
+
+    // Legacy single orbital body (overridden by galaxyBodies below)
+    c.orbital.semiMajor  = 110.0f;
+    c.orbital.bodyRadius = 1.5f;
+
+    // Camera pulled back to encompass the larger disk
+    c.camera.initialPos = glm::vec3(0.0f, 8.0f, 34.0f);
+
+    // Strong bloom — luminous cooling-flow AGN
+    c.bloom.threshold = 0.92f;
+    c.bloom.intensity = 0.70f;
+    c.bloom.exposure  = 1.15f;
+    c.bloom.softKnee  = 0.58f;
+
+    p.config = c;
+    p.defaultJets        = true;
+    p.defaultBLR         = true;
+    p.defaultOrbBody     = true;
+    p.defaultDoppler     = true;
+    p.defaultHostGalaxy  = true;
+    p.defaultLAB         = true;
+    p.defaultCGM         = false;
+
+    // Phoenix Cluster BCG nuclear environment:
+    //   Inner condensations: cooling-flow filaments that feed the AGN
+    //   Mid-distance gas:    ionised nebula in the BCG core
+    //   Nuclear star:        analogue to S-stars near a galactic nucleus
+    //   Inner/outer clusters: trace the massive BCG stellar envelope
+    //   Infalling satellite: BCG cannibalising a satellite galaxy (common in clusters)
+    // Orbital radii are deliberately large to reinforce the extreme physical scale.
+    p.galaxyBodies = {
+        {GalaxyBody3DType::GasCloud,        9.0f,  0.10f, -0.30f},  // Cooling condensation A
+        {GalaxyBody3DType::GasCloud,       14.0f,  0.20f, -0.08f},  // Cooling condensation B
+        {GalaxyBody3DType::GasCloud,       22.0f,  0.35f,  0.12f},  // Ionised gas filament
+        {GalaxyBody3DType::Star,           18.0f,  0.60f,  0.28f},  // Nuclear star
+        {GalaxyBody3DType::StellarCluster, 55.0f,  0.15f,  0.40f},  // Inner BCG cluster
+        {GalaxyBody3DType::StellarCluster, 90.0f,  0.08f, -0.20f},  // Outer BCG cluster
+        {GalaxyBody3DType::DwarfGalaxy,   130.0f,  0.25f,  0.55f}   // Infalling satellite
+    };
     return p;
 }
 
 /*--------- All profiles in order ---------*/
-inline std::array<BlackHoleProfile, 12> allProfiles() {
+inline std::array<BlackHoleProfile, 13> allProfiles() {
     return { ton618(), sgrAstar(), qso3c273(), j0529(),
              gaiaBH1(), gaiaBH2(), gaiaBH3(),
              v404Cyg(), a062000(), groJ165540(),
-             ngc1277(), oj287() };
+             ngc1277(), oj287(), phoenixA() };
 }
 
-constexpr int NUM_PROFILES = 12;
+constexpr int NUM_PROFILES = 13;
 
 } // namespace profiles
 
@@ -603,10 +867,11 @@ const inline BlackHolePreset BH_PRESETS[] = {
     {"Gaia BH1",          9.62,   "Nearest dormant BH, G-dwarf companion (~9.6 Msun)"},
     {"Gaia BH2",          8.94,   "Dormant BH with red giant companion (~8.9 Msun)"},
     {"Gaia BH3",          32.7,   "Most massive nearby dormant BH (~33 Msun)"},
-    {"V404 Cygni",        9.0,    "X-ray nova microquasar, K-giant companion (~9 Msun)"},
+    {"V404 Cygni",        9.0,    "Triple system: ~9 Msun BH + K-giant donor + distant tertiary (V404 Cyg C)"},
     {"A0620-00",          6.61,   "First confirmed stellar BH, quiescent K-dwarf (~6.6 Msun)"},
     {"GRO J1655-40",      6.3,    "Microquasar with relativistic jets (~6.3 Msun)"},
     {"NGC 1277",          1.7e10, "Overmassive SMBH in compact elliptical (~1.7e10 Msun)"},
-    {"OJ 287",            1.8e10, "SMBH binary, optical outburst source (~1.8e10 Msun)"}
+    {"OJ 287",            1.8e10, "SMBH binary, optical outburst source (~1.8e10 Msun)"},
+    {"Phoenix A",         1.0e11, "Largest known BH, Phoenix Cluster BCG (~1.0e11 Msun)"}
 };
 constexpr int NUM_BH_PRESETS = sizeof(BH_PRESETS) / sizeof(BH_PRESETS[0]);

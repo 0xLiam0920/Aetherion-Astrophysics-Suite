@@ -52,6 +52,7 @@ public:
             std::sqrt(1.0f - e) * std::cos(E * 0.5f));
 
         // Orbital radius from conic equation: r = a(1−e²) / (1 + e cos ν)
+        // four hundred years of orbital mechanics distilled into one line
         float r = cfg_.semiMajor * (1.0f - e * e)
                 / (1.0f + e * std::cos(trueAnomaly));
 
@@ -65,6 +66,16 @@ public:
         position_ = glm::vec3(xOrb,
                                zOrb * std::sin(incl),
                                zOrb * std::cos(incl));
+    }
+
+    /*--------- Phase control ---------*/
+    // Set the initial orbital phase (mean anomaly in radians). Used to
+    // stagger multiple bodies so they don't all start at periapsis on the
+    // same frame, which is especially noticeable for high-eccentricity
+    // orbits where periapsis lies very close to (or inside) the BH.
+    void setInitialPhase(float meanAnomalyRad) {
+        meanAnomaly_ = std::fmod(meanAnomalyRad, 2.0f * glm::pi<float>());
+        update(0.0f); // refresh position_ so the first frame already shows the staggered phase
     }
 
     /*--------- Speed control ---------*/
@@ -83,6 +94,7 @@ public:
     glm::vec3 position()   const { return position_; }
     float     bodyRadius() const { return cfg_.bodyRadius; }
     glm::vec3 bodyColor()  const { return cfg_.bodyColor; }
+    int       bodyType()   const { return cfg_.bodyType; }
 
 private:
     cfg::OrbitalConfig cfg_;

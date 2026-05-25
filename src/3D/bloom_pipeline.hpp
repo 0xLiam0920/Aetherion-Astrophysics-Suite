@@ -41,7 +41,7 @@ struct BloomPipeline {
         return true;
     }
 
-    void resize(int w, int h) {
+    void resize(int w, int h) { 
         sceneFBO.resize(w, h, true);
         thresholdFBO.resize(w / 2, h / 2, true);
         for (int i = 0; i < NUM_MIPS; ++i) {
@@ -54,7 +54,7 @@ struct BloomPipeline {
 
     // Execute the full bloom post-process (passes 2-4).
     // Assumes the scene has already been rendered into sceneFBO and the
-    // given quad VAO is currently bound.
+    // given quad VAO is currently bound. 
     void execute(const GLVertexArray& quad, const cfg::BloomConfig& bc,
                  bool cinematic = false, float time = 0.0f) {
         // Save GL state that we're about to clobber
@@ -79,6 +79,8 @@ struct BloomPipeline {
         quad.drawQuad();
 
         /*--------- Pass 3: progressive downsample + separable blur ---------*/
+        // four mip levels of blur. yes, four. no, i will not explain why four specifically.
+        // it just looks right and that's basically the whole field of computer graphics, so deal with it
         blurProg.use();
         GLuint srcTex = thresholdFBO.colorTex;
         for (int mip = 0; mip < NUM_MIPS; ++mip) {
@@ -110,7 +112,7 @@ struct BloomPipeline {
             blurProg.set2f("direction", 0.0f, 1.0f);
             quad.drawQuad();
 
-            // Additional blur passes for larger mips (capped at 2 for performance)
+            // Additional blur passes for larger mips (capped at 2 for performance) — your GPU said please.
             int extraPasses = std::min(mip + 1, 2);
             for (int extra = 0; extra < extraPasses; ++extra) {
                 blurTempFBO[mip].bind();

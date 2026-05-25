@@ -99,6 +99,10 @@ add_executable(blackhole-sim
     src/QT-LAUNCHER/updater.h
     src/QT-LAUNCHER/updater.cpp
 
+    # Object Library preview widget
+    src/QT-LAUNCHER/bh_preview_widget.h
+    src/QT-LAUNCHER/bh_preview_widget.cpp
+
     # 2D/3D integration files should be linked as libraries or refactored modules,
     # not standalone entrypoints with their own main().
     src/3D/shader_utils.cpp
@@ -127,7 +131,7 @@ target_compile_definitions(blackhole-sim PRIVATE
     AETHERION_QT_HOST
 )
 
-# GLEW for non-Apple platforms
+# GLEW for non-Apple platforms, because MacOS mainly uses their own proprietary framework for OpenGL.
 if(NOT APPLE)
     target_link_libraries(blackhole-sim PRIVATE GLEW::GLEW)
 endif()
@@ -246,7 +250,7 @@ add_dependencies(blackhole-3D sync_shaders_3D)
 
 # If a disk texture exists, copy it next to the executable for convenience.
 if(EXISTS ${CMAKE_SOURCE_DIR}/src/disk_texture.png)
-    add_custom_command(TARGET blackhole-sim POST_BUILD
+    add_custom_command(TARGET blackhole-sim POST_BUILD # we live in a cruel world, a world where I have to write fifty lines of CMake to copy a single file
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_SOURCE_DIR}/src/disk_texture.png
                 $<TARGET_FILE_DIR:blackhole-sim>/disk_texture.png)
@@ -330,19 +334,19 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/icon.png)
     install(FILES icon.png DESTINATION share/aetherionsuite)
     install(FILES icon.png
         DESTINATION share/icons/hicolor/256x256/apps
-        RENAME io.github.ArandomHitman.AetherionSuite.png)
+        RENAME io.github.0xLiam0920.AetherionSuite.png)
 endif()
 if(EXISTS ${CMAKE_SOURCE_DIR}/icon_transparent.png)
     install(FILES icon_transparent.png DESTINATION share/aetherionsuite)
 endif()
 
 # Desktop entry and AppStream metadata (used by Flatpak and system package managers).
-if(EXISTS ${CMAKE_SOURCE_DIR}/flatpak/io.github.ArandomHitman.AetherionSuite.desktop)
-    install(FILES flatpak/io.github.ArandomHitman.AetherionSuite.desktop
+if(EXISTS ${CMAKE_SOURCE_DIR}/flatpak/io.github.0xLiam0920.AetherionSuite.desktop)
+    install(FILES flatpak/io.github.0xLiam0920.AetherionSuite.desktop
         DESTINATION share/applications)
 endif()
-if(EXISTS ${CMAKE_SOURCE_DIR}/flatpak/io.github.ArandomHitman.AetherionSuite.metainfo.xml)
-    install(FILES flatpak/io.github.ArandomHitman.AetherionSuite.metainfo.xml
+if(EXISTS ${CMAKE_SOURCE_DIR}/flatpak/io.github.0xLiam0920.AetherionSuite.metainfo.xml)
+    install(FILES flatpak/io.github.0xLiam0920.AetherionSuite.metainfo.xml
         DESTINATION share/metainfo)
 endif()
 

@@ -5,8 +5,8 @@ in vec2 fragUV;
 out vec4 FragColor;
 
 uniform sampler2D sceneTex;
-uniform float threshold;      // Luminosity threshold (e.g., 0.8)
-uniform float softKnee;       // Soft knee width (e.g., 0.5)
+uniform float threshold;      // Luminosity threshold, change at risk of bloom quality loss (e.g., 0.8)
+uniform float softKnee;       // Soft knee width for smoother bloom (e.g., 0.5)
 
 void main() {
     vec3 color = texture(sceneTex, fragUV).rgb;

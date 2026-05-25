@@ -65,6 +65,9 @@ struct BLRConfig {
     float innerRadius = 18.0f;  // Clear gap from disk edge
     float outerRadius = 35.0f;  // Compressed BLR scale
     float thickness   = 6.0f;   // Thick torus geometry
+    // Relative strength [0,1]: controls cloud opacity & density.
+    // 1.0 = TON 618 (strongest observed BLR), 0.0 = no BLR.
+    float strength    = 0.0f;
 };
 
 /*--------- Orbiting body ---------*/
@@ -78,6 +81,10 @@ struct OrbitalConfig {
     float     fastTimeScale = 15.0f;  // Toggled fast speed
     int       keplerIterMax = 8;
     float     keplerTolerance = 1e-6f;
+    // Visual archetype index. Mirrors profiles::GalaxyBody3DType in the shader's
+    // ORB_TYPE_* defines. Default 0 = Star (also used by the legacy single-body
+    // path, which renders the body as a generic main-sequence star).
+    int       bodyType = 0;
 };
 
 /*--------- Bloom / post-processing ---------*/

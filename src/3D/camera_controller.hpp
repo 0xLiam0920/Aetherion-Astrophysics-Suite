@@ -43,6 +43,8 @@ public:
         direction_.z = -std::cos(viewPitch_) * std::cos(viewYaw_);
         direction_  = glm::normalize(direction_);
 
+        // rebuilding the basis every frame from scratch because trying to incrementally rotate it
+        // ended in tears, drift, and a camera that slowly listed to port over ~90 seconds. ask me how i know.
         right_ = glm::normalize(glm::cross(direction_, worldUp_));
         up_    = glm::normalize(glm::cross(right_, direction_));
 
@@ -73,6 +75,7 @@ public:
 
     /*--------- Mode toggle ---------*/
     // TODO: smoothly interpolate position/angles on mode switch instead of hard-snapping
+    // (it's been on the TODO list since approximately forever. the snap is jarring but functional
     void toggleMode() {
         if (freelook_) {
             // Switching to orbit — compute orbit params from current position
@@ -99,11 +102,11 @@ public:
     float       fov()        const { return cfg_.fov; }
     float       roll()       const { return viewRoll_; }
 
-    void resetRoll() { viewRoll_ = 0.0f; }
+    void resetRoll() { viewRoll_ = 0.0f; } // put the camera back on the straight and narrow
 
 private:
     void updateFreelook(float dt, const KeyState& keys) {
-        const float speed = cfg_.moveSpeed * (keys.fast ? cfg_.fastMultiplier : 1.0f);
+        const float speed = cfg_.moveSpeed * (keys.fast ? cfg_.fastMultiplier : 1.0f); // shift = go brr
         // Build direction from viewYaw/viewPitch for movement
         glm::vec3 dir;
         dir.x = std::cos(viewPitch_) * std::sin(viewYaw_);

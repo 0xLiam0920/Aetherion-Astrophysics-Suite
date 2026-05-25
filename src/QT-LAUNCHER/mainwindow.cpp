@@ -5,6 +5,7 @@
 #include "simulation_3d_widget.h"
 #include "keybindbuttonwidget.h"
 #include "custom_bh_dialog.h"
+#include "bh_preview_widget.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFrame>
@@ -261,6 +262,7 @@ void MainWindow::loadSettings()
 {
     QSettings s("Aetherion", "AetherionSuite");
     memoryDisplayEnabled = s.value("ui/memoryDisplay", true).toBool();
+    lightModeEnabled     = s.value("ui/lightMode",     false).toBool();
 }
 
 void MainWindow::saveSettings()
@@ -275,6 +277,16 @@ void MainWindow::saveSettings()
         s.setValue("export/folder", exportFolderEdit->text());
     if (exportTypeCombo)
         s.setValue("export/type", exportTypeCombo->currentText());
+
+    // Apply light/dark mode toggle live
+    if (lightModeCheck) {
+        const bool wantsLight = lightModeCheck->isChecked();
+        if (wantsLight != lightModeEnabled) {
+            lightModeEnabled = wantsLight;
+            s.setValue("ui/lightMode", lightModeEnabled);
+            applyStyles();
+        }
+    }
 
     // Apply memory display toggle live
     if (memoryDisplayCheck) {
@@ -428,9 +440,10 @@ void MainWindow::setupUI()
     sidebarLayout->addWidget(toolsLabel);
     
     toolsList = new QListWidget();
-    toolsList->setMaximumHeight(80);
+    toolsList->setMaximumHeight(112);
     toolsList->addItem("Export");
     toolsList->addItem("Settings");
+    toolsList->addItem("Breakdown");
     sidebarLayout->addWidget(toolsList);
     
     sidebarLayout->addStretch();
@@ -454,6 +467,7 @@ void MainWindow::setupUI()
     contentStack->addWidget(createObjectLibraryPage());
     contentStack->addWidget(createExportPage());
     contentStack->addWidget(createSettingsPage());
+    contentStack->addWidget(createBreakdownPage());
     contentAreaLayout->addWidget(contentStack, 1);
 
     statusLabel = new QLabel("ready");
@@ -483,12 +497,214 @@ void MainWindow::setupUI()
             this, &MainWindow::onToolsSelectionChanged);
 }
 
+void MainWindow::toggleTheme(bool lightMode)
+{
+    lightModeEnabled = lightMode;
+    QSettings s("Aetherion", "AetherionSuite");
+    s.setValue("ui/lightMode", lightModeEnabled);
+    applyStyles();
+}
+
+void MainWindow::applyChartTheme()
+{
+    // Colors chosen to fit dark or light app palette
+    const QColor bg         = lightModeEnabled ? QColor(0xf8, 0xf8, 0xfc) : QColor(0x12, 0x12, 0x1e);
+    const QColor titleColor = lightModeEnabled ? QColor(0x14, 0x16, 0x24) : Qt::white;
+    const QColor legendColor= lightModeEnabled ? QColor(0x30, 0x32, 0x50) : Qt::white;
+    const QColor axisLabel  = lightModeEnabled ? QColor(0x14, 0x16, 0x24) : Qt::white;
+    const QColor axisLine   = lightModeEnabled ? QColor(0x90, 0x92, 0xaa) : QColor(0x60, 0x60, 0x80);
+    const QColor gridLine   = lightModeEnabled ? QColor(0xcc, 0xce, 0xdc) : QColor(0x25, 0x25, 0x38);
+
+    for (QChart *chart : m_dataCharts) {
+        chart->setBackgroundBrush(QBrush(bg));
+        chart->setTitleBrush(QBrush(titleColor));
+        chart->legend()->setLabelColor(legendColor);
+        for (auto *axis : chart->axes()) {
+            axis->setLabelsBrush(QBrush(axisLabel));
+            axis->setTitleBrush(QBrush(axisLabel));
+            axis->setLinePen(QPen(axisLine));
+            axis->setGridLinePen(QPen(gridLine));
+            if (auto *va = qobject_cast<QValueAxis *>(axis))
+                va->setLabelsColor(axisLabel);
+            if (auto *la = qobject_cast<QLogValueAxis *>(axis))
+                la->setLabelsColor(axisLabel);
+        }
+    }
+    for (QChartView *view : m_dataChartViews) {
+        view->setBackgroundBrush(QBrush(bg));
+        view->update();
+    }
+}
+
 void MainWindow::applyStyles()
 {
     qApp->setStyle(QStyleFactory::create("Fusion"));
-    
-    QPalette darkPalette;
-    
+
+    if (lightModeEnabled) {
+        // ── Light mode palette ─────────────────────────────────────────────
+        QPalette lp;
+        lp.setColor(QPalette::Window,          QColor(240, 241, 246));
+        lp.setColor(QPalette::Base,            QColor(255, 255, 255));
+        lp.setColor(QPalette::AlternateBase,   QColor(232, 234, 240));
+        lp.setColor(QPalette::ToolTipBase,     QColor(255, 255, 220));
+        lp.setColor(QPalette::ToolTipText,     QColor(30,  30,  40));
+        lp.setColor(QPalette::Text,            QColor(20,  22,  36));
+        lp.setColor(QPalette::Disabled, QPalette::Text, QColor(160, 160, 175));
+        lp.setColor(QPalette::ButtonText,      QColor(20,  22,  36));
+        lp.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(160, 160, 175));
+        lp.setColor(QPalette::Button,          QColor(220, 222, 230));
+        lp.setColor(QPalette::Highlight,       QColor(38,  115, 192));
+        lp.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+        lp.setColor(QPalette::Link,            QColor(38,  115, 192));
+        lp.setColor(QPalette::LinkVisited,     QColor(100, 60,  180));
+        qApp->setPalette(lp);
+
+        qApp->setStyleSheet(R"(
+            QMainWindow { background-color: #f0f1f6; }
+
+            QWidget { background-color: #f0f1f6; color: #141624; }
+
+            QWidget#sidebar {
+                background-color: #e4e6ee;
+                border-right: 1px solid #c0c2cc;
+            }
+
+            QLabel#subtitle    { color: #5a5c72; font-weight: normal; }
+            QLabel#sectionHeader {
+                color: #5a5c72; font-size: 9pt; font-weight: bold; margin-top: 10px;
+            }
+            QLabel#subtext     { color: #626480; font-size: 11pt; margin-bottom: 15px; }
+            QLabel#modeNumber  { color: #7a7c96; font-size: 9pt; }
+            QLabel#description { color: #525470; font-size: 10pt; line-height: 1.4; }
+            QLabel#footer      { color: #9a9cb0; font-size: 9pt; }
+            QLabel#status      { color: #1a8a50; padding: 0 6px; }
+            QLabel#memoryLabel { color: #7080a0; padding: 0 10px 0 0; font-size: 9pt; }
+
+            QFrame#modeCard {
+                background-color: #ffffff;
+                border: 1px solid #c8cad8;
+                border-radius: 6px;
+                padding: 15px;
+            }
+            QFrame#modeCard:hover {
+                background-color: #f4f5fc;
+                border: 1px solid #a0aac8;
+            }
+
+            QPushButton#launchButton {
+                background-color: #2669bb;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 8px;
+                font-weight: bold;
+                font-size: 11pt;
+            }
+            QPushButton#launchButton:hover  { background-color: #3d7acc; }
+            QPushButton#launchButton:pressed { background-color: #1f5aa0; }
+
+            QListWidget {
+                background-color: #e4e6ee;
+                border: none;
+                outline: none;
+            }
+            QListWidget::item { padding: 6px 10px; border-radius: 3px; }
+            QListWidget::item:selected { background-color: #2669bb; color: #ffffff; }
+            QListWidget::item:hover    { background-color: #d4d6e4; }
+
+            QScrollBar:vertical {
+                background-color: #e4e6ee; width: 12px; border: none;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #b0b2c0; border-radius: 6px; min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover { background-color: #9092a4; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { border: none; background: none; }
+
+            QScrollBar:horizontal {
+                background-color: #e4e6ee; height: 10px; border: none;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: #b0b2c0; border-radius: 5px; min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover { background-color: #9092a4; }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { border: none; background: none; }
+
+            QLineEdit {
+                background-color: #ffffff;
+                border: 1px solid #c0c2cc;
+                border-radius: 4px;
+                color: #14162a;
+                padding: 4px 8px;
+                selection-background-color: #2669bb;
+            }
+            QLineEdit:focus { border-color: #3d6eb8; }
+
+            QComboBox {
+                background-color: #ffffff;
+                border: 1px solid #c0c2cc;
+                border-radius: 4px;
+                color: #14162a;
+                padding: 3px 8px;
+                selection-background-color: #2669bb;
+            }
+            QComboBox:focus { border-color: #3d6eb8; }
+            QComboBox::drop-down { border: none; width: 22px; }
+            QComboBox QAbstractItemView {
+                background-color: #ffffff;
+                border: 1px solid #c0c2cc;
+                color: #14162a;
+                selection-background-color: #2669bb;
+                outline: none;
+            }
+
+            QCheckBox { color: #2a2c40; spacing: 8px; }
+            QCheckBox::indicator {
+                width: 14px; height: 14px;
+                border: 1px solid #a0a2b8;
+                border-radius: 3px;
+                background-color: #ffffff;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2669bb;
+                border-color: #3d70bb;
+            }
+            QCheckBox::indicator:hover { border-color: #4466aa; }
+
+            QPushButton {
+                background-color: #e0e2ec;
+                color: #2a2c40;
+                border: 1px solid #b8bace;
+                border-radius: 4px;
+                padding: 5px 14px;
+            }
+            QPushButton:hover {
+                background-color: #d0d4e8;
+                border-color: #8090c0;
+                color: #14162a;
+            }
+            QPushButton:pressed { background-color: #c4c8dc; }
+            QPushButton:disabled { color: #a0a2b8; border-color: #d0d2dc; }
+
+            QTabWidget::pane { border: none; }
+            QTabBar::tab {
+                background-color: #dcdee8;
+                color: #2a2c40;
+                padding: 8px 15px;
+                border: none;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected  { background-color: #2669bb; color: #ffffff; }
+            QTabBar::tab:hover      { background-color: #ccd0e4; }
+
+            QSplitter::handle          { background-color: #c8cad8; }
+            QSplitter::handle:horizontal { width: 1px; }
+            QSplitter::handle:vertical   { height: 1px; }
+        )");
+    } else {
+        // ── Dark mode palette (original) ─────────────────────────────────────
+        QPalette darkPalette;
+
     // Background colors
     darkPalette.setColor(QPalette::Window, QColor(13, 13, 18));
     darkPalette.setColor(QPalette::Base, QColor(25, 25, 35));
@@ -511,10 +727,10 @@ void MainWindow::applyStyles()
     darkPalette.setColor(QPalette::Link, QColor(51, 153, 255));
     darkPalette.setColor(QPalette::LinkVisited, QColor(51, 153, 255));
     
-    qApp->setPalette(darkPalette);
-    
-    // Custom stylesheet
-    QString styleSheet = R"(
+        qApp->setPalette(darkPalette);
+
+        // Custom stylesheet
+        QString styleSheet = R"(
         QMainWindow {
             background-color: #0d0d12;
         }
@@ -744,7 +960,10 @@ void MainWindow::applyStyles()
         QSplitter::handle:vertical   { height: 1px; }
     )";
     
-    qApp->setStyleSheet(styleSheet);
+        qApp->setStyleSheet(styleSheet);
+    } // end dark mode
+
+    applyChartTheme();
 }
 
 QWidget* MainWindow::createOverviewPage()
@@ -1110,17 +1329,15 @@ QWidget* MainWindow::createDataAnalysisPage()
     rightStack->addWidget(chartTabs);    // index 1
 
     // ── Chart factory ───────────────────────────────────────────────────────
-    auto makeChart = [](const QString &title, QChartView **viewOut) -> QChart * {
+    auto makeChart = [this](const QString &title, QChartView **viewOut) -> QChart * {
         auto *chart = new QChart();
         chart->setTitle(title);
-        chart->setBackgroundBrush(QBrush(QColor(0x12, 0x12, 0x1e)));
-        chart->setTitleBrush(QBrush(Qt::white));
-        chart->legend()->setLabelColor(Qt::white);
         chart->legend()->setAlignment(Qt::AlignBottom);
         auto *view = new QChartView(chart);
         view->setRenderHint(QPainter::Antialiasing);
-        view->setBackgroundBrush(QBrush(QColor(0x12, 0x12, 0x1e)));
         *viewOut = view;
+        m_dataCharts.append(chart);
+        m_dataChartViews.append(view);
         return chart;
     };
 
@@ -1143,17 +1360,23 @@ QWidget* MainWindow::createDataAnalysisPage()
     chartTabs->addTab(gasView,   "Gas Profile");
     chartTabs->addTab(sedView,   "SED");
 
-    // ── Axis styling helper ─────────────────────────────────────────────────
-    auto styleAxes = [](QChart *chart) {
+    // Apply initial theme colors to all freshly-created charts
+    applyChartTheme();
+
+    // ── Axis styling helper — respects current theme ────────────────────────
+    auto styleAxes = [this](QChart *chart) {
+        const QColor axisLabel  = lightModeEnabled ? QColor(0x14, 0x16, 0x24) : Qt::white;
+        const QColor axisLine   = lightModeEnabled ? QColor(0x90, 0x92, 0xaa) : QColor(0x60, 0x60, 0x80);
+        const QColor gridLine   = lightModeEnabled ? QColor(0xcc, 0xce, 0xdc) : QColor(0x25, 0x25, 0x38);
         for (auto *axis : chart->axes()) {
-            axis->setLabelsBrush(QBrush(Qt::white));
-            axis->setTitleBrush(QBrush(Qt::white));
-            axis->setLinePen(QPen(QColor(0x60, 0x60, 0x80)));
-            axis->setGridLinePen(QPen(QColor(0x25, 0x25, 0x38)));
+            axis->setLabelsBrush(QBrush(axisLabel));
+            axis->setTitleBrush(QBrush(axisLabel));
+            axis->setLinePen(QPen(axisLine));
+            axis->setGridLinePen(QPen(gridLine));
             if (auto *va = qobject_cast<QValueAxis *>(axis))
-                va->setLabelsColor(Qt::white);
+                va->setLabelsColor(axisLabel);
             if (auto *la = qobject_cast<QLogValueAxis *>(axis))
-                la->setLabelsColor(Qt::white);
+                la->setLabelsColor(axisLabel);
         }
     };
 
@@ -1825,9 +2048,180 @@ QWidget* MainWindow::createObjectLibraryPage()
         QString host;       // host black hole / context
         QString description;
         QString properties; // key physical properties, newline-separated
+        QString previewKey; // passed to BlackHolePreviewWidget::setStyle(); empty = no preview
     };
 
     static const QVector<LibObject> ALL_OBJECTS = {
+        // ── Black Holes ──────────────────────────────────────────────────────
+        { "Black Holes",
+          "Sgr A*",
+          "Supermassive BH", "Milky Way Galaxy",
+          "The compact radio source and supermassive black hole sitting at the dynamical "
+          "centre of the Milky Way, located roughly 26,000 light-years from Earth. Its mass "
+          "was pinned down by decades of S-star orbit monitoring (the 2020 pericentre passage "
+          "of S2 confirmed Schwarzschild precession) and by the 2022 EHT image revealing its "
+          "photon ring. Despite being the nearest SMBH, Sgr A* is unusually dim, accreting "
+          "far below the Eddington limit in a radiatively inefficient state.",
+          "Mass: 4.3 × 10\u2076 M\u2609\nSchwarzschild radius: ~13 million km (~0.09 AU)\n"
+          "Distance: ~26,000 light-years\nAccretion state: RIAF (sub-Eddington)\n"
+          "Spin: a < 0.9 (constrained)\nClass: Supermassive BH",
+          "sgra" },
+
+        { "Black Holes",
+          "M87*",
+          "Supermassive BH", "M87 Galaxy (Virgo A)",
+          "The SMBH at the heart of the giant elliptical galaxy M87, made famous as the first "
+          "black hole ever directly imaged by the Event Horizon Telescope in April 2019. The "
+          "ring-like image (diameter ~40 microarcseconds) arises from photons orbiting the "
+          "photon sphere before reaching Earth. M87* powers one of the most powerful known "
+          "relativistic jets, extending ~6 kiloparsecs and moving at apparent superluminal "
+          "speeds of up to ~6c.",
+          "Mass: 6.5 × 10\u2079 M\u2609\nSchwarzschild radius: ~190 AU\n"
+          "Distance: ~55 million light-years\nJet power: ~10\u2044\u2074 erg/s\n"
+          "Spin: a ~ 0.9 (from jet models)\nClass: Supermassive BH",
+          "m87" },
+
+        { "Black Holes",
+          "TON 618",
+          "Ultramassive BH", "TON 618 Quasar Host Galaxy",
+          "One of the most massive black holes ever measured, powering the hyperluminous quasar "
+          "TON 618 at redshift z = 2.219. Its mass surpasses the combined stellar mass of the "
+          "entire Milky Way. At this extreme mass the tidal disruption radius for a solar-type "
+          "star falls inside the event horizon, so stars are swallowed whole with no bright "
+          "flare. The broad emission lines used to derive its mass imply orbital velocities "
+          "exceeding 6,000 km/s in the broad-line region.",
+          "Mass: 6.6 × 10\u00b9\u2070 M\u2609\nSchwarzschild radius: ~1,300 AU\n"
+          "Distance: ~10.4 billion light-years\nRedshift: z = 2.219\n"
+          "Eddington luminosity: ~8 × 10\u2074\u00b9 erg/s\nClass: Ultramassive BH",
+          "ton618" },
+
+        { "Black Holes",
+          "3C 273",
+          "Supermassive BH", "3C 273 Quasar Host Galaxy",
+          "The central engine of 3C 273, the first object ever identified as a quasar (1963, "
+          "Maarten Schmidt). Located at z = 0.158, it was the most distant object known at "
+          "the time of its classification. Its luminosity reaches ~4 × 10\u2074\u2076 erg/s, "
+          "outshining its host galaxy by a factor of roughly 100. The jet, extending ~60 kpc "
+          "in projection, carries kinetic luminosity comparable to the bolometric output of "
+          "the disc.",
+          "Mass: 8.9 × 10\u2078 M\u2609\nSchwarzschild radius: ~26 AU\n"
+          "Distance: ~2.4 billion light-years\nRedshift: z = 0.158\n"
+          "Bolometric luminosity: ~4 × 10\u2074\u2076 erg/s\nClass: Supermassive BH",
+          "3c273" },
+
+        { "Black Holes",
+          "J0529-4351",
+          "Supermassive BH", "J0529-4351 Quasar Host Galaxy",
+          "The host SMBH of the most luminous known quasar (confirmed 2024), located at "
+          "z = 3.962. It accretes at roughly 400 M\u2609/yr, near or exceeding the Eddington "
+          "limit, driving powerful disc winds reaching ~0.3c. At this redshift its emitted "
+          "optical light is observed in the near-infrared. The extreme growth rate implies it "
+          "formed from an unusually massive seed or experienced prolonged super-Eddington "
+          "episodes in the early universe.",
+          "Mass: 1.7 × 10\u00b9\u2070 M\u2609\nSchwarzschild radius: ~500 AU\n"
+          "Distance: ~12.2 billion light-years\nRedshift: z = 3.962\n"
+          "Accretion rate: ~400 M\u2609/yr\nClass: Supermassive BH",
+          "j0529" },
+
+        { "Black Holes",
+          "Cygnus X-1",
+          "Stellar-mass BH", "Cygnus X-1 Binary System",
+          "The first black hole to gain wide scientific acceptance as such (1972), Cygnus X-1 "
+          "is an X-ray binary pairing a black hole with the blue supergiant donor star "
+          "HDE 226868. The black hole accretes via the companion's stellar wind, producing "
+          "persistent bright X-ray emission. Its near-maximal spin is inferred from the "
+          "truncated inner accretion disc radius measured in X-ray reflection spectroscopy. "
+          "It cycles between a soft thermal disc-dominated state and a hard Comptonised state.",
+          "Mass: ~21 M\u2609\nSpin: a > 0.95 (near-maximal)\nOrbital period: 5.6 days\n"
+          "Distance: ~7,200 light-years\nDonor: HDE 226868 (O9.7 Iab supergiant)\n"
+          "Class: Stellar-mass BH",
+          "cygnusx1" },
+
+        { "Black Holes",
+          "GW150914 Remnant",
+          "Stellar-mass BH", "LIGO Binary Merger Event",
+          "The remnant left by GW150914, the first directly detected gravitational-wave event "
+          "(14 September 2015). Two black holes of roughly 36 M\u2609 and 29 M\u2609 spiralled "
+          "together and merged at ~1.4 billion light-years, radiating approximately 3 M\u2609 "
+          "as gravitational waves in under one second. The signal matched general relativistic "
+          "predictions to within measurement precision, providing the first direct confirmation "
+          "of merging stellar-mass black holes and binary black hole systems in nature.",
+          "Mass: ~62 M\u2609 (post-merger)\nMerger components: 36 + 29 M\u2609\n"
+          "GW energy radiated: ~3 M\u2609 c\u00b2\nDistance: ~1.4 billion light-years\n"
+          "Peak GW frequency: ~150 Hz\nClass: Stellar-mass BH (merger remnant)",
+          "gw150914" },
+
+        { "Black Holes",
+          "Gaia BH1",
+          "Stellar-mass BH", "Gaia BH1 Binary System",
+          "The nearest known black hole to Earth, confirmed in 2022 through Gaia astrometric "
+          "measurements of its Sun-like companion star. Gaia BH1 is dormant with no active "
+          "accretion disc, making it invisible in X-rays and detectable only through the "
+          "gravitational wobble it induces on its companion. Its proximity and quiescent state "
+          "make it a benchmark for understanding the population of isolated, non-accreting "
+          "stellar-mass black holes thought to number in the hundreds of millions throughout "
+          "the Galaxy.",
+          "Mass: ~9.6 M\u2609\nOrbital period: 185.6 days\nDistance: ~1,560 light-years\n"
+          "Companion: G-type main-sequence star (~1 M\u2609)\n"
+          "Accretion state: dormant (quiescent)\nClass: Stellar-mass BH",
+          "gaiabh1" },
+
+        { "Black Holes",
+          "Gaia BH2",
+          "Stellar-mass BH", "Gaia BH2 Binary System",
+          "The second Gaia-discovered dormant black hole, announced in 2023. Its companion is "
+          "a red giant, meaning the system is in a more evolved evolutionary stage than BH1. "
+          "The giant's expanded envelope sits close to its Roche lobe, raising the prospect "
+          "of future mass transfer and accretion. BH2 is roughly twice as far as BH1 yet "
+          "still one of the nearest known black holes, offering a window into how dormant "
+          "stellar-mass BHs interact with evolved companions.",
+          "Mass: ~8.9 M\u2609\nOrbital period: 1277 days\nDistance: ~5,130 light-years\n"
+          "Companion: Red giant (~1.1 M\u2609)\n"
+          "Accretion state: dormant (quiescent)\nClass: Stellar-mass BH",
+          "gaiabh2" },
+
+        { "Black Holes",
+          "Gaia BH3",
+          "Stellar-mass BH", "Gaia BH3 Binary System",
+          "The most massive stellar-mass black hole yet found in the Milky Way, revealed by "
+          "Gaia DR3 in 2024. At ~33 solar masses it rivals the component masses seen in "
+          "gravitational-wave events. Its metal-poor companion indicates the progenitor was a "
+          "near-pristine Population II star that collapsed with little or no mass ejection. "
+          "BH3 is the first direct confirmation that the Milky Way harbours very massive "
+          "stellar-mass BHs formed from low-metallicity progenitors.",
+          "Mass: ~33 M\u2609\nOrbital period: 11.6 years\nDistance: ~590 light-years\n"
+          "Companion: Metal-poor subgiant (~0.76 M\u2609)\n"
+          "Accretion state: dormant (quiescent)\nClass: Stellar-mass BH",
+          "gaiabh3" },
+
+        { "Black Holes",
+          "V404 Cygni",
+          "Stellar-mass BH", "V404 Cygni X-ray Binary",
+          "One of the most intensively observed X-ray transients in the Galaxy. V404 Cygni "
+          "hosts a ~9 solar-mass black hole accreting from a K-giant companion in a 6.5-day "
+          "orbit. It underwent dramatic outbursts in 1989 and 2015, briefly becoming the "
+          "brightest X-ray source in the sky. The 2015 outburst revealed quasi-periodic "
+          "jet ejections, dramatic spectral pivoting, and rapid variability on sub-second "
+          "timescales, making it a key laboratory for jet-disc coupling.",
+          "Mass: ~9 M\u2609\nOrbital period: 6.47 days\nDistance: ~7,800 light-years\n"
+          "Companion: K-type giant (~0.7 M\u2609)\n"
+          "Accretion state: transient (outburst/quiescent)\nClass: Stellar-mass BH",
+          "v404cygni" },
+
+        { "Black Holes",
+          "Phoenix A",
+          "Ultramassive BH", "Phoenix A Galaxy Cluster BCG",
+          "The most massive black hole candidate ever identified, residing at the centre of "
+          "the Phoenix A brightest cluster galaxy. Estimates from stellar dynamics and the "
+          "M-sigma relation place its mass at ~100 billion solar masses — an order of "
+          "magnitude above M87*. The host cluster is also one of the most X-ray luminous "
+          "and most rapidly star-forming galaxy clusters known, suggesting the black hole "
+          "is caught at an unusual moment of simultaneously rapid growth and feedback.",
+          "Mass: ~1 \u00d7 10\u00b9\u00b9 M\u2609 (est.)\nDistance: ~5.7 billion light-years\n"
+          "Host: Phoenix A BCG\nFeedback mode: jet + radiative\n"
+          "Class: Ultramassive BH",
+          "phoenixa" },
+
         // ── Research Scenarios ───────────────────────────────────────────────
         { "Research Scenarios",
           "ISCO Test — Unstable (5M)",
@@ -1837,7 +2231,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "exactly on the unstable fixed point. Will spiral into the horizon on a dynamical "
           "timescale.",
           "Orbital radius: 5 M\nInitial eccentricity: ~0 (circular)\nOutcome: captured\n"
-          "Classification: Unstable (sub-ISCO)" },
+          "Classification: Unstable (sub-ISCO)",
+          "isco_unstable" },
 
         { "Research Scenarios",
           "ISCO Test — Critical (6M)",
@@ -1847,7 +2242,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "grow slowly. Used to benchmark the integrator against the analytic ISCO condition "
           "r = 6M.",
           "Orbital radius: 6 M\nInitial eccentricity: ~0 (circular)\nOutcome: marginal\n"
-          "Classification: Critical (ISCO)" },
+          "Classification: Critical (ISCO)",
+          "isco_critical" },
 
         { "Research Scenarios",
           "ISCO Test — Stable (7M)",
@@ -1856,7 +2252,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "bound and stable over many periods. Demonstrates the contrast with the 5M and 6M "
           "cases.",
           "Orbital radius: 7 M\nInitial eccentricity: ~0 (circular)\nOutcome: stable\n"
-          "Classification: Stable (super-ISCO)" },
+          "Classification: Stable (super-ISCO)",
+          "isco_stable" },
 
         { "Research Scenarios",
           "Photon Sphere Test",
@@ -1866,7 +2263,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "edge of the photon sphere at r = 3M and measures deflection angles and orbit counts "
           "before absorption or escape.",
           "Critical impact parameter b_crit = 3√3 M ≈ 5.196 M\nPhoton sphere radius: 3 M\n"
-          "Perturbations tested: ±0.1%, ±1%, ±5%" },
+          "Perturbations tested: ±0.1%, ±1%, ±5%",
+          "photon_sphere" },
 
         { "Research Scenarios",
           "Radial Infall",
@@ -1876,7 +2274,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "the outside, while proper velocity diverges at the horizon. Used to demonstrate "
           "gravitational time dilation and coordinate singularity effects.",
           "Drop radius: 20 M\nAngular momentum: 0\nTrajectory: radial geodesic\n"
-          "Time dilation factor: diverges at r = 2M" },
+          "Time dilation factor: diverges at r = 2M",
+          "radial_infall" },
 
         { "Research Scenarios",
           "Tidal Disruption Star",
@@ -1886,7 +2285,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "inside the Roche limit the body is flagged as disrupted, mimicking a real tidal "
           "disruption event (TDE). If it crosses the ISCO it plunges directly.",
           "Semi-major axis: 8 M\nEccentricity: 0.85\nPericentre: ~1.2 M\n"
-          "Roche limit indicator: active\nOutcome: tidal disruption or plunge" },
+          "Roche limit indicator: active\nOutcome: tidal disruption or plunge",
+          "tidal_disrupt" },
 
         { "Research Scenarios",
           "Pulsar (Inspiraling NS)",
@@ -1899,7 +2299,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Mass: 1.4 M☉ (neutron star)\nStarting semi-major axis: 20 M\nEccentricity: 0.3\n"
           "Spin period: ~33 ms (Crab-like)\nMagnetic field: 10¹² G\n"
           "Physics: GW decay + magnetic drag + spin-down\nVisuals: rotating jets, field arcs, "
-          "light cylinder ring" },
+          "light cylinder ring",
+          "pulsar_inspiral" },
 
         // ── Sgr A* System ────────────────────────────────────────────────────
         { "Sgr A* — Galactic Centre",
@@ -1910,7 +2311,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "the primary probe of GR effects at a galactic centre. The 2020 pericentre passage "
           "confirmed Schwarzschild precession at the predicted level.",
           "Semi-major axis: 20 M\nEccentricity: 0.88\nBody type: Main-sequence star (≈15 M☉)\n"
-          "Key effect: Schwarzschild precession, gravitational redshift at pericentre" },
+          "Key effect: Schwarzschild precession, gravitational redshift at pericentre",
+          "sgra_s2" },
 
         { "Sgr A* — Galactic Centre",
           "S14-like Close Orbit",
@@ -1920,7 +2322,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Their short periods (< 10 yr) allow multiple pericentre passages to be observed "
           "within a human career.",
           "Semi-major axis: 10 M\nEccentricity: 0.95\nBody type: Star\n"
-          "Key effect: strong-field Schwarzschild precession, measurable time dilation" },
+          "Key effect: strong-field Schwarzschild precession, measurable time dilation",
+          "sgra_s14" },
 
         { "Sgr A* — Galactic Centre",
           "IRS 16 Cluster Star",
@@ -1929,7 +2332,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "of Sgr A*. Their presence close to the black hole is puzzling — the gravitational "
           "tidal forces should inhibit in-situ star formation (the 'paradox of youth').",
           "Semi-major axis: 40 M\nEccentricity: 0.30\nBody type: Massive OB star\n"
-          "Key effect: paradox of youth, disk-star interaction models" },
+          "Key effect: paradox of youth, disk-star interaction models",
+          "sgra_irs16" },
 
         { "Sgr A* — Galactic Centre",
           "Circumnuclear Gas Clump",
@@ -1939,7 +2343,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "are perturbed inward, triggering flaring activity. G2 (observed 2013) was a real "
           "gas cloud that survived its pericentre.",
           "Semi-major axis: 60 M\nEccentricity: 0.15\nBody type: Gas Cloud\n"
-          "Key effect: accretion feeding, tidal stretching at pericentre" },
+          "Key effect: accretion feeding, tidal stretching at pericentre",
+          "sgra_gasclump" },
 
         { "Sgr A* — Galactic Centre",
           "S-cluster Member",
@@ -1947,7 +2352,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Generic member of the dense stellar population within the inner 0.04 pc of Sgr A*. "
           "Over 100 S-stars are catalogued. Their orbits are randomised in inclination, "
           "consistent with formation in a disrupted cluster or binary.",
-          "Semi-major axis: 30 M\nEccentricity: 0.50\nBody type: Star" },
+          "Semi-major axis: 30 M\nEccentricity: 0.50\nBody type: Star",
+          "sgra_smember" },
 
         // ── TON 618 System ───────────────────────────────────────────────────
         { "TON 618 — Ultramassive Quasar",
@@ -1958,7 +2364,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "the accretion disk corona. Such clumps reprocess ionising radiation and produce the "
           "broad emission lines used to weigh the SMBH via reverberation mapping.",
           "Semi-major axis: 8 M\nEccentricity: 0.15\nBody type: Gas Cloud (BLR)\n"
-          "Key effect: reverberation mapping target, radiation pressure dynamics" },
+          "Key effect: reverberation mapping target, radiation pressure dynamics",
+          "ton618_blr" },
 
         { "TON 618 — Ultramassive Quasar",
           "Tidal-stripped Star",
@@ -1968,7 +2375,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "core. Each pericentre strips more mass, creating a stream of debris that feeds the "
           "accretion disk.",
           "Semi-major axis: 15 M\nEccentricity: 0.55\nBody type: Tidally stripped star\n"
-          "Key effect: repeated partial TDE, mass-transfer stream" },
+          "Key effect: repeated partial TDE, mass-transfer stream",
+          "ton618_tdstar" },
 
         { "TON 618 — Ultramassive Quasar",
           "Hot Gas Filament",
@@ -1977,7 +2385,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "stream is stretched by differential Keplerian shear and gradually becomes part of "
           "the accretion disk through viscous circularisation.",
           "Semi-major axis: 25 M\nEccentricity: 0.30\nBody type: Gas Cloud (TDE debris)\n"
-          "Key effect: disk-feeding, Keplerian shear, circularisation timescale" },
+          "Key effect: disk-feeding, Keplerian shear, circularisation timescale",
+          "ton618_gasfilm" },
 
         { "TON 618 — Ultramassive Quasar",
           "Plunging Star",
@@ -1987,7 +2396,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "radius lies inside the event horizon for solar-type stars — the star is swallowed "
           "whole, producing no bright flare.",
           "Semi-major axis: 12 M\nEccentricity: 0.80\nBody type: Star\n"
-          "Key effect: direct capture (no TDE flare for solar-type star)" },
+          "Key effect: direct capture (no TDE flare for solar-type star)",
+          "ton618_plunge" },
 
         { "TON 618 — Ultramassive Quasar",
           "Outer Stellar Orbit",
@@ -1996,7 +2406,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "this radius the SMBH dominates stellar dynamics over the surrounding galaxy bulge. "
           "Orbital precession is detectable and apsidal precession rates encode the BH spin "
           "via frame-dragging at higher order.",
-          "Semi-major axis: 50 M\nEccentricity: 0.20\nBody type: Star" },
+          "Semi-major axis: 50 M\nEccentricity: 0.20\nBody type: Star",
+          "ton618_outerstar" },
 
         { "TON 618 — Ultramassive Quasar",
           "Satellite Stellar Cluster",
@@ -2006,7 +2417,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "stellar cluster. Its own stellar mass black holes sink fastest, seeding an inner "
           "cusp.",
           "Semi-major axis: 80 M\nEccentricity: 0.10\nBody type: Stellar Cluster\n"
-          "Key effect: dynamical friction inspiral, cluster dissolution" },
+          "Key effect: dynamical friction inspiral, cluster dissolution",
+          "ton618_cluster" },
 
         // ── 3C 273 System ────────────────────────────────────────────────────
         { "3C 273 — First Identified Quasar",
@@ -2017,7 +2429,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "output. Blobs like this are ejected during accretion flares and can appear "
           "superluminal as they approach the observer at a small angle.",
           "Semi-major axis: 10 M\nEccentricity: 0.20\nBody type: Gas Cloud (jet base)\n"
-          "Key effect: superluminal motion, jet ejection" },
+          "Key effect: superluminal motion, jet ejection",
+          "3c273_jetblob" },
 
         { "3C 273 — First Identified Quasar",
           "Broad-line Region Cloud",
@@ -2027,7 +2440,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Mg II lines whose widths encode the cloud's orbital velocity (~5000 km/s), which "
           "combined with the light-travel-time lag gives the BH mass via reverberation.",
           "Semi-major axis: 20 M\nEccentricity: 0.40\nBody type: Gas Cloud (BLR)\n"
-          "Key effect: reverberation mapping, broad-line emission" },
+          "Key effect: reverberation mapping, broad-line emission",
+          "3c273_blr" },
 
         { "3C 273 — First Identified Quasar",
           "Stripped Dwarf Remnant",
@@ -2037,7 +2451,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "its own intermediate-mass black hole, creating a dual-BH system on a sub-parsec "
           "scale.",
           "Semi-major axis: 70 M\nEccentricity: 0.25\nBody type: Dwarf Galaxy remnant\n"
-          "Key effect: galaxy stripping, potential IMBH binary" },
+          "Key effect: galaxy stripping, potential IMBH binary",
+          "3c273_dwarf" },
 
         { "3C 273 — First Identified Quasar",
           "Close Stellar Orbit",
@@ -2046,7 +2461,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "pressure from the luminous accretion disc. For luminous quasars near Eddington, "
           "radiation pressure can significantly perturb stellar orbits, making them useful "
           "probes of the accretion disc geometry.",
-          "Semi-major axis: 35 M\nEccentricity: 0.60\nBody type: Star" },
+          "Semi-major axis: 35 M\nEccentricity: 0.60\nBody type: Star",
+          "3c273_closestar" },
 
         // ── J0529-4351 System ────────────────────────────────────────────────
         { "J0529-4351 — Most Luminous Quasar",
@@ -2057,7 +2473,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "powerful disc winds that can reach ~0.3c. Such outflows carry more kinetic power "
           "than most AGN jets.",
           "Semi-major axis: 9 M\nEccentricity: 0.10\nBody type: Gas Cloud\n"
-          "Key effect: super-Eddington accretion, disc wind" },
+          "Key effect: super-Eddington accretion, disc wind",
+          "j0529_fastblob" },
 
         { "J0529-4351 — Most Luminous Quasar",
           "UV-bright Clump",
@@ -2067,7 +2484,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "observed in the near-infrared. The luminosity implies a black hole growing rapidly, "
           "possibly via super-Eddington accretion.",
           "Semi-major axis: 18 M\nEccentricity: 0.35\nBody type: Gas Cloud (BLR)\n"
-          "Key effect: UV photoionisation, extreme luminosity" },
+          "Key effect: UV photoionisation, extreme luminosity",
+          "j0529_uvclump" },
 
         { "J0529-4351 — Most Luminous Quasar",
           "Tidally Disrupting Star",
@@ -2077,7 +2495,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "is near the event horizon, making whole-star swallowing likely. More massive stars "
           "and white dwarfs have smaller radii and can be disrupted at larger separations.",
           "Semi-major axis: 14 M\nEccentricity: 0.70\nBody type: Star (disrupting)\n"
-          "Key effect: tidal disruption event (TDE), mass stream" },
+          "Key effect: tidal disruption event (TDE), mass stream",
+          "j0529_tdestar" },
 
         { "J0529-4351 — Most Luminous Quasar",
           "Outer Gas Stream",
@@ -2085,7 +2504,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Outer accretion stream feeding the disc from a disrupted companion or infalling "
           "cloud. At this radius gas is still on nearly Keplerian orbits; viscous angular "
           "momentum transport will cause it to drift inward over many orbital periods.",
-          "Semi-major axis: 45 M\nEccentricity: 0.20\nBody type: Gas Cloud" },
+          "Semi-major axis: 45 M\nEccentricity: 0.20\nBody type: Gas Cloud",
+          "j0529_gasstream" },
 
         { "J0529-4351 — Most Luminous Quasar",
           "Infalling Stellar Cluster",
@@ -2093,7 +2513,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Dense stellar cluster sinking toward J0529's SMBH via dynamical friction. The "
           "extreme accretion environment means stellar winds and disc irradiation may erode the "
           "cluster before it reaches the galactic nucleus.",
-          "Semi-major axis: 65 M\nEccentricity: 0.15\nBody type: Stellar Cluster" },
+          "Semi-major axis: 65 M\nEccentricity: 0.15\nBody type: Stellar Cluster",
+          "j0529_cluster" },
 
         // ── M87 System ───────────────────────────────────────────────────────
         { "M87 — EHT Image Black Hole",
@@ -2104,7 +2525,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "imaging traces the jet launching zone down to ~10 Schwarzschild radii. Jet knots "
           "can move superluminally at up to ~6c in apparent sky velocity.",
           "Semi-major axis: 10 M\nEccentricity: 0.12\nBody type: Gas Cloud (jet knot)\n"
-          "Key effect: relativistic jet, frame-dragging, superluminal motion" },
+          "Key effect: relativistic jet, frame-dragging, superluminal motion",
+          "m87_jetknot" },
 
         { "M87 — EHT Image Black Hole",
           "Inner Stellar Orbit",
@@ -2113,7 +2535,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "(≈100 pc). Stellar dynamics here — including the velocity dispersion and the nuclear "
           "stellar cusp slope — were key inputs to the 6.5 × 10⁹ M☉ mass estimate prior to "
           "the EHT image.",
-          "Semi-major axis: 20 M\nEccentricity: 0.45\nBody type: Star" },
+          "Semi-major axis: 20 M\nEccentricity: 0.45\nBody type: Star",
+          "m87_innerstar" },
 
         { "M87 — EHT Image Black Hole",
           "Hot Gas Shell Fragment",
@@ -2122,7 +2545,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Virgo cluster intracluster medium (ICM); the jet inflates giant cavities in the "
           "ICM ('radio bubbles') that prevent runaway cooling — a key AGN feedback mechanism.",
           "Semi-major axis: 35 M\nEccentricity: 0.25\nBody type: Gas Cloud (ICM shell)\n"
-          "Key effect: AGN feedback, radio bubble inflation" },
+          "Key effect: AGN feedback, radio bubble inflation",
+          "m87_hotgas" },
 
         { "M87 — EHT Image Black Hole",
           "Globular Cluster",
@@ -2132,7 +2556,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Clusters that reach the nucleus can be tidally stripped, seeding the nuclear stellar "
           "population.",
           "Semi-major axis: 90 M\nEccentricity: 0.08\nBody type: Stellar Cluster\n"
-          "Key effect: dynamical friction, tidal stripping, nuclear cusp building" },
+          "Key effect: dynamical friction, tidal stripping, nuclear cusp building",
+          "m87_globular" },
 
         { "M87 — EHT Image Black Hole",
           "Infalling Dwarf Galaxy",
@@ -2142,7 +2567,8 @@ QWidget* MainWindow::createObjectLibraryPage()
           "an IMBH it will eventually pair with M87's SMBH and produce a low-frequency "
           "gravitational wave source detectable by LISA.",
           "Semi-major axis: 70 M\nEccentricity: 0.30\nBody type: Dwarf Galaxy\n"
-          "Key effect: SMBH-IMBH binary, LISA source candidate" },
+          "Key effect: SMBH-IMBH binary, LISA source candidate",
+          "m87_dwarf" },
     };
 
     // ── Layout: list on left, detail panel on right ───────────────────────────
@@ -2207,6 +2633,10 @@ QWidget* MainWindow::createObjectLibraryPage()
     QLabel *detailTypeLabel = new QLabel();
     detailTypeLabel->setObjectName("subtext");
     detailLayout->addWidget(detailTypeLabel);
+
+    BlackHolePreviewWidget *detailPreview = new BlackHolePreviewWidget();
+    detailPreview->setVisible(false);
+    detailLayout->addWidget(detailPreview);
 
     QFrame *divider = new QFrame();
     divider->setFrameShape(QFrame::HLine);
@@ -2285,6 +2715,7 @@ QWidget* MainWindow::createObjectLibraryPage()
             const LibObject &obj = ALL_OBJECTS[idx];
             detailNameLabel->setText(obj.name);
             detailTypeLabel->setText("Type: " + obj.type);
+            detailPreview->setStyle(obj.previewKey);
             detailHostLabel->setText("Host / Context:  " + obj.host);
             detailDescLabel->setText(obj.description);
             detailPropsLabel->setText(obj.properties);
@@ -2496,6 +2927,12 @@ QWidget* MainWindow::createSettingsPage()
         memoryDisplayCheck = new QCheckBox("Show memory usage in status bar");
         memoryDisplayCheck->setChecked(s.value("ui/memoryDisplay", true).toBool());
         ifLay->addWidget(memoryDisplayCheck);
+
+        lightModeCheck = new QCheckBox("Light mode");
+        lightModeCheck->setChecked(s.value("ui/lightMode", false).toBool());
+        ifLay->addWidget(lightModeCheck);
+        connect(lightModeCheck, &QCheckBox::toggled, this, &MainWindow::toggleTheme);
+
         lay->addWidget(ifCard);
 
         // ── Export defaults card ────────────────────────────────────────────
@@ -3067,4 +3504,104 @@ void MainWindow::onRecentItemContextMenu(const QPoint &pos)
             statusLabel->setText("Deleted workspace: " + name);
         }
     }
+}
+
+QWidget* MainWindow::createBreakdownPage()
+{
+    QWidget *page = new QWidget();
+    QVBoxLayout *outerLayout = new QVBoxLayout(page);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    outerLayout->setSpacing(0);
+
+    // Sub-stack: 0 = selection, 1 = detail
+    QStackedWidget *subStack = new QStackedWidget();
+
+    // ── SELECTION PAGE ────────────────────────────────────────────────────────
+    QWidget *selPage = new QWidget();
+    QVBoxLayout *selLayout = new QVBoxLayout(selPage);
+    selLayout->setContentsMargins(0, 0, 0, 0);
+    selLayout->setSpacing(12);
+
+    QLabel *selTitle = new QLabel("Please select a field for breakdown:");
+    selTitle->setObjectName("pageTitle");
+    selLayout->addWidget(selTitle);
+
+    QScrollArea *scroll = new QScrollArea();
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    QWidget *scrollContents = new QWidget();
+    QVBoxLayout *scrollLayout = new QVBoxLayout(scrollContents);
+    scrollLayout->setSpacing(6);
+    scrollLayout->setContentsMargins(0, 0, 0, 0);
+
+    // Reusable label for category headers
+    auto addCategory = [&](const QString &name) {
+        QLabel *lbl = new QLabel(name);
+        lbl->setObjectName("sectionHeader");
+        scrollLayout->addWidget(lbl);
+    };
+
+    // Each button switches to detail view and sets a shared field label
+    QLabel *fieldLabel = new QLabel();  // lives on detail page, set on click
+
+    auto addField = [&](const QString &name) {
+        QPushButton *btn = new QPushButton(name);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        btn->setFixedHeight(34);
+        QObject::connect(btn, &QPushButton::clicked, [subStack, fieldLabel, name]() {
+            fieldLabel->setText(name);
+            subStack->setCurrentIndex(1);
+        });
+        scrollLayout->addWidget(btn);
+    };
+
+    addCategory("Core Physics");
+    addField("General Relativity");
+    addField("Orbital Mechanics");
+    addField("Accretion Physics");
+
+    addCategory("Radiation & Observations");
+    addField("Radiation & Optics");
+    addField("Thermodynamics");
+
+    addCategory("Advanced Topics");
+    addField("Quantum Effects");
+    addField("Electromagnetism");
+
+    addCategory("Computational Methods");
+    addField("Numerical Methods");
+    addField("Signal Processing & Data");
+
+    scrollLayout->addStretch();
+    scroll->setWidget(scrollContents);
+    selLayout->addWidget(scroll);
+
+    // ── DETAIL PAGE ───────────────────────────────────────────────────────────
+    QWidget *detailPage = new QWidget();
+    QVBoxLayout *detailLayout = new QVBoxLayout(detailPage);
+    detailLayout->setContentsMargins(0, 0, 0, 0);
+    detailLayout->setSpacing(12);
+
+    QPushButton *backBtn = new QPushButton("← Back");
+    backBtn->setFixedWidth(90);
+    QObject::connect(backBtn, &QPushButton::clicked, [subStack]() {
+        subStack->setCurrentIndex(0);
+    });
+    detailLayout->addWidget(backBtn);
+
+    fieldLabel->setObjectName("pageTitle");
+    detailLayout->addWidget(fieldLabel);
+
+    QLabel *detailBody = new QLabel("Breakdown content coming soon.");
+    detailBody->setObjectName("pageSubtitle");
+    detailBody->setWordWrap(true);
+    detailLayout->addWidget(detailBody);
+
+    detailLayout->addStretch();
+
+    // ── Assemble ──────────────────────────────────────────────────────────────
+    subStack->addWidget(selPage);
+    subStack->addWidget(detailPage);
+    outerLayout->addWidget(subStack);
+    return page;
 }

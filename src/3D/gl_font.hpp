@@ -311,6 +311,17 @@ public:
     bool ready() const { return ready_; } // is this even going to make sense? after all, the font is either ready or not, and if not, we shouldn't be trying to draw with it at all. Just keep it I guess..
     int lineHeight() const { return lineH_; }
 
+    // Pixel width of a single-line string (stops at first newline).
+    float textWidth(const std::string& s) const {
+        float w = 0;
+        for (char ch : s) {
+            if (ch == '\n') break;
+            if (ch < 32 || ch > 126) continue;
+            w += glyphs_[ch - 32].advance;
+        }
+        return w;
+    }
+
 private:
     static GLuint compileShader(GLenum type, const char* src) {
         GLuint s = glCreateShader(type);

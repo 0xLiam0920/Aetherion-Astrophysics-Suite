@@ -32,6 +32,15 @@ struct UIState {
     int    notificationTimer = 0;
 
     static constexpr double presetHorizonPixelsTarget = 120.0;
+
+    // ── Merger menu ──────────────────────────────────────────────────────────
+    struct MergerMenuState {
+        bool        open             = false;
+        int         selectedIdx      = 0;       // 0..NUM_BH2D_PRESETS-1 = preset, NUM_BH2D_PRESETS = Custom
+        bool        inputtingCustom  = false;   // user is typing a custom mass
+        std::string customInput      = "10.0";  // raw digit string
+        double      customMassSolar  = 10.0;    // last parsed custom mass
+    } mergerMenu;
 };
 
 // Process a single SFML event and update UI / simulation state.
@@ -43,13 +52,92 @@ inline void handleInput(
     unsigned int      windowHeight,
     const KeyConfig2D& cfg = KeyConfig2D{})
 {
+    // ── Text entry for custom-mass field in merger menu ─────────────────────
+    if (ui.mergerMenu.open && ui.mergerMenu.inputtingCustom) {
+        if (auto* te = ev.getIf<sf::Event::TextEntered>()) {
+            char32_t c = te->unicode;
+            if (c >= '0' && c <= '9') {
+                ui.mergerMenu.customInput += (char)c;
+            } else if (c == '.') {
+                if (ui.mergerMenu.customInput.find('.') == std::string::npos)
+                    ui.mergerMenu.customInput += '.';
+            } else if (c == 8 || c == 127) { // backspace / delete
+                if (!ui.mergerMenu.customInput.empty())
+                    ui.mergerMenu.customInput.pop_back();
+            } else if (c == 13) { // Enter — confirm
+                try {
+                    double m = std::stod(ui.mergerMenu.customInput);
+                    if (m > 0.0) {
+                        ui.mergerMenu.customMassSolar = m;
+                        sim.startMerger(m, windowHeight);
+                        ui.mergerMenu.open            = false;
+                        ui.mergerMenu.inputtingCustom = false;
+                        ui.notification      = "Merger with custom BH initiated!";
+                        ui.notificationTimer = 150;
+                    }
+                } catch (...) {
+                    ui.notification      = "Invalid mass — enter a positive number";
+                    ui.notificationTimer = 120;
+                }
+            }
+        }
+    }
+
     if (!ev.is<sf::Event::KeyPressed>()) return;
 
     const auto *key    = ev.getIf<sf::Event::KeyPressed>();
     const sf::Keyboard::Key code = key->code;
     const double bh_isco = sim.bh.metric.isco();
 
-    // ── Simulation ────────────────────────────────────────────────────────
+    // ── Merger menu navigation (intercepts all keys while open) ─────────────
+    if (ui.mergerMenu.open) {
+        if (code == sf::Keyboard::Key::Escape) {
+            ui.mergerMenu.open            = false;
+            ui.mergerMenu.inputtingCustom = false;
+        } else if (code == sf::Keyboard::Key::Up) {
+            int total = NUM_BH2D_PRESETS + 1;
+            ui.mergerMenu.selectedIdx = (ui.mergerMenu.selectedIdx - 1 + total) % total;
+            ui.mergerMenu.inputtingCustom = false;
+        } else if (code == sf::Keyboard::Key::Down) {
+            int total = NUM_BH2D_PRESETS + 1;
+            ui.mergerMenu.selectedIdx = (ui.mergerMenu.selectedIdx + 1) % total;
+            ui.mergerMenu.inputtingCustom = false;
+        } else if (code == sf::Keyboard::Key::Enter) {
+            if (ui.mergerMenu.selectedIdx == NUM_BH2D_PRESETS) {
+                // Custom option — begin text entry
+                if (!ui.mergerMenu.inputtingCustom) {
+                    ui.mergerMenu.inputtingCustom = true;
+                    ui.mergerMenu.customInput     = "10.0";
+                } else {
+                    // Confirm what was typed
+                    try {
+                        double m = std::stod(ui.mergerMenu.customInput);
+                        if (m > 0.0) {
+                            ui.mergerMenu.customMassSolar = m;
+                            sim.startMerger(m, windowHeight);
+                            ui.mergerMenu.open            = false;
+                            ui.mergerMenu.inputtingCustom = false;
+                            ui.notification      = "Merger with custom BH initiated!";
+                            ui.notificationTimer = 150;
+                        }
+                    } catch (...) {
+                        ui.notification      = "Invalid mass — enter a positive number";
+                        ui.notificationTimer = 120;
+                    }
+                }
+            } else {
+                double massSolar = BH2D_PRESETS[ui.mergerMenu.selectedIdx].massSolar;
+                sim.startMerger(massSolar, windowHeight);
+                ui.mergerMenu.open = false;
+                ui.notification = std::string("Merger with ") +
+                                  BH2D_PRESETS[ui.mergerMenu.selectedIdx].name + " initiated!";
+                ui.notificationTimer = 150;
+            }
+        }
+        return; // swallow all keypresses while menu is open
+    }
+
+    // ── Simulation ────────────────────────────────────────────────────────────
     if (code == cfg.pause) {
         ui.paused = !ui.paused;
 
@@ -58,6 +146,7 @@ inline void handleInput(
         if (ui.presetActive) {
             sim.bh.metric.M       = units::solarMassToGeomMeters(BH2D_PRESETS[ui.presetIdx].massSolar);
             sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
+            sim.tidalRadiusM      = BH2D_PRESETS[ui.presetIdx].zones.tidalDisruptionM;
             sim.reinitBodies();
             if (ui.showGalaxySystem && BH2D_PRESETS[ui.presetIdx].isGalacticCenter)
                 sim.spawnGalaxySystem(ui.presetIdx);
@@ -74,6 +163,7 @@ inline void handleInput(
             ui.presetIdx = (ui.presetIdx + 1) % NUM_BH2D_PRESETS;
             sim.bh.metric.M       = units::solarMassToGeomMeters(BH2D_PRESETS[ui.presetIdx].massSolar);
             sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
+            sim.tidalRadiusM      = BH2D_PRESETS[ui.presetIdx].zones.tidalDisruptionM;
             sim.reinitBodies();
             if (ui.showGalaxySystem && BH2D_PRESETS[ui.presetIdx].isGalacticCenter)
                 sim.spawnGalaxySystem(ui.presetIdx);
@@ -87,6 +177,7 @@ inline void handleInput(
             ui.presetIdx = (ui.presetIdx - 1 + NUM_BH2D_PRESETS) % NUM_BH2D_PRESETS;
             sim.bh.metric.M       = units::solarMassToGeomMeters(BH2D_PRESETS[ui.presetIdx].massSolar);
             sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
+            sim.tidalRadiusM      = BH2D_PRESETS[ui.presetIdx].zones.tidalDisruptionM;
             sim.reinitBodies();
             if (ui.showGalaxySystem && BH2D_PRESETS[ui.presetIdx].isGalacticCenter)
                 sim.spawnGalaxySystem(ui.presetIdx);
@@ -271,5 +362,10 @@ inline void handleInput(
         sim.rebuildPhotons(windowHeight);
         ui.notification      = "Pulsar orbital sim — enable preset (T) for physical GW values";
         ui.notificationTimer = 150;
+
+    } else if (code == cfg.mergerMenu) {
+        ui.mergerMenu.open            = !ui.mergerMenu.open;
+        ui.mergerMenu.inputtingCustom = false;
+        ui.mergerMenu.selectedIdx     = 0;
     }
 }

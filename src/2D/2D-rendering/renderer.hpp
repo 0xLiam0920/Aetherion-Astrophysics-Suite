@@ -1,7 +1,16 @@
+/* ------------------------------------------------ *\
+   Renderer.hpp — SFML-based 2D renderer for black hole visualization.
+   All visual data is pre-computed by the visualization layer; this class
+   just draws shapes and sprites based on that data.
+
+   Part of Aetherion Suite: https://github.com/0xLiam0920/Aetherion-Astrophysics-Suite
+\* ------------------------------------------------ */`
 #pragma once
 #include <SFML/Graphics.hpp>
 #include "../2D-core/body_visual.hpp"
 #include <string>
+#include <sstream>
+#include <iomanip>
 #include <iostream>
 #include <cmath>
 #include <cstdint>
@@ -37,7 +46,7 @@ public:
         auto tryFont = [&](const std::string& path) -> bool {
             std::ifstream probe(path);
             return probe.good() && font_.openFromFile(path);
-        };
+        }; /* ----- Try these common system font paths, in order ----- */
         bool fontLoaded =
             tryFont("/usr/share/fonts/dejavu/DejaVuSans.ttf")                       ||
             tryFont("/usr/share/fonts/liberation-fonts/LiberationSans-Regular.ttf") ||
@@ -353,6 +362,7 @@ public:
             "3         Radial infall test",
             "4         Tidal disruption demo",
             "5         Pulsar orbital sim",
+            "6         Merger event menu",
         };
         constexpr int nAdv = sizeof(advLines) / sizeof(advLines[0]);
         for (int i = 0; i < nAdv; ++i) {
@@ -555,7 +565,7 @@ public:
 
                 // End point: BH horizon surface.
                 sf::Vector2f toBH = (dist > 1e-3f) ? ns2bh / dist : sf::Vector2f(1.0f, 0.0f);
-                float bhR = std::max(6.0f, dist * 0.05f);  // crude horizon radius estimate
+                float bhR = std::max(6.0f, dist * 0.05f);  // crude horizon radius estimate, since 
                 sf::Vector2f end = bhPos - toBH * bhR;
 
                 // Quadratic Bézier: P(t) = (1-t)² P0 + 2(1-t)t P1 + t² P2
@@ -659,6 +669,254 @@ public:
         }
         notif.setPosition({x, viewH - 30.0f});
         window_.draw(notif);
+    }
+
+    /*--------- Merger: incoming BH dot ---------*/
+    // Draws the secondary BH as a dark circle with a subtle glow, approaching the primary.
+    void drawMergerBH(sf::Vector2f pos, float radiusPx) {
+        // Outer glow
+        float glowR = radiusPx + 6.0f;
+        sf::CircleShape glow(glowR);
+        glow.setOrigin({glowR, glowR});
+        glow.setPosition(pos);
+        glow.setFillColor(sf::Color(180, 120, 255, 50));
+        window_.draw(glow);
+
+        // Core
+        sf::CircleShape core(radiusPx);
+        core.setOrigin({radiusPx, radiusPx});
+        core.setPosition(pos);
+        core.setFillColor(sf::Color(10, 10, 10));
+        core.setOutlineThickness(2.0f);
+        core.setOutlineColor(sf::Color(180, 100, 255, 200));
+        window_.draw(core);
+
+        // Label
+        sf::Text lbl(font_, "Incoming BH", 10);
+        lbl.setFillColor(sf::Color(200, 160, 255));
+        lbl.setPosition({pos.x + radiusPx + 4.0f, pos.y - 7.0f});
+        window_.draw(lbl);
+    }
+
+    // Draw the fading death-spiral trail for one of the two BHs.
+    // trailColor: base RGB of this BH's streak (purple for secondary, cyan for primary).
+    void drawMergerTrail(
+        const std::deque<std::pair<double,double>>& trail,
+        sf::Vector2f bhCenter,
+        float pixelsPerM,
+        sf::Color baseColor)
+    {
+        if (trail.size() < 2) return;
+        sf::VertexArray line(sf::PrimitiveType::LineStrip, trail.size());
+        for (size_t i = 0; i < trail.size(); ++i) {
+            float wx = (float)trail[i].first;
+            float wy = (float)trail[i].second;
+            line[i].position = {
+                bhCenter.x + wx * pixelsPerM,
+                bhCenter.y - wy * pixelsPerM   // y-flip: world +y = screen up
+            };
+            // Fade from transparent (old) to fully opaque (recent)
+            float t = (float)i / (float)(trail.size() - 1);
+            line[i].color = sf::Color(
+                baseColor.r,
+                baseColor.g,
+                baseColor.b,
+                (uint8_t)(t * 200.0f)
+            );
+        }
+        window_.draw(line);
+    }
+
+    /*--------- Merger: white flash at the moment of coalescence ---------*/
+    // alpha: 0.0 = transparent, 1.0 = full white
+    void drawMergeFlash(float alpha, float viewW, float viewH) {
+        sf::RectangleShape flash(sf::Vector2f(viewW, viewH));
+        flash.setPosition({0.f, 0.f});
+        uint8_t a = (uint8_t)(std::min(1.0f, alpha) * 220.0f);
+        flash.setFillColor(sf::Color(255, 255, 255, a));
+        window_.draw(flash);
+    }
+
+    /*--------- Merger: selection menu overlay ---------*/
+    // presets / numPresets: the BH preset table (includes "Custom" as the last entry)
+    // state: current menu navigation state from UIState::MergerMenuState
+    template<typename MergerMenuState, typename BHPreset>
+    void drawMergerMenu(const MergerMenuState& state,
+                        const BHPreset* presets, int numPresets,
+                        float viewW, float viewH)
+    {
+        constexpr float PANEL_W  = 440.0f;
+        constexpr float ROW_H    = 18.0f;
+        constexpr float HEADER_H = 48.0f;
+        constexpr float FOOTER_H = 36.0f;
+        // Total rows: numPresets + 1 (Custom)
+        int totalRows = numPresets + 1;
+        float panelH  = HEADER_H + totalRows * ROW_H + FOOTER_H + 8.0f;
+        float panelX  = (viewW - PANEL_W) * 0.5f;
+        float panelY  = (viewH - panelH)  * 0.5f;
+
+        // Background
+        sf::RectangleShape bg(sf::Vector2f(PANEL_W, panelH));
+        bg.setPosition({panelX, panelY});
+        bg.setFillColor(sf::Color(8, 8, 24, 230));
+        bg.setOutlineThickness(2.0f);
+        bg.setOutlineColor(sf::Color(160, 80, 255, 200));
+        window_.draw(bg);
+
+        // Title
+        sf::Text title(font_, "MERGER EVENT  (Enter: select  Esc: cancel)", 13);
+        title.setFillColor(sf::Color(220, 160, 255));
+        title.setPosition({panelX + 10.0f, panelY + 8.0f});
+        window_.draw(title);
+
+        sf::Text subtitle(font_, "Choose the merging black hole:", 11);
+        subtitle.setFillColor(sf::Color(160, 160, 200, 200));
+        subtitle.setPosition({panelX + 10.0f, panelY + 26.0f});
+        window_.draw(subtitle);
+
+        // Divider
+        sf::RectangleShape div(sf::Vector2f(PANEL_W - 20.0f, 1.0f));
+        div.setPosition({panelX + 10.0f, panelY + HEADER_H - 4.0f});
+        div.setFillColor(sf::Color(160, 80, 255, 120));
+        window_.draw(div);
+
+        // Preset rows
+        float rowY = panelY + HEADER_H;
+        auto formatMass = [](double msun) -> std::string {
+            std::ostringstream os;
+            if (msun >= 1e9)       os << std::scientific << std::setprecision(2) << msun << " Msun";
+            else if (msun >= 1e6)  os << std::fixed << std::setprecision(2) << (msun / 1e6) << "M Msun";
+            else if (msun >= 1e3)  os << std::fixed << std::setprecision(0) << msun << " Msun";
+            else                   os << std::fixed << std::setprecision(2) << msun << " Msun";
+            return os.str();
+        };
+
+        for (int i = 0; i <= numPresets; ++i) {
+            bool isSelected = (state.selectedIdx == i);
+            bool isCustom   = (i == numPresets);
+
+            // Highlight bar
+            if (isSelected) {
+                sf::RectangleShape sel(sf::Vector2f(PANEL_W - 12.0f, ROW_H - 1.0f));
+                sel.setPosition({panelX + 6.0f, rowY + 1.0f});
+                sel.setFillColor(sf::Color(160, 60, 255, 80));
+                window_.draw(sel);
+            }
+
+            // Cursor arrow
+            sf::Text arrow(font_, isSelected ? ">" : " ", 11);
+            arrow.setFillColor(sf::Color(220, 160, 255));
+            arrow.setPosition({panelX + 8.0f, rowY + 2.0f});
+            window_.draw(arrow);
+
+            if (!isCustom) {
+                // Name
+                sf::Text name(font_, presets[i].name, 11);
+                name.setFillColor(isSelected ? sf::Color(255, 220, 255) : sf::Color(210, 210, 230));
+                name.setPosition({panelX + 22.0f, rowY + 2.0f});
+                window_.draw(name);
+
+                // Mass (right-aligned)
+                std::string massStr = formatMass(presets[i].massSolar);
+                sf::Text massText(font_, massStr, 10);
+                massText.setFillColor(sf::Color(160, 200, 255, 180));
+                float massX = panelX + PANEL_W - massText.getLocalBounds().size.x - 14.0f;
+                massText.setPosition({massX, rowY + 3.0f});
+                window_.draw(massText);
+            } else {
+                // Custom row
+                std::string customLabel = "Custom BH";
+                if (state.inputtingCustom) {
+                    customLabel = "Custom BH  mass: " + state.customInput + "_";
+                } else {
+                    customLabel = "Custom BH  (press Enter, then type mass in solar masses)";
+                }
+                sf::Text cust(font_, customLabel, 11);
+                cust.setFillColor(isSelected ? sf::Color(255, 255, 180) : sf::Color(210, 210, 160));
+                cust.setPosition({panelX + 22.0f, rowY + 2.0f});
+                window_.draw(cust);
+            }
+
+            rowY += ROW_H;
+        }
+
+        // Footer hint
+        sf::RectangleShape div2(sf::Vector2f(PANEL_W - 20.0f, 1.0f));
+        div2.setPosition({panelX + 10.0f, rowY + 2.0f});
+        div2.setFillColor(sf::Color(160, 80, 255, 80));
+        window_.draw(div2);
+
+        sf::Text hint(font_, "Up/Down: navigate   Enter: confirm   Esc: cancel", 10);
+        hint.setFillColor(sf::Color(140, 140, 170, 180));
+        hint.setPosition({panelX + 10.0f, rowY + 6.0f});
+        window_.draw(hint);
+    }
+
+    /*--------- Tidal disruption event overlay ---------*/
+    // Caller pre-projects world positions to screen coords.
+    struct TidalParticleVis {
+        float sx, sy;       // screen position
+        float size;         // dot radius in pixels (already lifetime-scaled)
+        float lifeF;        // lifetime fraction [0,1]
+        bool  isFallback;   // true = gas-stream (blue-white), false = debris (orange)
+    };
+
+    // flashPos: screen coords of disruption point
+    // flashAlpha: 0 (no flash) to 1 (peak flash), derived from flashTimer/FLASH_DURATION
+    void drawTidalEvent(sf::Vector2f flashPos, float flashAlpha,
+                        const std::vector<TidalParticleVis>& particles,
+                        bool showLabel) {
+        // Localised expanding ring flash
+        if (flashAlpha > 0.0f) {
+            float t = 1.0f - flashAlpha;  // 0 = just triggered, 1 = faded
+            // Inner bright core
+            float coreR = flashAlpha * 22.0f;
+            sf::CircleShape core(coreR);
+            core.setOrigin({coreR, coreR});
+            core.setPosition(flashPos);
+            core.setFillColor(sf::Color(255, 230, 160,
+                                        static_cast<uint8_t>(flashAlpha * 210)));
+            window_.draw(core);
+
+            // Expanding shockwave ring
+            float ringR = 20.0f + t * 90.0f;
+            sf::CircleShape ring(ringR);
+            ring.setOrigin({ringR, ringR});
+            ring.setPosition(flashPos);
+            ring.setFillColor(sf::Color::Transparent);
+            ring.setOutlineThickness(2.5f);
+            ring.setOutlineColor(sf::Color(255, 160, 60,
+                                           static_cast<uint8_t>(flashAlpha * 180)));
+            window_.draw(ring);
+        }
+
+        // Particle cloud
+        for (const auto& p : particles) {
+            if (p.size < 0.5f) continue;
+            sf::CircleShape dot(p.size);
+            dot.setOrigin({p.size, p.size});
+            dot.setPosition({p.sx, p.sy});
+
+            if (p.isFallback) {
+                // Gas stream: blue-white
+                dot.setFillColor(sf::Color(140, 195, 255,
+                                           static_cast<uint8_t>(p.lifeF * 195)));
+            } else {
+                // Debris: orange → yellow fade as it cools
+                uint8_t g = static_cast<uint8_t>(80 + p.lifeF * 120);
+                dot.setFillColor(sf::Color(255, g, 30,
+                                           static_cast<uint8_t>(p.lifeF * 215)));
+            }
+            window_.draw(dot);
+        }
+
+        // Notification label near the disruption point
+        if (showLabel) {
+            sf::Text lbl(font_, "TIDAL DISRUPTION EVENT", 13);
+            lbl.setFillColor(sf::Color(255, 140, 40, 220));
+            lbl.setPosition({flashPos.x - 110.0f, flashPos.y + 32.0f});
+            window_.draw(lbl);
+        }
     }
 
     /*--------- Reset view after window resize ---------*/

@@ -40,6 +40,7 @@ protected:
     void onUpdate() override;
     void onKeyPressed(sf::Keyboard::Key code) override;
     void onKeyReleased(sf::Keyboard::Key code) override;
+    void onTextEntered(char32_t unicode) override;
     void onMouseMoved(float x, float y) override;
     void onMousePressed(sf::Mouse::Button button, float x, float y) override;
     void onMouseWheelScrolled(float delta, float x, float y) override;

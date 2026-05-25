@@ -72,9 +72,9 @@ struct Framebuffer {
     }
 
     void resize(int w, int h, bool hdr = true) {
-        if (w == width && h == height) return;
+        if (w == width && h == height) return; // nothing changed, go home
         destroy();
-        create(w, h, hdr);
+        create(w, h, hdr); // nuke it and rebuild. very elegant. very professional.
     }
     /*-------- destruction function that deletes GL resources and resets members --------*/
     void destroy() {
