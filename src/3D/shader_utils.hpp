@@ -18,3 +18,4 @@ GLuint compileShader(GLenum type, const char* src);
 
 // Compile a shader from a file path; returns 0 on failure
 GLuint compileShaderFromFile(GLenum type, const char* path);
+

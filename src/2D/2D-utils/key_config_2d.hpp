@@ -1,6 +1,6 @@
 #pragma once
 // ─────────────────────────────────────────────────────────────────────────────
-// key_config_2d.hpp  —  configurable keybind mapping for the 2D simulation.
+// key_config_2d.hpp ,  configurable keybind mapping for the 2D simulation.
 //
 // Canonical key name format (same as the 3D .cfg format):
 //   Single chars uppercase: A–Z, 0–9, [  ]  ,  .  /  =  -  ;  '  `  \
@@ -123,6 +123,11 @@ struct KeyConfig2D {
     sf::Keyboard::Key testPulsar         = sf::Keyboard::Key::Num5;
     // ── Merger menu ─────────────────────────────────────────────────────────
     sf::Keyboard::Key mergerMenu         = sf::Keyboard::Key::Num6;
+    sf::Keyboard::Key customBodyMenu     = sf::Keyboard::Key::Num7;
+    sf::Keyboard::Key cycleMergerSpeed   = sf::Keyboard::Key::M;
+    sf::Keyboard::Key resetView          = sf::Keyboard::Key::V;
+    sf::Keyboard::Key toggleLightMode    = sf::Keyboard::Key::B;
+    sf::Keyboard::Key learnMore          = sf::Keyboard::Key::L;
 };
 
 // ── Load from .cfg file ──────────────────────────────────────────────────────
@@ -191,6 +196,11 @@ inline KeyConfig2D loadKeyConfig2D(const std::string &path)
         else if (action == "test_tidal")      cfg.testTidal      = k;
         else if (action == "test_pulsar")     cfg.testPulsar     = k;
         else if (action == "merger_menu")      cfg.mergerMenu     = k;
+        else if (action == "custom_body_menu") cfg.customBodyMenu = k;
+        else if (action == "cycle_merger_speed") cfg.cycleMergerSpeed = k;
+        else if (action == "reset_view")      cfg.resetView      = k;
+        else if (action == "toggle_light_mode") cfg.toggleLightMode = k;
+        else if (action == "learn_more")      cfg.learnMore      = k;
     }
     return cfg;
 }

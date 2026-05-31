@@ -139,7 +139,7 @@ WELCOME
 
 # Conclusion screen (shown after successful install)
 if [[ "${APP_SIGN_IDENTITY}" == "-" ]]; then
-    _LAUNCH_NOTE='<p><em>First-launch note:</em> this build is ad-hoc signed and not notarized. macOS may show a security prompt — open <strong>System Settings \u2192 Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> to proceed.</p>'
+    _LAUNCH_NOTE='<p><em>First-launch note:</em> this build is ad-hoc signed and not notarized. macOS may show a security prompt, open <strong>System Settings \u2192 Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> to proceed.</p>'
 else
     _LAUNCH_NOTE='<p><em>First-launch note:</em> if this build has not been notarized with Apple, macOS Gatekeeper may still show a security prompt. Open <strong>System Settings \u2192 Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> to proceed.</p>'
 fi
@@ -167,7 +167,7 @@ cat > "${RESOURCES_DIR}/conclusion.html" <<CONCLUSION
 </html>
 CONCLUSION
 
-# License — use project LICENSE file if present, otherwise fall back to inline MIT
+# License: use project LICENSE file if present, otherwise fall back to inline MIT
 if [[ -f "${SCRIPT_DIR}/LICENSE" ]]; then
     cp "${SCRIPT_DIR}/LICENSE" "${RESOURCES_DIR}/LICENSE.txt"
 else
@@ -189,7 +189,7 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 LICENSE
 fi
 
-# Distribution XML — defines UI pages, OS requirement, and package reference
+# Distribution XML: defines UI pages, OS requirement, and package reference
 cat > "${WORK_DIR}/distribution.xml" <<DIST_XML
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">

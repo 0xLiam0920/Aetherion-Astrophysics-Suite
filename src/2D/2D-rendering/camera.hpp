@@ -1,7 +1,7 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 
-// Camera / coordinate transform — handles zoom, pan, screen mapping.
+// Camera / coordinate transform, handles zoom, pan, screen mapping.
 // Uses view dimensions (logical coordinates) rather than raw window pixels
 // so rendering works correctly at any window size or fullscreen resolution.
 struct Camera {

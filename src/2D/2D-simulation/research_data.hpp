@@ -1,76 +1,6 @@
-/*
-TODO: DWARF GALAXY & generic body SIMULATION
-=====================================================
-
-PHASE 1: CORE PHYSICS VALIDATION
---------------------------------
-- Implement custom FITS unit parsing for 'rg', 'M' in astropy (for export compatibility)
-- Export simulation parameters to PRIMARY HDU: M_BH, c_s, r_Bondi/rg, beta
-- Add geodesic convergence tests (ISCO radius, frame-dragging angles)
-- Compute/export ENERGY_DRIFT per timestep for all integrators
-
-PHASE 2: DYNAMICAL DIAGNOSTICS  
------------------------------
-- Track stream morphology: WIDTH(rg), LENGTH(rg), DENSITY profile
-- Loss-cone statistics: THETA_LC, FEED_RATE(stars/s), J_SCATTER
-- Angular momentum histogram: J_MIN, J_ISCO per particle
-- Precession module: PERIAPSIS_PHI evolution (fix empty table)
-
-PHASE 3: ACCRETION & OBSERVABLES
--------------------------------
-- Bondi-Hoyle accretion: MDOT_BONDI(t), MDOT_HOLE(t/M) 
-- Gas dynamics grid: RHO_GAS(r,phi), VRAD(r), CS_PROFILE(r)
-- Bolometric light curve: L_BOL(t), peak time/flux
-- Spectral energy distribution mockup (SED)
-
-PHASE 4: NUMERICAL CONVERGENCE  
------------------------------
-- Adaptive timestep convergence: DT_MIN history, CFL_NUMBER
-- Spatial resolution sweep: N_PARTICLES=1e3→1e5
-- Integrator comparison: RK4 vs GEOKON vs BULIRSCH-STOER  
-- Particle noise analysis: shot noise vs dynamical friction
-
-PHASE 5: PUBLICATION EXPORTS
----------------------------
-- Full FITS suite with WCS headers (astropy-compliant)
-- HDF5 particle dump for community codes (GADGET/AREPO)
-- LaTeX table generator for paper (parameters, convergence)
-- JWST/ELT mock images of stream (surface brightness)
-
-SIMULATION BOUNDS (Sgr A* baseline):
-- M_BH = 4e6 Msun → rg = 1.2e10 cm
-- r_Bondi ≈ 1e4 rg (c_s=10 km/s)
-- r_SOI ≈ 1e6 rg (3 pc)
-- t_final = 10^5 M (~1 day)
-
-Maybe a bug if it still exists: ENERGY_DRIFT < 1e-10, J_CONSERVATION < 1e-12
-
-
-              _-o#&&*''''?d:>b\_
-          _o/"`''  '',, dMF9MMMMMHo_
-       .o&#'        `"MbHMMMMMMMMMMMHo.
-     .o"" '         vodM*$&&HMMMMMMMMMM?.
-    ,'              $M&ood,~'`(&##MMMMMMH\
-   /               ,MMMMMMM#b?#bobMMMMHMMML
-  &              ?MMMMMMMMMMMMMMMMM7MMM$R*Hk
- ?$.            :MMMMMMMMMMMMMMMMMMM/HMMM|`*L
-|               |MMMMMMMMMMMMMMMMMMMMbMH'   T,
-$H#:            `*MMMMMMMMMMMMMMMMMMMMb#}'  `?
-]MMH#             ""*""""*#MMMMMMMMMMMM'     -
-MMMMMb_                   |MMMMMMMMMMMP'     :
-HMMMMMMMHo                 `MMMMMMMMMT       .
-?MMMMMMMMP                  9MMMMMMMM}       -
--?MMMMMMM                  |MMMMMMMMM?,d-    '
- :|MMMMMM-                 `MMMMMMMT .M|.   :
-  .9MMM[                    &MMMMM*' `'    .
-   :9MMk                    `MMM#"        -
-     &M}                     `          .-
-      `&.                             .
-        `~,   .                     ./
-            . _                  .-
-              '`--._,dd###pp=""'
-
-*/
+// Dwarf-galaxy / generic-body research-data roadmap moved to
+//   docs/2d-research-roadmap.md
+// Deferred to beta 3+; not in scope for the 2D beta-2 milestone.
 
 /*---------- Header files ---------*/
 #pragma once
@@ -86,6 +16,19 @@ HMMMMMMMHo                 `MMMMMMMMMT       .
 #define M_PI 3.14159265358979323846 // Yes, this is a nitpick. We need 20 or so significant figures since precession and photon angles can be extremely small. something something radians as well
 #endif
 
+/*--------- Research scenario types ---------*/
+// Defined here (rather than in simulation.hpp) so OrbitingBody can tag itself
+// with the scenario that created it, enabling additive/toggle behaviour for
+// test scenarios without wiping the rest of the scene.
+enum class ResearchScenario {
+    None,
+    ISCOTest,          // Particles at 5M, 6M, 7M
+    PhotonSphereTest,  // Photon near critical b
+    RadialInfall,      // Particle dropped from rest
+    TidalDisruption,   // Body in tidal zone
+    PulsarOrbital      // Neutron star inspiraling via GW emission
+};
+
 /*--------- Precession tracking for orbiting bodies ---------*/
 struct PrecessionTracker {
     std::vector<double> periapsisAngles;
@@ -97,7 +40,7 @@ struct PrecessionTracker {
 
     // periapsis detection via local minimum of r over a 3-sample window.
     // This is robust to inspiraling orbits where vr never flips sign positive
-    // (GW decay, drag, capture trajectories) — the original vr-sign-flip
+    // (GW decay, drag, capture trajectories), the original vr-sign-flip
     // detector silently produced zero entries for those cases.
     // We register the periapsis at the *middle* sample's phi.
     void detectPeriapsis(double r, double /*vr*/, double phi) {
@@ -161,7 +104,7 @@ struct ConservationTracker {
     static constexpr size_t MAX_HISTORY = 2000;
     int sampleCounter = 0;
 
-    // NOTE: E_initial is set at orbit init, not at first step — so any numerical transient
+    // NOTE: E_initial is set at orbit init, not at first step, so any numerical transient
     // at the very first step counts against drift. this is intentional: we want to catch
     // initialization errors too, not just integration drift.
     void init(double E0) {
@@ -184,7 +127,7 @@ struct ConservationTracker {
         sampleCounter++;
         if (sampleCounter % 50 == 0) {
             driftHistory.emplace_back(properTime, drift);
-            if (driftHistory.size() > MAX_HISTORY)      // [FIXED 2026-04-24: was erase(begin()), O(n) on vector — now pop_front() on deque, O(1)]
+            if (driftHistory.size() > MAX_HISTORY)      // [FIXED 2026-04-24: was erase(begin()), O(n) on vector, now pop_front() on deque, O(1)]
                 driftHistory.pop_front();
         }
     }
@@ -252,7 +195,7 @@ struct NumericalErrorTracker {
 //     η = 1 - sqrt(8/9) ≈ 0.0572
 //     L_bol = η Ṁ c²                                    [W]
 //
-// This is a strictly post-processing diagnostic — none of the gas is actually
+// This is a strictly post-processing diagnostic, none of the gas is actually
 // simulated, we just feed M_BH, c_s, and the selected body's orbital v through
 // the analytic formula at every update and record the time series. It still
 // gives a research-grade observable curve once the orbit has had time to evolve
@@ -277,7 +220,7 @@ struct BondiAccretionTracker {
     std::deque<BondiAccretionEntry> history;
     int sampleCounter = 0;
 
-    // Last evaluated values — exposed for the data panel.
+    // Last evaluated values, exposed for the data panel.
     double last_mdotBondi_kgs    = 0.0;
     double last_mdotBHL_kgs      = 0.0;
     double last_Lbol_W           = 0.0;
@@ -298,7 +241,7 @@ struct BondiAccretionTracker {
         const double cs   = cs_over_c * C_SI;
         const double v    = v_over_c  * C_SI;
 
-        // 4π λ G² M² ρ∞ — common prefactor. Pulling this out of the 1/denom
+        // 4π λ G² M² ρ∞, common prefactor. Pulling this out of the 1/denom
         // form keeps the two rates differing only in the denominator, which
         // is what we want for a clean BHL-vs-Bondi comparison.
         const double prefactor = 4.0 * M_PI * LAMBDA_ADIABATIC
@@ -310,7 +253,7 @@ struct BondiAccretionTracker {
         const double denom    = std::pow(v * v + cs * cs, 1.5);
         const double mdotBHL  = (denom > 0.0) ? prefactor / denom : 0.0;
 
-        // L_bol = η Ṁ c² — Schwarzschild ISCO efficiency.
+        // L_bol = η Ṁ c², Schwarzschild ISCO efficiency.
         const double L_bol_W  = ETA_SCHWARZSCHILD * mdotBHL * C_SI * C_SI;
 
         last_mdotBondi_kgs   = mdotBondi;
@@ -349,7 +292,7 @@ struct BondiAccretionTracker {
 // Outside r_B the flow asymptotes to the unperturbed ISM (ρ_∞, c_s∞, v≈0).
 //
 // snapshot() fills the arrays from current simulation state. The struct holds
-// no time history — it's a one-shot picture rebuilt on each export.
+// no time history, it's a one-shot picture rebuilt on each export.
 struct GasRadialProfile {
     static constexpr int    N_SAMPLES = 96;
     static constexpr double R_MIN_M   = 2.0;        // inside ISCO (in M units)
@@ -424,7 +367,7 @@ struct GasRadialProfile {
 // Each annulus radiates as a blackbody at T(r); total ν L_ν is the
 // integral of 4π² r B_ν(T(r)) dr from r_in (ISCO = 6M) to r_out.
 //
-// This is a snapshot — recomputed when exported. A toy SED in W per ν.
+// This is a snapshot, recomputed when exported. A toy SED in W per ν.
 struct SEDSnapshot {
     static constexpr int    N_FREQ      = 200;
     static constexpr double NU_MIN_HZ   = 1.0e10;     // 10 GHz (radio)
@@ -522,6 +465,26 @@ struct PhotonDeflection {
     double deflectionAngle = 0.0;
     double deflectionDeg   = 0.0;
     bool   captured = false;
+    // Shapiro time-delay excess and total coordinate time along the path,
+    // both in geometric units (M). Populated by buildLensingData() from the
+    // matching Photon entry; left at 0 for captured rays.
+    double shapiroDelay_M  = 0.0;
+    double coordTime_M     = 0.0;
+};
+
+/*--------- Einstein ring / image-multiplicity finder ---------*/
+// One detected image: the impact parameter at which a photon's total
+// deflection crosses Δ = (2n−1)·π (so it returns to the source line on
+// the opposite side of the lens, producing an Einstein ring at n=1 and
+// successively higher-order relativistic rings at n=2,3,…). Computed by
+// linear interpolation between adjacent ray samples in the deflection
+// table, so accuracy is bounded by ray spacing — switch to high-res
+// lensing mode (H) for sharp results near b_crit.
+struct EinsteinRingImage {
+    int    order = 0;              // n = 1 (primary), 2 (1st relativistic), …
+    double impactParameter = 0.0;  // b at which Δ = (2n−1)π (geometric units, M)
+    double deflectionDeg   = 0.0;  // matched Δ in degrees, for display
+    int    sign = +1;              // +1 = above lens (b > 0), −1 = below (b < 0)
 };
 
 /*--------- Lensing analysis ---------*/
@@ -529,6 +492,17 @@ struct LensingData {
     double criticalImpactParam = 0.0;
     std::vector<PhotonDeflection> deflectionTable;
     std::vector<std::pair<float, float>> causticPoints;
+    std::vector<EinsteinRingImage> einsteinRings;
+    // Spectrum histogram of observed (redshifted) wavelengths from emitter
+    // photons that escape to infinity. 24 bins spanning 300–900 nm covers
+    // near-UV through near-IR (the visible band is ~380–780). Filled by the
+    // simulation's hot-spot / disk-emitter update routines so the data panel
+    // and the in-canvas spectrum bar can render it.
+    static constexpr int    SPECTRUM_BINS    = 24;
+    static constexpr double SPECTRUM_MIN_NM  = 300.0;
+    static constexpr double SPECTRUM_MAX_NM  = 900.0;
+    std::array<int, SPECTRUM_BINS> spectrumCounts {};
+    int    spectrumTotal = 0;
 };
 
 /*--------- Photon sphere test ---------*/
@@ -541,6 +515,13 @@ struct PhotonSphereTestResult {
     // NOTE: for b exactly at b_crit, the theoretical stabilityAngle is infinite (photon orbits forever).
     // in practice we always get a finite number because floating point isn't exact and the
     // unstable orbit eventually tips one way or the other. the nearer to b_crit, the bigger the number.
+
+    // Extra diagnostics surfaced in the data-analysis panel (May 2026).
+    double rMin_M           = 0.0;   // closest approach radius (units of M)
+    double deflectionDeg    = 0.0;   // total deflection in degrees (signed)
+    double shapiroDelay_M   = 0.0;   // Shapiro excess time (units of M)
+    double coordTime_M      = 0.0;   // total coordinate time along path (units of M)
+    double epsilon          = 0.0;   // (b − b_crit)/b_crit for this sample
 };
 
 /*--------- ISCO test ---------*/
@@ -550,8 +531,8 @@ struct ISCOTestResult {
     double radiusDrift = 0.0;       // how much r has drifted from starting radius (in units of M)
     bool   captured = false;
     double survivalTime = 0.0;
-    // if radiusDrift is growing monotonically — the orbit is unstable, as expected.
-    // if it oscillates around zero — stable orbit, just normal orbital motion.
+    // if radiusDrift is growing monotonically, the orbit is unstable, as expected.
+    // if it oscillates around zero, stable orbit, just normal orbital motion.
     // in practice even the "stable" 7M orbit shows a tiny secular drift due to RK4 not being
     // a symplectic integrator. it's small enough that it doesn't matter for demo purposes, but
     // if you run it for long enough it will eventually drift. this is a known RK4 limitation.

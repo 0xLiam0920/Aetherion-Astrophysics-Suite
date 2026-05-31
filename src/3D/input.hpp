@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// input.hpp — Input state abstraction
+// input.hpp: Input state abstraction
 // ============================================================
 
 #include <SFML/Window/Keyboard.hpp>

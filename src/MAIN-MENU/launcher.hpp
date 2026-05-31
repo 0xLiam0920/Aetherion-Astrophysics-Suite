@@ -96,7 +96,7 @@ inline bool launchSimulator(const std::string& execName,
         return false;
     }
     if (pid == 0) {
-        // Child process — exec the simulator
+        // Child process, exec the simulator
         if (args.empty()) {
             execl(path.string().c_str(), execName.c_str(), (char*)nullptr);
         } else {
@@ -108,7 +108,7 @@ inline bool launchSimulator(const std::string& execName,
         _exit(127);
     }
 
-    // Parent — track the child PID
+    // Parent, track the child PID
     launchedPids().push_back(pid);
     return true;
 #endif

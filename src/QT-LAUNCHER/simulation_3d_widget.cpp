@@ -1,5 +1,5 @@
 // ============================================================
-// simulation_3d_widget.cpp — Qt-embedded 3D black-hole widget.
+// simulation_3d_widget.cpp: Qt-embedded 3D black-hole widget.
 // ============================================================
 // Thin glue around the shared core (src/3D/bh3d_core.hpp). The
 // QSFMLCanvas owns the GL context / event source; everything
@@ -239,7 +239,7 @@ void Simulation3DWidget::keyPressEvent(QKeyEvent* ev)
 {
     if (imguiReady_) imgui_qt::feedKeyPress(ev);
     // Forward to simulation only when ImGui is not consuming keyboard input.
-    // (WantCaptureKeyboard reflects the previous frame — standard ImGui practice.)
+    // (WantCaptureKeyboard reflects the previous frame, standard ImGui practice.)
     if (!imguiReady_ || !ImGui::GetIO().WantCaptureKeyboard)
         QSFMLCanvas::keyPressEvent(ev);
 }
@@ -254,7 +254,7 @@ void Simulation3DWidget::keyReleaseEvent(QKeyEvent* ev)
 void Simulation3DWidget::mouseMoveEvent(QMouseEvent* ev)
 {
     if (imguiReady_) imgui_qt::feedMouseMove(ev);
-    // Always forward mouse moves — camera look uses drag (right-button held),
+    // Always forward mouse moves, camera look uses drag (right-button held),
     // and WantCaptureMouse only covers ImGui windows.
     if (!imguiReady_ || !ImGui::GetIO().WantCaptureMouse)
         QSFMLCanvas::mouseMoveEvent(ev);

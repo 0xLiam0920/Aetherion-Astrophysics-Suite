@@ -100,7 +100,7 @@ void QSFMLCanvas::paintEvent(QPaintEvent *event)
     Q_UNUSED(event);
 
     if (isInitialized) {
-        // Reclaim the OpenGL context — Qt may have activated another context
+        // Reclaim the OpenGL context, Qt may have activated another context
         // (e.g. for QChartView) since the last frame, which corrupts the SFML
         // vertex state and causes paths to render as straight lines.
         (void)sf::RenderWindow::setActive(true);
@@ -110,7 +110,7 @@ void QSFMLCanvas::paintEvent(QPaintEvent *event)
         // that use their own GL contexts don't inherit our state.
         (void)sf::RenderWindow::setActive(false);
     }
-    // Rendering is driven by renderTimer_ — no update() call here.
+    // Rendering is driven by renderTimer_, no update() call here.
 }
 
 void QSFMLCanvas::resizeEvent(QResizeEvent *event)

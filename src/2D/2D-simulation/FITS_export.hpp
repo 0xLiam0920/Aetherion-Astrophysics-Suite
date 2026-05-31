@@ -97,7 +97,7 @@ static std::string keyVal(const std::string& key, const std::string& val, const 
     return result;
 }
 
-// Overload for double values — fixed-width FITS floating-point card.
+// Overload for double values, fixed-width FITS floating-point card.
 // FITS uses ASCII E-notation, right-justified in columns 11–30.
 static std::string keyVal(const std::string& key, double val, const std::string& comment = "") {
     char buf[81] = {};

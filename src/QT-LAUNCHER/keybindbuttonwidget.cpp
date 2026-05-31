@@ -57,7 +57,7 @@ void KeyBindButton::mousePressEvent(QMouseEvent *e)
         m_capturing = true;
         setFocus(Qt::MouseFocusReason);
         updateAppearance();
-        // Don't call super — prevents the QPushButton click state machine from
+        // Don't call super, prevents the QPushButton click state machine from
         // firing clicked() on the subsequent mouse-release while we're capturing.
         return;
     }
@@ -79,7 +79,7 @@ void KeyBindButton::keyPressEvent(QKeyEvent *e)
         return;
     }
 
-    // Ignore standalone modifier keys — wait for a real key.
+    // Ignore standalone modifier keys, wait for a real key.
     if (key == Qt::Key_Control || key == Qt::Key_Shift ||
         key == Qt::Key_Alt     || key == Qt::Key_Meta) {
         return;

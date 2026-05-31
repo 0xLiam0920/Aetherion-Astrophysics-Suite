@@ -9,7 +9,7 @@
     2. Add a new entry to the Tab enum in app_state.hpp
     3. #include your header below, then append one PageDef to kPages.
 
-    That's it — the sidebar and content area are driven by this list automatically.
+    That's it, the sidebar and content area are driven by this list automatically.
 */
 #pragma once
 

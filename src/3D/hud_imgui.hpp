@@ -1,5 +1,5 @@
 // ============================================================
-// hud_imgui.hpp — ImGui-based HUD overlays for the standalone
+// hud_imgui.hpp: ImGui-based HUD overlays for the standalone
 // 3D black hole viewer.
 //
 //  Phase 1: preset selector menu.
@@ -37,7 +37,7 @@ inline void applyAetherionStyle() {
     s.ItemSpacing      = ImVec2(8, 6);
     s.ItemInnerSpacing = ImVec2(6, 4);
 
-    // Colors — match hud::col palette in hud_panel.hpp
+    // Colors, match hud::col palette in hud_panel.hpp
     auto rgba = [](float r, float g, float b, float a) { return ImVec4(r, g, b, a); };
     ImVec4* c = s.Colors;
     c[ImGuiCol_WindowBg]            = rgba(0.05f, 0.06f, 0.09f, 0.92f);
@@ -71,13 +71,13 @@ inline void applyAetherionStyle() {
 }
 
 // ────────────────────────────────────────────────────────────
-// Light variant — off-white panels, dark text, blue accents.
+// Light variant, off-white panels, dark text, blue accents.
 // Call in place of applyAetherionStyle() when light mode is on.
 // ────────────────────────────────────────────────────────────
 inline void applyAetherionStyleLight() {
     ImGuiStyle& s = ImGui::GetStyle();
 
-    // Geometry (identical to dark — keeps layout consistent)
+    // Geometry (identical to dark, keeps layout consistent)
     s.WindowRounding   = 6.0f;
     s.ChildRounding    = 6.0f;
     s.FrameRounding    = 4.0f;
@@ -141,7 +141,7 @@ inline bool drawPresetMenu(bh3d::State& s) {
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float panelW = 320.0f;
-    // Slide in from the right — at t=0 the panel sits off-screen.
+    // Slide in from the right, at t=0 the panel sits off-screen.
     const float restX  = vp->WorkPos.x + vp->WorkSize.x - panelW - 16.0f;
     const float offX   = (1.0f - eased) * (panelW + 24.0f);
     const ImVec2 pos   = ImVec2(restX + offX, vp->WorkPos.y + vp->WorkSize.y * 0.5f);
@@ -303,7 +303,7 @@ inline void drawStatusPanel(const bh3d::State& s) {
         const float rollDeg = snap.roll * (180.0f / 3.14159265f);
 
         sectionHeader("Profile");
-        kvRow("Profile", snap.profileName.c_str(), textPrim());
+        kvRow("Profile", snap.profileName.c_str(), accent());
         ImGui::Separator();
 
         sectionHeader("Camera");
@@ -322,6 +322,9 @@ inline void drawStatusPanel(const bh3d::State& s) {
         onOffRow("Host Galaxy", snap.hostGalaxyEnabled);
         onOffRow("LAB",         snap.labEnabled);
         onOffRow("CGM",         snap.cgmEnabled);
+        onOffRow("RK4 Orbits",  s.physOverlay.orbitsEnabled);
+        onOffRow("Photons",     s.physOverlay.photonsEnabled);
+        onOffRow("Spacetime",   s.physOverlay.spacetimeEnabled);
         if (snap.animSpeed >= 1.0f) std::snprintf(buf, sizeof(buf), "%dx", int(snap.animSpeed + 0.5f));
         else                        std::snprintf(buf, sizeof(buf), "%.2fx", snap.animSpeed);
         kvRow("Anim Speed", buf, textPrim());
@@ -443,33 +446,64 @@ inline void drawOverlaysPanel(bh3d::State& s) {
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float panelW = 260.0f;
-    const float estH   = 180.0f;
+    // Cap height so the panel scrolls instead of overflowing the viewport on
+    // shorter windows. ~58% of viewport, hard-clamped to a sane range.
+    const float maxH   = std::max(180.0f, std::min(vp->WorkSize.y * 0.58f, 420.0f));
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 12.0f,
-                                   vp->WorkPos.y + vp->WorkSize.y - estH - 60.0f),
+                                   vp->WorkPos.y + vp->WorkSize.y - maxH - 60.0f),
                             ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, maxH), ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.88f);
 
     const ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoFocusOnAppearing |
-        ImGuiWindowFlags_AlwaysAutoResize;
+        ImGuiWindowFlags_NoFocusOnAppearing;
 
     if (ImGui::Begin("Overlays", nullptr, flags)) {
         const float btnW = ImGui::GetContentRegionAvail().x;
 
-        // Active: Label View
-        if (ImGui::Selectable(s.overlays.labelView ? "Label View   [ON]" : "Label View   [OFF]",
-                              s.overlays.labelView, 0, ImVec2(btnW, 24))) {
+        // Helper: a Selectable that paints itself green when active so the
+        // audience can see at a glance which layers are live.
+        auto toggleRow = [&](const char* labelOn, const char* labelOff,
+                             bool active, ImVec2 sz) -> bool {
+            const ImVec4 onCol(0.55f, 0.95f, 0.65f, 1.0f);
+            if (active) ImGui::PushStyleColor(ImGuiCol_Text, onCol);
+            bool clicked = ImGui::Selectable(active ? labelOn : labelOff,
+                                             active, 0, sz);
+            if (active) ImGui::PopStyleColor();
+            return clicked;
+        };
+
+        ImGui::SeparatorText("Visuals");
+        if (toggleRow("Label View   [ON]", "Label View   [OFF]",
+                      s.overlays.labelView, ImVec2(btnW, 24))) {
             s.overlays.labelView = !s.overlays.labelView;
         }
 
+        ImGui::SeparatorText("Physics");
+        if (toggleRow("RK4 GR Orbits   [ON]", "RK4 GR Orbits   [OFF]",
+                      s.physOverlay.orbitsEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.orbitsEnabled = !s.physOverlay.orbitsEnabled;
+            s.physOverlay.markDirty();
+        }
+        if (toggleRow("Photon Geodesics  [ON]", "Photon Geodesics  [OFF]",
+                      s.physOverlay.photonsEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.photonsEnabled = !s.physOverlay.photonsEnabled;
+            s.physOverlay.markDirty();
+        }
+        if (toggleRow("Spacetime Curvature  [ON]", "Spacetime Curvature  [OFF]",
+                      s.physOverlay.spacetimeEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.spacetimeEnabled = !s.physOverlay.spacetimeEnabled;
+            s.physOverlay.markDirty();
+        }
+
+        ImGui::SeparatorText("Experimental");
         // Stubbed togglables (kept disabled to match legacy parity)
         ImGui::BeginDisabled();
         bool dummy;
         dummy = s.overlays.spacetimeViz;
-        ImGui::Selectable("Spacetime Visualization (TBD)", dummy, 0, ImVec2(btnW, 24));
+        ImGui::Selectable("Legacy Spacetime Stub (TBD)", dummy, 0, ImVec2(btnW, 24));
         dummy = s.overlays.gravRedshift;
         ImGui::Selectable("Gravitational Redshift (TBD)", dummy, 0, ImVec2(btnW, 24));
         dummy = s.overlays.kerrShadowGuide;
@@ -478,8 +512,58 @@ inline void drawOverlaysPanel(bh3d::State& s) {
 
         ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
-        ImGui::TextUnformatted("Click to toggle.");
+        ImGui::TextUnformatted("Click to toggle.  Green = active.");
         ImGui::PopStyleColor();
+    }
+    ImGui::End();
+}
+
+// ────────────────────────────────────────────────────────────
+// Floating legend for the RK4/photon overlays. Anchored bottom-right.
+// Auto-shows whenever either overlay is enabled.
+// ────────────────────────────────────────────────────────────
+inline void drawPhysOverlayLegend(bh3d::State& s) {
+    if (!s.physOverlay.orbitsEnabled && !s.physOverlay.photonsEnabled &&
+        !s.physOverlay.spacetimeEnabled) return;
+
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - 16.0f,
+                                   vp->WorkPos.y + vp->WorkSize.y - 16.0f),
+                            ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.80f);
+
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar;
+
+    if (ImGui::Begin("##PhysLegend", nullptr, flags)) {
+        auto swatch = [](ImVec4 c) {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            float sz = ImGui::GetTextLineHeight();
+            dl->AddRectFilled(p, ImVec2(p.x + sz, p.y + sz),
+                              ImGui::ColorConvertFloat4ToU32(c));
+            ImGui::Dummy(ImVec2(sz, sz));
+            ImGui::SameLine();
+        };
+        if (s.physOverlay.photonsEnabled) {
+            swatch(ImVec4(0.45f, 0.85f, 1.0f, 1.0f));
+            ImGui::TextUnformatted("Photon escape (b > b_crit)");
+            swatch(ImVec4(1.0f, 0.35f, 0.20f, 1.0f));
+            ImGui::TextUnformatted("Photon capture (b < b_crit)");
+        }
+        if (s.physOverlay.orbitsEnabled) {
+            swatch(ImVec4(0.75f, 0.85f, 1.0f, 1.0f));
+            ImGui::TextUnformatted("RK4 GR orbit (rosette precession)");
+        }
+        if (s.physOverlay.spacetimeEnabled) {
+            swatch(ImVec4(0.65f, 0.80f, 1.0f, 1.0f));
+            ImGui::TextUnformatted("Spacetime curvature (Flamm)");
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("K = orbits   L = photons   T = spacetime");
     }
     ImGui::End();
 }
@@ -489,6 +573,7 @@ inline void drawOverlaysPanel(bh3d::State& s) {
 // Call between ImGui::SFML::Update and ImGui::SFML::Render.
 // ────────────────────────────────────────────────────────────
 inline void drawAll(bh3d::State& s) {
+    drawPhysOverlayLegend(s);
     if (s.showHUD) {
         drawStatusPanel(s);
         drawControlsHint();

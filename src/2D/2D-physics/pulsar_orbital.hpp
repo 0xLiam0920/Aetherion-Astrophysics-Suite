@@ -1,12 +1,12 @@
 #pragma once
 /*
- * pulsar_orbital.hpp — Physics model for a neutron star (pulsar) orbiting a
+ * pulsar_orbital.hpp, Physics model for a neutron star (pulsar) orbiting a
  * Schwarzschild black hole.
  *
  * The geodesic integration is delegated to the existing OrbitingBody / RK4 pipeline.
  * This file adds:
- *   1. PulsarState       — NS intrinsic properties + adiabatic GW-decay bookkeeping.
- *   2. PulsarOrbitalData — Four observable categories with rolling history deques.
+ *   1. PulsarState      , NS intrinsic properties + adiabatic GW-decay bookkeeping.
+ *   2. PulsarOrbitalData, Four observable categories with rolling history deques.
  *   3. Inline physics functions for GW emission (Peters 1964), Shapiro delay,
  *      gravitational redshift, Roche limit, NS binding energy.
  *
@@ -39,7 +39,7 @@
 struct PulsarState {
     double massSolar  = 1.4;        // NS mass (solar masses)
     double massGeom   = 0.0;        // NS mass (geometric metres); computed by init()
-    double radiusM    = 1.0e4;      // NS physical radius (m) — ~10 km
+    double radiusM    = 1.0e4;      // NS physical radius (m), ~10 km
     double spinPeriod = 0.033;      // Rotation period (seconds), Crab pulsar-like
     double magField   = 1.0e12;     // Surface dipole B-field (Gauss)
 
@@ -55,7 +55,7 @@ struct PulsarState {
 
     bool active = false;
 
-    // GW inspiral time-scale multiplier (visual only — da/dt, de/dt are real physics
+    // GW inspiral time-scale multiplier (visual only, da/dt, de/dt are real physics
     // multiplied by this before applying to the orbit).
     static constexpr double GW_VIS_SCALE  = 1.0e4;
     // Unipolar inductor orbital coupling amplifier (for data panel display).

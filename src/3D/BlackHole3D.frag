@@ -42,7 +42,7 @@ uniform int   maxStepsOverride;  // Runtime step limit [ADDED 2026-05-25: was pr
 // ============================================================================
 // NOISE UTILITIES
 // ============================================================================
-// Value hash — maps a vec3 lattice point to a pseudo-random float [0,1].
+// Value hash, maps a vec3 lattice point to a pseudo-random float [0,1].
 // Classic permutation-free hash from Dave Hoskins.
 float hash31(vec3 p) {
     p = fract(p * vec3(443.897, 441.423, 437.195));
@@ -54,7 +54,7 @@ float hash11(float p) {
     return fract(sin(p * 127.1) * 43758.5453);
 }
 
-// Smooth 3-D value noise — trilinear interpolation of random lattice values.
+// Smooth 3-D value noise, trilinear interpolation of random lattice values.
 float valueNoise3(vec3 p) {
     vec3 i = floor(p);
     vec3 f = fract(p);
@@ -75,7 +75,7 @@ float valueNoise3(vec3 p) {
         u.z);
 }
 
-// Fractional Brownian Motion — 4 octaves of value noise.
+// Fractional Brownian Motion, 4 octaves of value noise.
 // Gives the clumpy, self-similar structure of turbulent astrophysical gas.
 float fbm(vec3 p) {
     float v = 0.0;
@@ -172,7 +172,7 @@ vec4 sampleDiskRGBA(vec3 pos, vec3 bhPos) {
     // Shape: bright knots (turb > 0.55) pop out against a dimmer average disk.
     // The 2x factor keeps average brightness neutral; clamp prevents blow-out.
     float knotBright = clamp(turb * 2.0 - 0.5, 0.5, 2.5);
-    // Knots are hotter — bias color toward blue-white at peak intensity
+    // Knots are hotter, bias color toward blue-white at peak intensity
     vec3 knotTint = mix(vec3(1.0, 0.85, 0.6), vec3(1.1, 1.05, 1.3),
                         smoothstep(0.55, 1.0, turb));
     d.rgb *= knotBright * knotTint;
@@ -304,7 +304,7 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
     if (ay > effectiveLength) return vec3(0.0);
 
     // ── Episodic accretion bursts ─────────────────────────────────────────
-    // Accretion onto a SMBH like TON 618 is wildly variable — the disk is
+    // Accretion onto a SMBH like TON 618 is wildly variable, the disk is
     // magnetically unstable and dumps clumps of material onto the jet base
     // on timescales of minutes to hours (compressed here for visibility).
     // Model as a smooth low-frequency noise (≈0.07 Hz) so the whole jet
@@ -317,7 +317,7 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
     // Shear between the jet and surrounding gas drives KHI, which manifests
     // as a slow helical/sinusoidal oscillation of the jet spine.
     // Amplitude grows with distance from the BH (jets widen and destabilise).
-    // KHI helical wobble — amplitude 40% of jet radius, grows toward tip
+    // KHI helical wobble, amplitude 40% of jet radius, grows toward tip
     float wobbleAmp   = 0.40 * jetRadius * (ay / jetLength);
     float wobbleFreq  = 4.0 / max(jetLength, EPSILON);
     float wobbleSpeed = 0.35;
@@ -437,13 +437,13 @@ void traceBentRay(
             }
         }
 
-        // Jet emission — gated by showJets toggle.
+        // Jet emission, gated by showJets toggle.
         // Pass the original ray direction (rd) for Doppler beaming calculations;
         // the bent 'dir' at this sample point would give incorrect beaming angles.
         if (showJets != 0)
             outJet += jetEmission(pos, bhPos, rd) * stepLen;
 
-        // BLR cloud field — discrete gas blobs orbiting at high speed.
+        // BLR cloud field, discrete gas blobs orbiting at high speed.
         // Controlled by blrStrength [0,1]: TON 618 densest, non-AGN zero.
         if (showBLR != 0 && blrStrength > 0.0) {
             float blrAbsY = abs((pos - bhPos).y);
@@ -463,7 +463,7 @@ void traceBentRay(
                             + 0.50 * valueNoise3(cloudP * 2.1)
                             + 0.25 * valueNoise3(cloudP * 4.3);
                 cloud = cloud / 1.75;          // normalise to [0,1]
-                cloud = pow(cloud, 1.4);        // mild sharpening — keeps dense filling
+                cloud = pow(cloud, 1.4);        // mild sharpening, keeps dense filling
                 cloud *= radFade * vertFade * blrStrength;
 
                 // BLR line emission: Hα red core → blue-shifted CIV outer wing
@@ -531,19 +531,19 @@ void main() {
     vec3 color;
 
     // Gravitational blueshift factor for background starlight
-    // f_obs / f_∞ = 1/√(1 - Rs/r_obs) — blueshift when observer is close to BH
+    // f_obs / f_∞ = 1/√(1 - Rs/r_obs), blueshift when observer is close to BH
     // Deep in the gravitational well, distant stars appear as a warped blue halo.
     float rCamera = length(cameraPos - blackHolePos);
     float gCamera = sqrt(max(1.0 - blackHoleRadius / rCamera, 0.001));
     float bgFreqShift = (showBlueshift != 0 && gCamera < 0.98) ? (1.0 / max(gCamera, 0.02)) : 1.0;
 
-    // Scene radius for background sampling — must match what traceBentRay uses.
+    // Scene radius for background sampling, must match what traceBentRay uses.
     float sceneRadius = max(max(diskOuterRadius, jetLength) * 1.5, 140.0);
 
     if (diskHit.a > 0.001) {
         vec3 rel = (bentPos - blackHolePos);
         vec3 diskCol = applyDoppler(diskHit.rgb, rel, bentDir);
-        // Composite disk over background — scale look-ahead with scene so stars aren't sampled
+        // Composite disk over background, scale look-ahead with scene so stars aren't sampled
         // inside the disk on large configs [FIXED 2026-04-24: was hardcoded 40.0]
         vec3 bg = sampleBackground(bentPos + bentDir * max(diskOuterRadius * 0.5, 40.0), blackHolePos);
         if (bgFreqShift > 1.01) bg = applyFrequencyShift(bg, bgFreqShift);

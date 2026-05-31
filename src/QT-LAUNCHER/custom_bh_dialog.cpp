@@ -1,5 +1,5 @@
 // ============================================================
-// custom_bh_dialog.cpp — "Build a Black Hole" configuration dialog
+// custom_bh_dialog.cpp: "Build a Black Hole" configuration dialog
 // Lets users tune every meaningful parameter before launching a
 // custom simulation tab in either 2D or 3D.
 //
@@ -27,7 +27,7 @@
 #include <cmath>
 
 // ─────────────────────────────────────────────────────────────
-// Helper — because apparently Qt's spinbox constructor takes 7
+// Helper, because Qt's spinbox constructor takes 7
 // arguments and nobody wanted to type that 15 times.
 // ─────────────────────────────────────────────────────────────
 static QDoubleSpinBox *makeDSpin(double lo, double hi, double val,
@@ -331,7 +331,7 @@ void CustomBlackHoleDialog::build3DSection(QWidget *parent)
 }
 
 // ─────────────────────────────────────────────────────────────
-// Live summary — updates on every spinbox twitch because the user
+// Live summary, updates on every spinbox twitch because the user
 // apparently needs real-time reassurance that their black hole
 // exists. It does. Probably.
 // ─────────────────────────────────────────────────────────────
@@ -347,7 +347,7 @@ void CustomBlackHoleDialog::applyPreviewLabel()
         const double ro = m_diskOuter3D ? m_diskOuter3D->value() : 20.0;
         const bool jets = m_jets3D && m_jets3D->isChecked();
         const bool blr  = m_blr3D  && m_blr3D->isChecked();
-        txt = QString("3D renderer — Kerr spin a*=%1 | disk %2–%3 Rs%4%5")
+        txt = QString("3D renderer, Kerr spin a*=%1 | disk %2–%3 Rs%4%5")
                 .arg(a, 0, 'f', 3)
                 .arg(ri, 0, 'f', 1)
                 .arg(ro, 0, 'f', 1)
@@ -358,7 +358,7 @@ void CustomBlackHoleDialog::applyPreviewLabel()
         const double rs = 2.0 * M;
         const double a  = m_semiMajor2D ? m_semiMajor2D->value() : 10.0;
         const double e  = m_ecc2D ? m_ecc2D->value() : 0.3;
-        txt = QString("2D renderer — r_s = %1 m | orbit: a=%2 M, e=%3")
+        txt = QString("2D renderer, r_s = %1 m | orbit: a=%2 M, e=%3")
                 .arg(rs, 0, 'e', 3)
                 .arg(a,  0, 'f', 2)
                 .arg(e,  0, 'f', 3);
@@ -458,7 +458,7 @@ CustomBH3DConfig CustomBlackHoleDialog::to3DConfig() const
 }
 
 // ─────────────────────────────────────────────────────────────
-// Static helper — wraps content in a bold-titled box so it looks
+// Static helper, wraps content in a bold-titled box so it looks
 // like we put serious thought into the UI layout. We did. Mostly.
 // ─────────────────────────────────────────────────────────────
 QGroupBox *CustomBlackHoleDialog::makeGroup(const QString &title, QWidget *parent)

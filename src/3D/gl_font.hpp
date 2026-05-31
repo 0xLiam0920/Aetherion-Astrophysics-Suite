@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// gl_font.hpp — Pure OpenGL 3.3 Core bitmap font renderer
+// gl_font.hpp: Pure OpenGL 3.3 Core bitmap font renderer
 //
 // Uses SFML to load the font and rasterize glyphs at init time,
 // then renders entirely via our own GL objects (no SFML in the
@@ -37,7 +37,7 @@ public:
     bool initFromFont(sf::Font& font, unsigned charSize = 14) {
         charSize_ = charSize;
 
-        // Determine atlas dimensions — pack ASCII 32..126 in a grid
+        // Determine atlas dimensions, pack ASCII 32..126 in a grid
         const int glyphCount = 127 - 32; // 95 printable chars
         const int cols = 16;
         const int rows = (glyphCount + cols - 1) / cols;
@@ -279,7 +279,7 @@ public:
 
         // Use glyph for space (index 0) which should be empty
         const GlyphInfo& gi = glyphs_[0];
-        // Pick center of space glyph cell — should be transparent
+        // Pick center of space glyph cell, should be transparent
         float um = (gi.u0 + gi.u1) * 0.5f;
         float vm = (gi.v0 + gi.v1) * 0.5f;
 

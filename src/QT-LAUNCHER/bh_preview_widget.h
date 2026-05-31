@@ -141,7 +141,7 @@ private slots:
 private:
     PreviewStyle  m_style = PreviewStyle::NONE;
     QTimer       *m_timer = nullptr;
-    float         m_angle = 0.f;   // degrees — drives disc rotation and companion orbits
+    float         m_angle = 0.f;   // degrees, drives disc rotation and companion orbits
     float         m_phase = 0.f;   // generic animation phase (jets, winds, ripples)
     int           m_frame = 0;
 

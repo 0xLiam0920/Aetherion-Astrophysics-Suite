@@ -1,5 +1,5 @@
 // ============================================================
-// BlackHole3D.cpp — Main application (uses RAII wrappers, config,
+// BlackHole3D.cpp: Main application (uses RAII wrappers, config,
 //                   CameraController, PhysicsSnapshot, BloomPipeline)
 // ============================================================
 
@@ -562,7 +562,7 @@ int main(int argc, char* argv[]) {
         sf::Style::Default,
         sf::State::Windowed,
         settings);
-    window.setVerticalSyncEnabled(false);  // Disable VSync — measure true FPS
+    window.setVerticalSyncEnabled(false);  // Disable VSync, measure true FPS
     window.setKeyRepeatEnabled(false);
     if (!window.setActive(true)) {
         std::cerr << "Failed to activate OpenGL context.\n";
@@ -651,7 +651,7 @@ int main(int argc, char* argv[]) {
     if (havePhotoreal) photorealUfs = SceneUniforms::lookup(photorealProgram);
     if (haveSimple)    simpleUfs    = SceneUniforms::lookup(simpleProgram);
 
-    // Active program pointers — start cinematic (photoreal) if available
+    // Active program pointers, start cinematic (photoreal) if available
     bool cinematicMode = havePhotoreal;
     GLProgram*    activeProgram = cinematicMode ? &photorealProgram : &simpleProgram;
     SceneUniforms activeUfs     = cinematicMode ? photorealUfs      : simpleUfs;
@@ -670,11 +670,11 @@ int main(int argc, char* argv[]) {
         }
     }
     {
-        // Photoreal shader generates disk color procedurally — just needs a white placeholder
+        // Photoreal shader generates disk color procedurally, just needs a white placeholder
         photorealDiskTex = createFallbackWhiteTexture();
     }
     {
-        // Simple shader samples disk texture directly — needs a real texture
+        // Simple shader samples disk texture directly, needs a real texture
         std::string diskPath = resources.find("disk_texture.png");
         if (!diskPath.empty()) simpleDiskTex = loadTexture2D(diskPath.c_str());
         if (!simpleDiskTex) {
@@ -693,7 +693,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // (HUD uses GLBitmapFont — pure GL, no SFML RenderTexture needed)
+    // (HUD uses GLBitmapFont, pure GL, no SFML RenderTexture needed)
 
     /*--------- Controllers ---------*/
     CameraController camera(config.camera);
@@ -806,7 +806,7 @@ int main(int argc, char* argv[]) {
                         // Reinitialize orbital bodies for new profile
                         rebuildOrbBodies(orbBodies, prof, config);
                         std::cerr << "Profile: " << prof.name
-                                  << " — " << prof.description << std::endl;
+                                  << ", " << prof.description << std::endl;
                 } else if (kp->code == actionKeys.toggleRender) {
                     if (havePhotoreal && haveSimple) {
                         cinematicMode = !cinematicMode;
@@ -960,7 +960,7 @@ int main(int argc, char* argv[]) {
 
             bloom.execute(quad, cfg::cinematicBloom(), true, totalTime);
         } else {
-            // Fast mode: render directly to screen — skip all 10 HDR FBOs to
+            // Fast mode: render directly to screen, skip all 10 HDR FBOs to
             // save VRAM bandwidth (critical on iGPUs where FBO == system RAM).
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, w, h);
@@ -973,7 +973,7 @@ int main(int argc, char* argv[]) {
         }
 
         /*--------- HUD overlay (pure GL bitmap font) ---------*/
-        // Always rebind FBO 0 before the HUD (or display) — bloom.execute() saves+restores
+        // Always rebind FBO 0 before the HUD (or display), bloom.execute() saves+restores
         // prevFBO which ends up as sceneFBO, not 0. Without this, display() runs with
         // sceneFBO bound, causing a stall / blank frame on macOS Metal-backed GL.
         glBindFramebuffer(GL_FRAMEBUFFER, 0);

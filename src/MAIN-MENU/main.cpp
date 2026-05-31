@@ -8,7 +8,7 @@
     1. Create  src/MAIN-MENU/pages/my_page.hpp  with a  draw(AppState&)  function.
     2. Add an entry to the Tab enum in  app_state.hpp.
     3. #include and register it in  page_registry.hpp  (one line each).
-    Done — sidebar and content update automatically.
+    Done, sidebar and content update automatically.
 */
 
 #include "libraries.hpp"

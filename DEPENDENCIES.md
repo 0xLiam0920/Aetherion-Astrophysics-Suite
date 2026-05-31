@@ -121,7 +121,7 @@ The `bundle_app.sh` script handles copying and relinking these for macOS `.app` 
 | **Script** | `makedisktexture.py` |
 | **Requires** | Python 3 with [Pillow](https://pypi.org/project/Pillow/) (`pip install Pillow`) |
 | **Purpose** | Generates `src/disk_texture.png` (accretion disk texture) |
-| **Required?** | No — only needed if you want to regenerate the texture |
+| **Required?** | No, only needed if you want to regenerate the texture |
 
 ### Homebrew (macOS only)
 

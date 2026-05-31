@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// framebuffer.hpp — RAII framebuffer object wrapper
+// framebuffer.hpp: RAII framebuffer object wrapper
 // ============================================================
 
 // TODO: for an eventual windows port, lets not rely on GLAD's implicit OpenGL context management 

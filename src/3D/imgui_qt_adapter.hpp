@@ -1,4 +1,4 @@
-// imgui_qt_adapter.hpp — Qt event → ImGuiIO bridge + imgui_impl_opengl3 lifecycle.
+// imgui_qt_adapter.hpp: Qt event → ImGuiIO bridge + imgui_impl_opengl3 lifecycle.
 //
 // This header is only compiled into translation units that define AETHERION_QT_HOST.
 // It provides a thin `imgui_qt` namespace that:
@@ -95,7 +95,7 @@ inline void applyModifiers(Qt::KeyboardModifiers mods)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Lifecycle — call inside the widget's GL context
+// Lifecycle, call inside the widget's GL context
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Call once after the GL context is active (e.g. end of onInit()).
@@ -108,7 +108,7 @@ inline void init(int w, int h)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.DisplaySize  = ImVec2(static_cast<float>(w), static_cast<float>(h));
     io.DeltaTime    = 1.0f / 60.0f;
-    // Disable the default imgui.ini file — this widget is embedded in Qt.
+    // Disable the default imgui.ini file, this widget is embedded in Qt.
     io.IniFilename  = nullptr;
     hud_im::applyAetherionStyle();
     ImGui_ImplOpenGL3_Init("#version 330 core");
@@ -122,7 +122,7 @@ inline void shutdown()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Per-frame — call inside onUpdate() with the GL context active
+// Per-frame, call inside onUpdate() with the GL context active
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Begin a new ImGui frame.  Call before any hud_im::drawXxx calls.
@@ -145,7 +145,7 @@ inline void render()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Event feeds — call from the widget's Qt event overrides
+// Event feeds, call from the widget's Qt event overrides
 // ─────────────────────────────────────────────────────────────────────────────
 
 inline void feedKeyPress(QKeyEvent* ev)

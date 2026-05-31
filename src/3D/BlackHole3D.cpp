@@ -1,5 +1,5 @@
 // ============================================================
-// BlackHole3D.cpp — Standalone window entry point.
+// BlackHole3D.cpp: Standalone window entry point.
 // ============================================================
 // All simulation, rendering, HUD, and input logic lives in
 //   src/3D/bh3d_core.hpp
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
             if (const auto* kp = event.getIf<sf::Event::KeyPressed>()) {
                 // We always feed our own keystate (so WASD held during a menu
                 // open keeps physics consistent on close), but we suppress
-                // action-key dispatch when ImGui is consuming keyboard input —
+                // action-key dispatch when ImGui is consuming keyboard input -
                 // except for the menu toggle (N) and release-mouse (Esc) keys
                 // which the user expects to always work.
                 state.keys.onKeyPressed(kp->code);

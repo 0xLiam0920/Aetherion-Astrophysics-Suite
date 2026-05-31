@@ -210,7 +210,7 @@ void Updater::promptDownload(const QString &tag, const QString &releaseNotes,
 
     if (dlg.clickedButton() == updateBtn) {
         if (assetUrl.isEmpty()) {
-            // No platform-specific asset found — send user to the releases page.
+            // No platform-specific asset found, send user to the releases page.
             QDesktopServices::openUrl(QUrl(releasesPageUrl(tag)));
             return;
         }

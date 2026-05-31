@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// presets.hpp — Black hole profile presets with full SimConfig
+// presets.hpp: Black hole profile presets with full SimConfig
 // ============================================================
 
 #include "config.hpp"
@@ -51,7 +51,7 @@ struct BlackHoleProfile {
 
     // Barycentric binary: true when the companion mass is significant enough
     // that both the BH and companion visibly orbit the shared centre of mass.
-    // Set for Gaia BH1/BH2/BH3 — the astrometric wobble these systems were
+    // Set for Gaia BH1/BH2/BH3, the astrometric wobble these systems were
     // discovered through IS the BH's displacement from the barycenter.
     bool   isBinaryWithBarycenter = false;
     double companionMassSolar     = 0.0;   // companion mass [Msun] for mass-ratio calc
@@ -91,7 +91,7 @@ inline cfg::OrbitalConfig makeOrbitalBody(const GalaxyBody3D& b) {
             break;
         case GalaxyBody3DType::NeutronStar:
             oc.bodyRadius = 0.40f;
-            // Vivid magenta — physically a pulsar is blue-white, but here we
+            // Vivid magenta, physically a pulsar is blue-white, but here we
             // tint it for at-a-glance identification against nearby S-stars.
             oc.bodyColor  = glm::vec3(1.00f, 0.35f, 0.90f);
             break;
@@ -104,7 +104,7 @@ inline cfg::OrbitalConfig makeOrbitalBody(const GalaxyBody3D& b) {
 }
 
 
-/*--------- TON 618 — Most massive known quasar ---------*/
+/*--------- TON 618, Most massive known quasar ---------*/
 inline BlackHoleProfile ton618() {
     BlackHoleProfile p;
     p.name        = "TON 618";
@@ -140,21 +140,21 @@ inline BlackHoleProfile ton618() {
     return p;
 }
 
-/*--------- Sagittarius A* — Milky Way center ---------*/
+/*--------- Sagittarius A*, Milky Way center ---------*/
 // Low-luminosity, radiatively inefficient accretion flow (RIAF).
 // Weak/absent jets, no broad-line region, small dim disk.
 inline BlackHoleProfile sgrAstar() {
     BlackHoleProfile p;
     p.name        = "Sgr A*";
-    p.description = "Milky Way center (~4.3e6 Msun) — dim, quiet";
+    p.description = "Milky Way center (~4.3e6 Msun), dim, quiet";
     p.massSolar   = 4.3e6;
 
     cfg::SimConfig c;
-    // Moderate spin — current EHT constraints suggest ~0.5–0.9
+    // Moderate spin, current EHT constraints suggest ~0.5–0.9
     c.blackHole.spinParameter = 0.5f;
     c.blackHole.radius        = 1.0f;
 
-    // Small, dim accretion flow — RIAF geometry
+    // Small, dim accretion flow, RIAF geometry
     c.disk.innerRadius   = 3.0f;   // Larger ISCO (lower spin)
     c.disk.outerRadius   = 10.0f;  // Compact accretion flow
     c.disk.halfThickness = 0.04f;  // Thicker, puffy RIAF
@@ -168,9 +168,9 @@ inline BlackHoleProfile sgrAstar() {
     c.blr.innerRadius = 8.0f;
     c.blr.outerRadius = 14.0f;
     c.blr.thickness   = 2.0f;
-    c.blr.strength    = 0.0f;  // Sgr A*: RIAF — no detectable BLR
+    c.blr.strength    = 0.0f;  // Sgr A*: RIAF, no detectable BLR
 
-    // Camera closer — smaller object
+    // Camera closer, smaller object
     c.camera.initialPos = glm::vec3(0.0f, 4.0f, 18.0f);
 
     // Subtle bloom (dim source)
@@ -201,7 +201,7 @@ inline BlackHoleProfile sgrAstar() {
         {GalaxyBody3DType::Star,        40.0f, 0.30f,  0.05f, "IRS 16"},
         {GalaxyBody3DType::GasCloud,    60.0f, 0.15f,  0.25f, "Circumnuclear Gas"},
         {GalaxyBody3DType::Star,        30.0f, 0.50f,  0.45f, "S-cluster"},
-        // BLPSR — 8.19 ms pulsar in tight relativistic orbit around Sgr A*.
+        // BLPSR, 8.19 ms pulsar in tight relativistic orbit around Sgr A*.
         // Compact, fast-spinning recycled neutron star; emits a coherent
         // radio/X-ray beam every 8.19 ms (~122 Hz). Coloured magenta in-sim
         // purely as a visual identifier against the surrounding S-cluster.
@@ -210,16 +210,16 @@ inline BlackHoleProfile sgrAstar() {
     return p;
 }
 
-/*--------- 3C 273 — First identified quasar ---------*/
+/*--------- 3C 273, First identified quasar ---------*/
 // Powerful relativistic jet, bright accretion disk, active BLR.
 inline BlackHoleProfile qso3c273() {
     BlackHoleProfile p;
     p.name        = "3C 273";
-    p.description = "First quasar identified (~8.9e8 Msun) — bright jet";
+    p.description = "First quasar identified (~8.9e8 Msun), bright jet";
     p.massSolar   = 8.86e8;
 
     cfg::SimConfig c;
-    // High spin — jet-producing quasar
+    // High spin, jet-producing quasar
     c.blackHole.spinParameter = 0.9f;
     c.blackHole.radius        = 1.0f;
 
@@ -241,7 +241,7 @@ inline BlackHoleProfile qso3c273() {
 
     c.camera.initialPos = glm::vec3(0.0f, 7.0f, 28.0f);
 
-    // Bright bloom — luminous quasar
+    // Bright bloom, luminous quasar
     c.bloom.threshold  = 1.0f;
     c.bloom.intensity  = 0.60f;
     c.bloom.exposure   = 1.1f;
@@ -271,20 +271,20 @@ inline BlackHoleProfile qso3c273() {
     return p;
 }
 
-/*--------- J0529-4351 — Most luminous quasar known ---------*/
+/*--------- J0529-4351, Most luminous quasar known ---------*/
 // Extreme accretion rate, enormous disk, blazing luminosity.
 inline BlackHoleProfile j0529() {
     BlackHoleProfile p;
     p.name        = "J0529-4351";
-    p.description = "Most luminous quasar (~1.7e10 Msun) — extreme disk";
+    p.description = "Most luminous quasar (~1.7e10 Msun), extreme disk";
     p.massSolar   = 1.7e10;
 
     cfg::SimConfig c;
-    // Very high spin — extreme accretion
+    // Very high spin, extreme accretion
     c.blackHole.spinParameter = 0.95f;
     c.blackHole.radius        = 1.0f;
 
-    // Massive, bright accretion disk — largest known
+    // Massive, bright accretion disk, largest known
     c.disk.innerRadius   = 1.5f;   // Very close ISCO at near-maximal spin
     c.disk.outerRadius   = 30.0f;  // Enormous disk
     c.disk.halfThickness = 0.01f;  // Thin, efficient disk
@@ -300,10 +300,10 @@ inline BlackHoleProfile j0529() {
     c.blr.thickness   = 8.0f;
     c.blr.strength    = 0.90f;  // J0529-4351: hyperluminous, near-maximal BLR
 
-    // Pull camera back — big object
+    // Pull camera back, big object
     c.camera.initialPos = glm::vec3(0.0f, 8.0f, 32.0f);
 
-    // Intense bloom — most luminous object in the universe
+    // Intense bloom, most luminous object in the universe
     c.bloom.threshold  = 0.8f;
     c.bloom.intensity  = 0.75f;
     c.bloom.exposure   = 1.2f;
@@ -335,25 +335,25 @@ inline BlackHoleProfile j0529() {
     return p;
 }
 
-/*--------- Gaia BH1 — Nearest known dormant black hole ---------*/
+/*--------- Gaia BH1, Nearest known dormant black hole ---------*/
 // Discovered via astrometric wobble of its G-dwarf companion (Gaia DR3).
 // Dormant: NO detectable accretion disk. Disk params represent theoretical
-// Bondi-Hoyle capture of stellar wind at ~10^-8 L_Edd — far below any
+// Bondi-Hoyle capture of stellar wind at ~10^-8 L_Edd, far below any
 // observable threshold. The companion star is the entire visual story here.
 inline BlackHoleProfile gaiaBH1() {
     BlackHoleProfile p;
     p.name        = "Gaia BH1";
-    p.description = "Nearest dormant BH (~9.6 Msun) — discovered via astrometry, no disk";
+    p.description = "Nearest dormant BH (~9.6 Msun), discovered via astrometry, no disk";
     p.massSolar   = 9.62;
 
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.3f;
     c.blackHole.radius        = 1.0f;
-    // No accretion disk — dormant black hole, discovered by astrometry only.
+    // No accretion disk, dormant black hole, discovered by astrometry only.
     // outerRadius = 0 makes the shader condition (r < diskOuterRadius) always
     // false, suppressing all disk rendering passes.
     c.disk.innerRadius   = 3.0f;
-    c.disk.outerRadius   = 0.0f;    // Zero — disables disk entirely in shader
+    c.disk.outerRadius   = 0.0f;    // Zero, disables disk entirely in shader
     c.disk.halfThickness = 0.0f;
     c.disk.peakTemp             = 1000.0f;
     c.disk.displayTempInner     = 1000.0f;
@@ -363,7 +363,7 @@ inline BlackHoleProfile gaiaBH1() {
     c.jet.radius = 0.08f; c.jet.length = 4.0f;
     c.jet.color  = glm::vec3(0.1f, 0.3f, 0.6f);
     c.orbital.semiMajor  = 28.0f;
-    c.orbital.bodyRadius = 1.2f;    // G-dwarf companion — the visual focus
+    c.orbital.bodyRadius = 1.2f;    // G-dwarf companion, the visual focus
     c.camera.initialPos  = glm::vec3(0.0f, 3.5f, 15.0f);
     c.bloom.threshold    = 4.0f;    // Nothing blooms at this luminosity
     c.bloom.intensity    = 0.04f;
@@ -377,7 +377,7 @@ inline BlackHoleProfile gaiaBH1() {
     p.defaultLAB         = false;
     p.defaultCGM         = false;
     // G-dwarf binary companion. Real measured eccentricity e ≈ 0.451
-    // (Gaia DR3) — the visual focus of this dormant BH system.
+    // (Gaia DR3), the visual focus of this dormant BH system.
     p.galaxyBodies = {
         {GalaxyBody3DType::CompanionStar, 28.0f, 0.45f, 0.10f}
     };
@@ -386,7 +386,7 @@ inline BlackHoleProfile gaiaBH1() {
     return p;
 }
 
-/*--------- Gaia BH2 — Dormant BH with red giant companion ---------*/
+/*--------- Gaia BH2, Dormant BH with red giant companion ---------*/
 // Discovered via astrometric wobble of a red giant companion ~1.16 kpc away.
 // Dormant: NO detectable accretion disk. The red giant overfills its Roche
 // lobe slightly, but the resulting RIAF luminosity is still undetectable.
@@ -394,17 +394,17 @@ inline BlackHoleProfile gaiaBH1() {
 inline BlackHoleProfile gaiaBH2() {
     BlackHoleProfile p;
     p.name        = "Gaia BH2";
-    p.description = "Dormant BH (~8.9 Msun) — discovered via astrometry, red giant companion";
+    p.description = "Dormant BH (~8.9 Msun), discovered via astrometry, red giant companion";
     p.massSolar   = 8.94;
 
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.2f;
     c.blackHole.radius        = 1.0f;
-    // No accretion disk — dormant black hole, discovered by astrometry only.
+    // No accretion disk, dormant black hole, discovered by astrometry only.
     // outerRadius = 0 makes the shader condition (r < diskOuterRadius) always
     // false, suppressing all disk rendering passes.
     c.disk.innerRadius   = 3.0f;
-    c.disk.outerRadius   = 0.0f;    // Zero — disables disk entirely in shader
+    c.disk.outerRadius   = 0.0f;    // Zero, disables disk entirely in shader
     c.disk.halfThickness = 0.0f;
     c.disk.peakTemp             = 1000.0f;
     c.disk.displayTempInner     = 1000.0f;
@@ -414,7 +414,7 @@ inline BlackHoleProfile gaiaBH2() {
     c.jet.radius = 0.08f; c.jet.length = 4.0f;
     c.jet.color  = glm::vec3(0.1f, 0.3f, 0.6f);
     c.orbital.semiMajor  = 30.0f;
-    c.orbital.bodyRadius = 2.4f;    // Red giant is noticeably larger — the visual focus
+    c.orbital.bodyRadius = 2.4f;    // Red giant is noticeably larger, the visual focus
     c.camera.initialPos  = glm::vec3(0.0f, 3.5f, 15.0f);
     c.bloom.threshold    = 4.0f;
     c.bloom.intensity    = 0.04f;
@@ -436,25 +436,25 @@ inline BlackHoleProfile gaiaBH2() {
     return p;
 }
 
-/*--------- Gaia BH3 — Most massive nearby dormant BH ---------*/
+/*--------- Gaia BH3, Most massive nearby dormant BH ---------*/
 // Discovered via astrometric wobble of a metal-poor giant companion.
-// ~33 Msun — well above typical stellar BH mass, yet completely dormant.
+// ~33 Msun, well above typical stellar BH mass, yet completely dormant.
 // No detectable X-ray or optical emission from any accretion disk.
 // Disk params: theoretical RIAF trace only; renders invisible by design.
 inline BlackHoleProfile gaiaBH3() {
     BlackHoleProfile p;
     p.name        = "Gaia BH3";
-    p.description = "Most massive nearby dormant BH (~33 Msun) — discovered via astrometry, no disk";
+    p.description = "Most massive nearby dormant BH (~33 Msun), discovered via astrometry, no disk";
     p.massSolar   = 32.7;
 
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.45f;
     c.blackHole.radius        = 1.0f;
-    // No accretion disk — dormant black hole, discovered by astrometry only.
+    // No accretion disk, dormant black hole, discovered by astrometry only.
     // outerRadius = 0 makes the shader condition (r < diskOuterRadius) always
     // false, suppressing all disk rendering passes.
     c.disk.innerRadius   = 2.8f;
-    c.disk.outerRadius   = 0.0f;    // Zero — disables disk entirely in shader
+    c.disk.outerRadius   = 0.0f;    // Zero, disables disk entirely in shader
     c.disk.halfThickness = 0.0f;
     c.disk.peakTemp             = 1000.0f;
     c.disk.displayTempInner     = 1000.0f;
@@ -478,7 +478,7 @@ inline BlackHoleProfile gaiaBH3() {
     p.defaultLAB         = false;
     p.defaultCGM         = false;
     // Metal-poor giant companion. Real measured eccentricity e ≈ 0.729
-    // (Gaia DR3, 2024) — a dramatic wide-binary swing from periapsis to apoapsis.
+    // (Gaia DR3, 2024), a dramatic wide-binary swing from periapsis to apoapsis.
     p.galaxyBodies = {
         {GalaxyBody3DType::CompanionStar, 38.0f, 0.73f, 0.08f}
     };
@@ -487,7 +487,7 @@ inline BlackHoleProfile gaiaBH3() {
     return p;
 }
 
-/*--------- V404 Cygni — X-ray nova microquasar ---------*/
+/*--------- V404 Cygni, X-ray nova microquasar ---------*/
 // Represents the 2015 outburst: brightest stellar BH transient in decades.
 // Hot bright disk. kelvinToRGB(7500) → near-white with yellow tinge.
 // Well-distinguished from quiescent Gaia BHs by temperature and brightness.
@@ -504,7 +504,7 @@ inline BlackHoleProfile v404Cyg() {
     c.disk.outerRadius   = 12.0f;
     c.disk.halfThickness = 0.03f;   // Thin, efficient accretion (outburst)
     // kelvinToRGB(7500) → bright pale-yellow/almost-white inner core.
-    // kelvinToRGB(3800) → orange middle ring — classic X-ray nova gradient.
+    // kelvinToRGB(3800) → orange middle ring, classic X-ray nova gradient.
     c.disk.peakTemp             = 30000.0f;
     c.disk.displayTempInner     = 7500.0f;   // Hot pale-yellow inner ring
     c.disk.displayTempOuter     = 3800.0f;   // Orange outer disk
@@ -529,8 +529,8 @@ inline BlackHoleProfile v404Cyg() {
     p.defaultCGM         = false;
     // Triple system:
     //   • Donor (K-giant, ~0.7 Msun) on the close 6.47-day orbit being stripped
-    //     into the disk — modelled as the inner CompanionStar.
-    //   • V404 Cyg C — distant tertiary (~3500 AU, ~70 000-yr period, evolved
+    //     into the disk, modelled as the inner CompanionStar.
+    //   • V404 Cyg C, distant tertiary (~3500 AU, ~70 000-yr period, evolved
     //     star / future red giant) discovered 2024. Compressed to a far orbit
     //     in simulation units so it stays visible alongside the inner pair.
     p.galaxyBodies = {
@@ -540,18 +540,18 @@ inline BlackHoleProfile v404Cyg() {
     return p;
 }
 
-/*--------- A0620-00 — First confirmed stellar BH ---------*/
-// Quiescent LMXB — archetypal dormant system; K-dwarf donor, very low accretion.
+/*--------- A0620-00, First confirmed stellar BH ---------*/
+// Quiescent LMXB, archetypal dormant system; K-dwarf donor, very low accretion.
 // Faintest disk of any preset. kelvinToRGB(3000) → deep red-orange ember glow.
-// Distinctive as the "dimmest" — users can see it's barely accreting.
+// Distinctive as the "dimmest", users can see it's barely accreting.
 inline BlackHoleProfile a062000() {
     BlackHoleProfile p;
     p.name        = "A0620-00";
-    p.description = "First confirmed stellar BH (~6.6 Msun) — quiescent K-dwarf";
+    p.description = "First confirmed stellar BH (~6.6 Msun), quiescent K-dwarf";
     p.massSolar   = 6.61;
 
     cfg::SimConfig c;
-    c.blackHole.spinParameter = 0.12f;  // Low spin — lowest Novikov-Thorne flux
+    c.blackHole.spinParameter = 0.12f;  // Low spin, lowest Novikov-Thorne flux
     c.blackHole.radius        = 1.0f;
     c.disk.innerRadius   = 3.2f;
     c.disk.outerRadius   = 8.0f;
@@ -586,15 +586,15 @@ inline BlackHoleProfile a062000() {
     return p;
 }
 
-/*--------- GRO J1655-40 — Microquasar with relativistic jets ---------*/
+/*--------- GRO J1655-40, Microquasar with relativistic jets ---------*/
 // Best-measured spin in the stellar-mass regime (a* ~ 0.7).
 // Hot, efficient thin disk during outburst.
-// kelvinToRGB(9500) → white with a perceptible blue-violet tinge — the hottest
+// kelvinToRGB(9500) → white with a perceptible blue-violet tinge, the hottest
 // stellar BH in the set. The jet color reinforces the blue identity.
 inline BlackHoleProfile groJ165540() {
     BlackHoleProfile p;
     p.name        = "GRO J1655-40";
-    p.description = "Microquasar with relativistic jets (~6.3 Msun) — F-star companion";
+    p.description = "Microquasar with relativistic jets (~6.3 Msun), F-star companion";
     p.massSolar   = 6.3;
 
     cfg::SimConfig c;
@@ -603,12 +603,12 @@ inline BlackHoleProfile groJ165540() {
     c.disk.innerRadius   = 1.9f;    // Smaller ISCO at a*=0.7
     c.disk.outerRadius   = 10.0f;
     c.disk.halfThickness = 0.025f;  // Very thin, efficient disk
-    // kelvinToRGB(9500) → cold white with faint blue cast — clearly hotter than V404.
+    // kelvinToRGB(9500) → cold white with faint blue cast, clearly hotter than V404.
     // kelvinToRGB(4500) → warm yellow outer; keeps the gradient interesting.
     c.disk.peakTemp             = 40000.0f;
     c.disk.displayTempInner     = 9500.0f;   // Near-white with blue cast
     c.disk.displayTempOuter     = 4500.0f;   // Yellow-orange middle/outer
-    c.disk.saturationBoostInner = 1.5f;      // Low — blue-white desaturates naturally
+    c.disk.saturationBoostInner = 1.5f;      // Low, blue-white desaturates naturally
     c.disk.saturationBoostOuter = 2.6f;      // Orange outer pops against the white core
     c.jet.radius = 0.24f;
     c.jet.length = 18.0f;
@@ -634,8 +634,8 @@ inline BlackHoleProfile groJ165540() {
     return p;
 }
 
-/*--------- NGC 1277 — Overmassive SMBH in compact elliptical ---------*/
-// ~14% of host-galaxy bulge mass — 10× above the M-σ relation.
+/*--------- NGC 1277, Overmassive SMBH in compact elliptical ---------*/
+// ~14% of host-galaxy bulge mass, 10× above the M-σ relation.
 // AGN-class accretion; should visually resemble a compact 3C 273 but with
 // a hotter, more saturated disk to distinguish it.
 // kelvinToRGB(6800) → warm-white with slight gold tinge.
@@ -656,7 +656,7 @@ inline BlackHoleProfile ngc1277() {
     // the bluer OJ 287 or the warm-white quasars.
     c.disk.peakTemp             = 28000.0f;
     c.disk.displayTempInner     = 6800.0f;   // Gold-white inner AGN disk
-    c.disk.displayTempOuter     = 3000.0f;   // Orange outer — vivid contrast
+    c.disk.displayTempOuter     = 3000.0f;   // Orange outer, vivid contrast
     c.disk.saturationBoostInner = 2.2f;
     c.disk.saturationBoostOuter = 3.2f;      // Make the orange outer edge striking
     c.jet.radius = 0.30f;
@@ -690,7 +690,7 @@ inline BlackHoleProfile ngc1277() {
     return p;
 }
 
-/*--------- OJ 287 — SMBH binary with optical outbursts ---------*/
+/*--------- OJ 287, SMBH binary with optical outbursts ---------*/
 // Primary BH ~1.8×10¹⁰ Msun; secondary (~1.5×10⁸ Msun) punches through the
 // disk every ~12 years, triggering UV/optical flares.
 // Blazar-class: jet pointed near line of sight → Doppler-boosted bright jet.
@@ -698,7 +698,7 @@ inline BlackHoleProfile ngc1277() {
 inline BlackHoleProfile oj287() {
     BlackHoleProfile p;
     p.name        = "OJ 287";
-    p.description = "SMBH binary system (~1.8e10 Msun primary) — blazar, optical outbursts";
+    p.description = "SMBH binary system (~1.8e10 Msun primary), blazar, optical outbursts";
     p.massSolar   = 1.8e10;
 
     cfg::SimConfig c;
@@ -707,12 +707,12 @@ inline BlackHoleProfile oj287() {
     c.disk.innerRadius   = 1.75f;   // Very close ISCO at a*=0.82
     c.disk.outerRadius   = 26.0f;
     c.disk.halfThickness = 0.011f;  // Extremely thin Shakura-Sunyaev disk
-    // kelvinToRGB(11000) → icy blue-white — immediately distinguishable from all others.
-    // kelvinToRGB(4200) → warm yellow-orange outer — strong thermal gradient.
+    // kelvinToRGB(11000) → icy blue-white, immediately distinguishable from all others.
+    // kelvinToRGB(4200) → warm yellow-orange outer, strong thermal gradient.
     c.disk.peakTemp             = 38000.0f;
     c.disk.displayTempInner     = 11000.0f;  // Icy blue-white blazar inner disk
-    c.disk.displayTempOuter     = 4200.0f;   // Yellow-orange outer — broad gradient
-    c.disk.saturationBoostInner = 1.4f;      // Cool — blue-white is naturally pale
+    c.disk.displayTempOuter     = 4200.0f;   // Yellow-orange outer, broad gradient
+    c.disk.saturationBoostInner = 1.4f;      // Cool, blue-white is naturally pale
     c.disk.saturationBoostOuter = 2.8f;      // Pop the yellow outer ring
     c.jet.radius = 0.45f;
     c.jet.length = 48.0f;
@@ -737,7 +737,7 @@ inline BlackHoleProfile oj287() {
     p.defaultLAB         = true;
     p.defaultCGM         = false;
     // OJ 287 binary system (mirrors 2D OJ287_BODIES)
-    // Secondary SMBH represented as a bright star — the famous ~12yr periodic
+    // Secondary SMBH represented as a bright star, the famous ~12yr periodic
     // disk-piercing companion that triggers optical outbursts.
     p.galaxyBodies = {
         {GalaxyBody3DType::Star,     15.0f, 0.66f, -0.20f},  // Secondary SMBH (~1.5e8 Msun)
@@ -747,9 +747,9 @@ inline BlackHoleProfile oj287() {
     return p;
 }
 
-/*--------- Phoenix A — Largest known black hole ---------*/
+/*--------- Phoenix A, Largest known black hole ---------*/
 // Ultramassive BH in the BCG of the Phoenix Cluster (SPT-CLJ2344-4243), z = 0.597.
-// Mass ~1.0×10¹¹ Msun — the largest known black hole, ~1.52× TON 618.
+// Mass ~1.0×10¹¹ Msun, the largest known black hole, ~1.52× TON 618.
 // Schwarzschild radius Rs ≈ 1970 AU ≈ 6.4 light-days (~50× Pluto's orbital radius).
 // Spin unconstrained; ultramassive BHs grown partly via mergers of randomly-aligned
 // spins tend toward lower net spin → conservative a* = 0.35.
@@ -761,7 +761,7 @@ inline BlackHoleProfile oj287() {
 inline BlackHoleProfile phoenixA() {
     BlackHoleProfile p;
     p.name        = "Phoenix A";
-    p.description = "Largest known BH (~1.0e11 Msun) — Rs~1970 AU, Phoenix Cluster BCG";
+    p.description = "Largest known BH (~1.0e11 Msun), Rs~1970 AU, Phoenix Cluster BCG";
     p.massSolar   = 1.0e11;
 
     cfg::SimConfig c;
@@ -774,14 +774,14 @@ inline BlackHoleProfile phoenixA() {
     c.disk.outerRadius   = 30.0f;
     c.disk.halfThickness = 0.010f;  // Thin efficient Shakura-Sunyaev disk
     // kelvinToRGB(4800) → amber-gold (cooler than TON 618's 5500 K warm-white).
-    // kelvinToRGB(1900) → deep crimson-orange outer rim — visually distinct from all others.
+    // kelvinToRGB(1900) → deep crimson-orange outer rim, visually distinct from all others.
     c.disk.peakTemp             = 26000.0f;
     c.disk.displayTempInner     = 4800.0f;   // Amber-gold AGN inner disk
     c.disk.displayTempOuter     = 1900.0f;   // Deep crimson-orange outer rim
     c.disk.saturationBoostInner = 2.4f;      // Rich amber saturation
     c.disk.saturationBoostOuter = 1.6f;      // Warm crimson glow at the rim
 
-    // Powerful relativistic jets — X-ray cavities ~200 kpc wide confirmed.
+    // Powerful relativistic jets, X-ray cavities ~200 kpc wide confirmed.
     // Longer than TON 618 jets; wide radius befitting the extreme jet power.
     c.jet.radius = 0.50f;
     c.jet.length = 55.0f;
@@ -800,7 +800,7 @@ inline BlackHoleProfile phoenixA() {
     // Camera pulled back to encompass the larger disk
     c.camera.initialPos = glm::vec3(0.0f, 8.0f, 34.0f);
 
-    // Strong bloom — luminous cooling-flow AGN
+    // Strong bloom, luminous cooling-flow AGN
     c.bloom.threshold = 0.92f;
     c.bloom.intensity = 0.70f;
     c.bloom.exposure  = 1.15f;

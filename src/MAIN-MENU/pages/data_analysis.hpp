@@ -8,7 +8,7 @@ namespace pages::data_analysis {
     inline void draw(ui::AppState& /*state*/) {
         ImGui::SetCursorPosX(30);
         ImGui::TextColored(ImVec4(0.93f, 0.93f, 0.96f, 1.0f), "Data Analysis");
-        ImGui::TextDisabled("Coming soon — this space will host analysis controls and charts.");
+        ImGui::TextDisabled("Coming soon, this space will host analysis controls and charts.");
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();

@@ -16,7 +16,7 @@
 struct Sim3DState;
 
 /**
- * Simulation3DWidget — embeds the full 3D ray-marching black hole simulation
+ * Simulation3DWidget, embeds the full 3D ray-marching black hole simulation
  * inside a Qt tab. Uses the QSFMLCanvas OpenGL context; all GL objects are
  * created in onInit() after the context is active.
  */

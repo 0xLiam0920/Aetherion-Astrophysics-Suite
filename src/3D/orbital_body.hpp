@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// orbital_body.hpp — Keplerian orbit with GR apsidal precession
+// orbital_body.hpp: Keplerian orbit with GR apsidal precession
 // ============================================================
 
 #include <glm/glm.hpp>
@@ -95,6 +95,7 @@ public:
     float     bodyRadius() const { return cfg_.bodyRadius; }
     glm::vec3 bodyColor()  const { return cfg_.bodyColor; }
     int       bodyType()   const { return cfg_.bodyType; }
+    const cfg::OrbitalConfig& config() const { return cfg_; }
 
 private:
     cfg::OrbitalConfig cfg_;

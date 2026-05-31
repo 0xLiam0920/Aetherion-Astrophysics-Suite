@@ -6,7 +6,7 @@
 #include <QString>
 
 /**
- * KeyBindButton — a push-button that captures a single key press for keybind assignment.
+ * KeyBindButton, a push-button that captures a single key press for keybind assignment.
  *
  * Usage:
  *   1. Display shows "[KEY]" (e.g. "[SPACE]", "[F]").

@@ -16,7 +16,7 @@ Could not find a package configuration file provided by "SFML"
 **Solution:**
 - Make sure SFML **3.x** is installed (not 2.x).
 - macOS: `brew install sfml`
-- Linux: `sudo apt install libsfml-dev` — check that your distro provides SFML 3.x. If not, build SFML from source.
+- Linux: `sudo apt install libsfml-dev`, check that your distro provides SFML 3.x. If not, build SFML from source.
 - Windows: Use vcpkg or build SFML 3.x from source. Install via vcpkg:
   ```bash
   vcpkg install sfml glm
@@ -92,16 +92,16 @@ sudo apt install build-essential
 ### Black screen on launch (`blackhole-3D`)
 
 **Possible causes:**
-1. **OpenGL 3.3 not supported** — The simulator requires OpenGL 3.3 Core. Check your GPU/driver support:
+1. **OpenGL 3.3 not supported**, The simulator requires OpenGL 3.3 Core. Check your GPU/driver support:
    ```bash
    glxinfo | grep "OpenGL version"   # Linux
    ```
    On macOS, OpenGL 3.3 is supported on all Macs from 2012 onwards.
    On windows, check your GPU specs online, or use a tool like GPU-Z. Corrupted drivers can also cause this, so use DDU or something along that line.
 
-2. **Shader files missing** — The build copies `.frag` files next to the executable. If you moved the binary, make sure `BlackHole3D.frag` and `BlackHole3D_PhotorealDisk.frag` are in the same directory as the executable, or in the project's `src/3D/` directory.
+2. **Shader files missing**, The build copies `.frag` files next to the executable. If you moved the binary, make sure `BlackHole3D.frag` and `BlackHole3D_PhotorealDisk.frag` are in the same directory as the executable, or in the project's `src/3D/` directory.
 
-3. **Missing textures** — Background or disk textures are optional but the shader may render a black disk without them. See the [Textures](#textures-not-loading) section.
+3. **Missing textures**, Background or disk textures are optional but the shader may render a black disk without them. See the [Textures](#textures-not-loading) section.
 
 ### Shaders fail to compile at runtime
 
@@ -137,9 +137,9 @@ Shader compilation failed: ...
 - The 3D simulator is GPU-bound (full-screen ray marching every frame). A discrete GPU is recommended for good performance.
 - Reduce the window size, don't use fullscreen to avoid fps stuttering.
 - Toggle off expensive features:
-  - **J** — disable relativistic jets
-  - **G** — disable Broad Line Region
-  - **V** — disable Doppler beaming
+  - **J**, disable relativistic jets
+  - **G**, disable Broad Line Region
+  - **V**, disable Doppler beaming
 - Check that your system isn't falling back to software rendering (integrated GPU), for windows sometimes task manager priority going to very high/realtime can fix this.
 
 ### Mouse cursor stuck / input not working
@@ -220,7 +220,7 @@ If you're using the bundled tarball (`bundle_app.sh --platform linux`), the plug
 ```bash
 sudo apt install libgl1-mesa-dri libgl1-mesa-glx mesa-utils
 ```
-Verify with `glxinfo | grep "OpenGL version"` — you need 3.3+.
+Verify with `glxinfo | grep "OpenGL version"`, you need 3.3+.
 
 ### SFML linking errors with system packages
 

@@ -1,10 +1,10 @@
-# Aetherion — Astrophysics Simulation Suite
+# Aetherion: Astrophysics Simulation Suite
 
 [![Version](https://img.shields.io/badge/version-0.1.4--beta1-blue)]
 [![Status](https://img.shields.io/badge/status-beta-orange)]
 [![License](https://img.shields.io/badge/license-MIT-green)]
 
-Aetherion is an open source astrophysics simulation and analysis suite designed for precision experimentation, visualization, and reproducible research around BLACK HOLES.
+Aetherion is an open source astrophysics simulation and analysis suite for experimenting with, visualising, and analysing BLACK HOLES.
 
 DISCLAIMER!
                                                        
@@ -35,15 +35,15 @@ SIDE NOTE: Since Apple forces you to pay 100 dollars a year to get your app cert
 
 ## About
 
-The purpose of Aetherion is to bridge the gap between raw astrophysics simulation and structured analysis.
+Aetherion sits between a raw physics simulator and a data-analysis tool. You can run a scenario, watch what happens, and then export the data to look at it properly.
 
 The program focuses on:
-- Outcome-deterministic simulation pipelines
-- Modular design
-- Clean data export for external (or internal) analysis
-- Built-in visualization tools 
+- Deterministic simulation runs (same inputs, same outputs)
+- A modular codebase so individual pieces can be swapped out
+- Clean data export for external or in-app analysis
+- Built-in visualisation
 
-Unlike traditional simulation tools, Aetherion is built around **reproducibility, extensibility, and clean results**.
+The goal is reproducible results without having to fight the tooling.
 
 ---
 
@@ -98,7 +98,7 @@ sudo apt install cmake g++ \
     libglm-dev \
     libglew-dev \
     qt6-base-dev qt6-charts-dev \
-    qt6-qpa-plugins           # XCB platform plugin — required at runtime
+    qt6-qpa-plugins           # XCB platform plugin, required at runtime
 git clone https://github.com/0xLiam0920/Aetherion-Astrophysics-Suite.git
 cd Aetherion-Astrophysics-Suite
 mkdir build && cd build
@@ -107,7 +107,12 @@ make -j$(nproc)
 ./blackhole-sim
 ```
 
-> **Note:** SFML 3.x is required. Ubuntu 24.04+ provides it via `libsfml-dev`. On older, moreso legacy Ubuntu/Debian releases, build SFML 3.0 from source or use the Flatpak distr.
+> **Note:** SFML 3.x is required. As of May 2026, Ubuntu/Debian's `libsfml-dev`
+> still ships **SFML 2.6** on most stable releases (24.04 LTS included), this
+> will not work; the build will fail at `cmake` with a clear error. Either build
+> SFML 3.0 from source ([SFML 3.0.0 release](https://github.com/SFML/SFML/releases/tag/3.0.0))
+> or use the Flatpak build below. Ubuntu 25.04+ / Debian trixie+ ship SFML 3 and
+> work out of the box.
 
 ### Linux (Fedora / RHEL)
 
@@ -119,7 +124,7 @@ sudo dnf install cmake gcc-c++ \
     qt6-qtbase-devel qt6-qtcharts-devel
 ```
 
-### Linux (Flatpak — recommended for end users)
+### Linux (Flatpak, recommended for end users)
 
 ```bash
 flatpak install flathub org.kde.Platform//6.8 org.kde.Sdk//6.8
@@ -139,7 +144,7 @@ ctest --output-on-failure -R physics-regression
 
 ## Known Issues
 
-- SFML 2.x is not supported — 3.x API is required.
+- SFML 2.x is not supported, 3.x API is required.
 - On Wayland, the app forces X11/XWayland via `QT_QPA_PLATFORM=xcb` (required by SFML). Set `QT_QPA_PLATFORM=xcb` manually if needed.
 - Pulsar and merger objects are still a VERY early WIP, and are not recommended for any serious data compilation (see TODO.md).
 - Windows support is untested and officially unsupported, but structurally supported if you wish to make a Pull request to compile to exe for windows.

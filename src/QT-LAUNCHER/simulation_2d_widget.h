@@ -8,14 +8,14 @@
 #include <vector>
 #include <string>
 
-// Forward declarations — full types included only in the .cpp
+// Forward declarations, full types included only in the .cpp
 class  Simulation;
 struct Camera;
 class  Renderer;
 struct UIState;
 
 /**
- * Simulation2DWidget — embeds the full 2D black hole simulation inside a Qt tab.
+ * Simulation2DWidget, embeds the full 2D black hole simulation inside a Qt tab.
  * Mirrors the BlackHole2D main() render loop inside onUpdate(), driven by
  * QSFMLCanvas::paintEvent (which calls onUpdate() then display()).
  */
@@ -35,6 +35,10 @@ public:
     /// Store state to be applied once onInit() runs (call before the widget is shown).
     void setPendingState(const QJsonObject &obj);
 
+public slots:
+    /// Switch the 2D HUD palette to light or dark. Cheap; takes effect next frame.
+    void setLightMode(bool on);
+
 protected:
     void onInit() override;
     void onUpdate() override;
@@ -51,6 +55,7 @@ private:
     std::unique_ptr<Renderer>   renderer_;
     std::unique_ptr<UIState>    ui_;
     sf::Clock                   clock_;
+    sf::Clock                   bgClock_;   // wall-clock time for background animation
     std::vector<sf::Vertex>     rayVertScratch_;
     KeyConfig2D                 keyConfig_;   ///< loaded from blackhole2d_keybinds.cfg
     QString                     m_workspaceName = "untitled_data";

@@ -9,6 +9,7 @@
 ##  ╚═══════════════════════════════════════╝
 ##
 
+# Should've taken a more layered approach. The code is a bit messy, but it gets the job done for a non-official script.
 ## ---------------- Structured imports ---------------- ##
 from PIL import Image, ImageFilter, ImageDraw
 import numpy as np
@@ -45,7 +46,7 @@ nebula_colors = [
     (7, 2, 10), (3, 4, 11), (9, 5, 3), (2, 7, 8),
 ]
 
-for _ in range(18):
+for _ in range(18): ## 500 
     cx = random.randint(-200, ww + 200)
     cy = random.randint(-200, h + 200)
     rx = random.randint(250, 900)
@@ -139,7 +140,7 @@ for _ in range(1200):
             if 0 <= nx < w and 0 <= ny < h:
                 star_arr[ny, nx] += col * f
 
-# Slight blur for glow
+# Slight blur for glow, then added to the main image 
 star_img = Image.fromarray(np.clip(star_arr, 0, 255).astype(np.uint8))
 star_img = star_img.filter(ImageFilter.GaussianBlur(radius=0.7))
 arr += np.array(star_img, dtype=np.float32)

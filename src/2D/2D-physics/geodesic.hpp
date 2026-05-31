@@ -3,7 +3,7 @@
 #include "integrator.hpp"
 
 /*--------- Null geodesic (Binet equation) ---------*/
-// The Binet substitution u = 1/r is genuinely clever — it turns the messy r(φ) ODE into a nice polynomial form.
+// The Binet substitution u = 1/r is genuinely clever, it turns the messy r(φ) ODE into a nice polynomial form.
 // d²u/dφ² + u = 3Mu²   (the Schwarzschild Binet equation for null geodesics)
 // the right-hand side 3Mu² is the GR correction; without it you get straight lines (Newtonian).
 // I did not derive this myself, in case that wasn't obvious.
@@ -65,7 +65,7 @@ inline TimelikeState stepTimelikeGeodesic(
     double L,
     double dtau)
 {
-    // Clamp r to just outside horizon before stepping — L/r² and
+    // Clamp r to just outside horizon before stepping, L/r² and
     // radialAcceleration both diverge as r → 2M, producing NaN/Inf.
     const double rMin = bh.horizon() * 1.01;
     TimelikeState clamped = state;
@@ -80,7 +80,7 @@ inline TimelikeState stepTimelikeGeodesic(
         };
     });
 
-    // Post-step NaN/Inf guard — if the integrator produced garbage,
+    // Post-step NaN/Inf guard, if the integrator produced garbage,
     // freeze the state rather than propagating poison values.
     if (!std::isfinite(result.r) || !std::isfinite(result.phi) || !std::isfinite(result.vr)) {
         return state; // return unchanged
@@ -90,7 +90,7 @@ inline TimelikeState stepTimelikeGeodesic(
 }
 
 // Step a timelike geodesic by proper time dτ using Runge-Kutta-Fehlberg 4(5).
-// Cash-Karp variant — returns the 5th-order result and writes the embedded
+// Cash-Karp variant, returns the 5th-order result and writes the embedded
 // 4th-vs-5th-order local truncation error estimate into *errOut.
 // Same boundary clamps and NaN guard as the RK4 stepper, since the
 // derivative blows up identically near r=2M regardless of integrator choice.

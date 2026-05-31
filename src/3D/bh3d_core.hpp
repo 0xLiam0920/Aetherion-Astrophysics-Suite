@@ -38,6 +38,7 @@
 #include "orbital_body.hpp"
 #include "gl_font.hpp"
 #include "hud_panel.hpp"
+#include "physics_overlay.hpp"
 
 #include <array>
 #include <cctype>
@@ -91,6 +92,8 @@ inline const char* keyToString(sf::Keyboard::Key k) {
         case sf::Keyboard::Key::LControl: return "LCTRL";
         case sf::Keyboard::Key::LShift:   return "LSHIFT";
         case sf::Keyboard::Key::Escape:   return "ESCAPE";
+        case sf::Keyboard::Key::Equal:    return "=";
+        case sf::Keyboard::Key::Hyphen:   return "-";
         default: return "UNKNOWN";
     }
 }
@@ -125,6 +128,8 @@ inline bool keyFromString(const std::string& raw, sf::Keyboard::Key& out) {
     if (s=="LCTRL"||s=="LCONTROL"||s=="CTRL"){out=sf::Keyboard::Key::LControl;return true;}
     if (s=="LSHIFT"||s=="SHIFT"){out=sf::Keyboard::Key::LShift;return true;}
     if (s=="ESC"||s=="ESCAPE"){out=sf::Keyboard::Key::Escape;return true;}
+    if (s=="="||s=="EQUAL"||s=="PLUS"||s=="+"){out=sf::Keyboard::Key::Equal;return true;}
+    if (s=="-"||s=="HYPHEN"||s=="MINUS"){out=sf::Keyboard::Key::Hyphen;return true;}
     return false;
 }
 
@@ -151,6 +156,9 @@ struct ActionKeybinds {
     sf::Keyboard::Key toggleOverlays   = sf::Keyboard::Key::M;
     sf::Keyboard::Key speedUp          = sf::Keyboard::Key::Equal;   // '+' / '='
     sf::Keyboard::Key speedDown        = sf::Keyboard::Key::Hyphen;  // '-'
+    sf::Keyboard::Key toggleRK4Orbits  = sf::Keyboard::Key::K;
+    sf::Keyboard::Key toggleRK4Photons = sf::Keyboard::Key::L;
+    sf::Keyboard::Key toggleSpacetime  = sf::Keyboard::Key::T;
 };
 
 inline std::filesystem::path keybindConfigPath() {
@@ -174,7 +182,7 @@ inline void enforceKeybindConflicts(ActionKeybinds& keys) {
                k == sf::Keyboard::Key::LShift;
     };
     struct Entry { const char* name; sf::Keyboard::Key* key; sf::Keyboard::Key def; };
-    std::array<Entry, 19> entries = {{
+    std::array<Entry, 22> entries = {{
         {"toggle_freelook",   &keys.toggleFreelook,   defaults.toggleFreelook},
         {"toggle_jets",       &keys.toggleJets,       defaults.toggleJets},
         {"toggle_blr",        &keys.toggleBLR,        defaults.toggleBLR},
@@ -193,7 +201,10 @@ inline void enforceKeybindConflicts(ActionKeybinds& keys) {
         {"release_mouse",     &keys.releaseMouse,     defaults.releaseMouse},
         {"toggle_overlays",   &keys.toggleOverlays,   defaults.toggleOverlays},
         {"speed_up",          &keys.speedUp,          defaults.speedUp},
-        {"speed_down",        &keys.speedDown,        defaults.speedDown}
+        {"speed_down",        &keys.speedDown,        defaults.speedDown},
+        {"toggle_rk4_orbits", &keys.toggleRK4Orbits,  defaults.toggleRK4Orbits},
+        {"toggle_rk4_photons",&keys.toggleRK4Photons, defaults.toggleRK4Photons},
+        {"toggle_spacetime",  &keys.toggleSpacetime,  defaults.toggleSpacetime}
     }};
     for (auto& e : entries) {
         if (isMovementKey(*e.key)) *e.key = e.def;
@@ -231,6 +242,9 @@ inline void writeDefaultKeybindFile(const std::filesystem::path& path, const Act
     out << "toggle_overlays="   << keyToString(k.toggleOverlays)   << "\n";
     out << "speed_up="          << keyToString(k.speedUp)          << "\n";
     out << "speed_down="        << keyToString(k.speedDown)        << "\n";
+    out << "toggle_rk4_orbits=" << keyToString(k.toggleRK4Orbits)  << "\n";
+    out << "toggle_rk4_photons="<< keyToString(k.toggleRK4Photons) << "\n";
+    out << "toggle_spacetime="  << keyToString(k.toggleSpacetime)  << "\n";
 }
 
 inline ActionKeybinds loadActionKeybinds() {
@@ -261,7 +275,10 @@ inline ActionKeybinds loadActionKeybinds() {
         {"release_mouse",     &keys.releaseMouse},
         {"toggle_overlays",   &keys.toggleOverlays},
         {"speed_up",          &keys.speedUp},
-        {"speed_down",        &keys.speedDown}
+        {"speed_down",        &keys.speedDown},
+        {"toggle_rk4_orbits", &keys.toggleRK4Orbits},
+        {"toggle_rk4_photons",&keys.toggleRK4Photons},
+        {"toggle_spacetime",  &keys.toggleSpacetime}
     };
     std::string line;
     while (std::getline(in, line)) {
@@ -529,6 +546,10 @@ struct State {
     // Persistent snapshot
     PhysicsSnapshot snap{};
 
+    // RK4 orbit + null-geodesic photon-ray overlay (world-space lines).
+    // Cached vertex buffer; rebuilt on profile switch / toggle change.
+    PhysicsOverlay physOverlay;
+
     // Tidal disruption event (3D)
     struct TidalEvent3D {
         bool   active        = false;
@@ -669,7 +690,7 @@ inline void tickPhysics(State& s, float dt) {
     // ---- Tidal disruption detection ----
     // NOTE: All 3D orbBodies are on permanent Keplerian orbits (no energy loss /
     // radiation-reaction inspiral). Triggering a TDE when a high-eccentricity body
-    // passes periapsis would fire every single orbit — physically nonsensical for
+    // passes periapsis would fire every single orbit, physically nonsensical for
     // stable S-stars, pulsars, etc. TDE in 3D is reserved for bodies that are
     // genuinely accreting (future feature). Detection loop intentionally disabled.
     {
@@ -767,7 +788,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
 
         // ── Barycentric binary mode (Gaia BH1/2/3) ──────────────────────────
         // For these systems the companion mass is large enough that the BH
-        // noticeably orbits the centre of mass — exactly the astrometric signal
+        // noticeably orbits the centre of mass, exactly the astrometric signal
         // Gaia measured.  We keep the Keplerian integrator running in
         // BH-centred coords but, at snapshot time, shift everything so the
         // *barycenter* sits at world origin:
@@ -868,9 +889,22 @@ inline void renderScene(State& s, int w, int h) {
         s.quad.drawQuad();
     }
     // bloom.execute() saves+restores prevFBO which ends up as sceneFBO; force
-    // back to default before any HUD or display() — required on macOS Metal-GL.
+    // back to default before any HUD or display(), required on macOS Metal-GL.
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w, h);
+
+    // RK4 orbit + photon-ray overlays (world-space lines, drawn over the
+    // ray-marched scene). Lazy-init the GL resources on first draw so
+    // tickPhysics doesn't have to know about GL context state.
+    if (s.physOverlay.orbitsEnabled || s.physOverlay.photonsEnabled ||
+        s.physOverlay.spacetimeEnabled) {
+        s.physOverlay.init();
+        s.physOverlay.notifyScale(s.snap.bhRadius, s.snap.diskOuterRadius);
+        if (s.physOverlay.dirty()) {
+            s.physOverlay.rebuild(s.snap, s.orbBodies);
+        }
+        s.physOverlay.draw(s.snap);
+    }
 }
 
 // Render the panel-based HUD + label-view overlay + overlays toggle panel.
@@ -985,8 +1019,9 @@ inline void switchToProfile(State& s, int newIdx) {
     rebuildOrbBodies(s.orbBodies, prof, s.config);
     s.orbBodyDisrupted.assign(s.orbBodies.size(), false);
     s.tde3D = State::TidalEvent3D{};
+    s.physOverlay.markDirty();
     std::cerr << "[bh3d] profile: " << prof.name
-              << " — " << prof.description << "\n";
+              << ", " << prof.description << "\n";
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1001,7 +1036,7 @@ inline void onActionKey(State& s, sf::Keyboard::Key code) {
     // ── Preset menu intercepts navigation when open ──
     if (s.presetMenu.open) {
         if (s.useImGuiHud) {
-            // ImGui owns Up/Down/Enter/Esc — we only handle the toggle key
+            // ImGui owns Up/Down/Enter/Esc, we only handle the toggle key
             // here so the user can still close the menu with N.
             if (code == kb.nextProfile) {
                 s.presetMenu.open = false;
@@ -1054,6 +1089,18 @@ inline void onActionKey(State& s, sf::Keyboard::Key code) {
     else if (code == kb.toggleHUD)         s.showHUD      = !s.showHUD;
     else if (code == kb.toggleDebugHUD)    s.showDebugHUD = !s.showDebugHUD;
     else if (code == kb.toggleOverlays)    s.overlays.panelOpen = !s.overlays.panelOpen;
+    else if (code == kb.toggleRK4Orbits) {
+        s.physOverlay.orbitsEnabled = !s.physOverlay.orbitsEnabled;
+        s.physOverlay.markDirty();
+    }
+    else if (code == kb.toggleRK4Photons) {
+        s.physOverlay.photonsEnabled = !s.physOverlay.photonsEnabled;
+        s.physOverlay.markDirty();
+    }
+    else if (code == kb.toggleSpacetime) {
+        s.physOverlay.spacetimeEnabled = !s.physOverlay.spacetimeEnabled;
+        s.physOverlay.markDirty();
+    }
     else if (code == kb.resetTilt)         s.camera.resetRoll();
     else if (code == kb.nextProfile) {
         // Open the preset menu (or close it if already open). The menu-open

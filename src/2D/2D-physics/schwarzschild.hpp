@@ -3,7 +3,7 @@
 #include <algorithm>
 
 // Encapsulates all Schwarzschild black hole math (geometric units: G = c = 1).
-// This is the scientific API — all metric-level computations live here.
+// This is the scientific API, all metric-level computations live here.
 struct Schwarzschild {
     double M = 1.0;
 
@@ -18,7 +18,7 @@ struct Schwarzschild {
     double f(double r) const { return 1.0 - 2.0 * M / r; }
 
     /*--------- Time dilation & redshift ---------*/
-    // diverges as r → 2M, which is correct — a clock at the horizon runs infinitely slowly relative to infinity
+    // diverges as r → 2M, which is correct, a clock at the horizon runs infinitely slowly relative to infinity
     // the max(1e-12, ...) is just so we don't divide by zero when someone queries exactly at the horizon, which they will
     double timeDilation(double r) const {
         return 1.0 / std::sqrt(std::max(1e-12, f(r)));
@@ -46,7 +46,7 @@ struct Schwarzschild {
     /*--------- Radial acceleration for timelike geodesic (proper time) ---------*/
     // d²r/dτ² = -M/r²  (Newtonian gravity)
     //         + L²/r³  (centrifugal repulsion, same as Newtonian)
-    //         - 3ML²/r⁴  (GR correction term — this is the whole reason orbits inside ISCO are unstable)
+    //         - 3ML²/r⁴  (GR correction term, this is the whole reason orbits inside ISCO are unstable)
     // that last term is small at large r but absolutely dominates near the horizon. without it, RK4 orbits near 3M look stable and they really aren't.
     double radialAcceleration(double r, double L) const {
         double r2 = r * r, r3 = r2 * r, r4 = r3 * r;
@@ -70,7 +70,7 @@ struct Schwarzschild {
     // E, L for bound orbit from periapsis r_p and apoapsis r_a
     // Uses exact Schwarzschild turning-point equations:
     //   E² = f(r)(1 + L²/r²) at both r_p and r_a
-    // this is actually some fairly gnarly algebra — you solve two simultaneous equations for E² and L².
+    // this is actually some fairly gnarly algebra, you solve two simultaneous equations for E² and L².
     // I sat with pen and paper for a while on this one. the fallback to circularOrbitEL covers the edge cases
     // where the two radii are nearly identical (which would make denom blow up).
     // For very high eccentricity orbits where r_peri approaches 3M (photon sphere),
@@ -101,7 +101,7 @@ struct Schwarzschild {
 
     /*--------- Escape velocity ---------*/
     // Relativistic escape velocity at radius r (as fraction of c)
-    // technically this is the Newtonian expression and happens to give the right answer here — the GR derivation
+    // technically this is the Newtonian expression and happens to give the right answer here, the GR derivation
     // gives the same formula for a radially infalling particle from rest at infinity. convenient coincidence.
     double escapeVelocity(double r) const {
         return std::sqrt(2.0 * M / r);
@@ -124,7 +124,7 @@ struct Schwarzschild {
     // Tidal disruption threshold: returns true if tidal force exceeds
     // self-gravity approximation for a body of mass m_obj, radius R_obj
     // this is the super-simplified Roche limit approximation assuming a uniform-density sphere.
-    // real tidal disruption is way messier — this just tells you "approximately yes/no" which is good enough for display purposes
+    // real tidal disruption is way messier, this just tells you "approximately yes/no" which is good enough for display purposes
     bool tidallyDisrupted(double r, double m_obj, double R_obj) const {
         if (m_obj <= 0.0 || R_obj <= 0.0) return false;
         double f_tidal = tidalForce(r) * R_obj;
@@ -167,10 +167,10 @@ struct Schwarzschild {
     }
 
     /*--------- Theoretical precession (weak-field limit) ---------*/
-    // Δφ = 6πM / a(1-e²) per orbit — this is the famous GR precession formula (same one that explains Mercury's orbit)
+    // Δφ = 6πM / a(1-e²) per orbit, this is the famous GR precession formula (same one that explains Mercury's orbit)
     // IMPORTANT: weak-field approximation only! valid when a >> M.
     // for tight orbits near the ISCO the simulation's measured precession will be significantly larger than this prediction
-    // and that's not a bug — it's the actual physics working correctly. the formula just doesn't apply there.
+    // and that's not a bug, it's the actual physics working correctly. the formula just doesn't apply there.
     double theoreticalPrecession(double a, double ecc) const {
         double denom = a * (1.0 - ecc * ecc);
         if (denom <= 0.0) return 0.0;
@@ -186,7 +186,7 @@ struct Schwarzschild {
 
     /*--------- ISCO stability classification ---------*/
     // Returns "Stable", "Critical", or "Unstable" for orbit at r
-    // the 1% margins are intentional — without them, an orbit sitting right at 6M would flicker between
+    // the 1% margins are intentional, without them, an orbit sitting right at 6M would flicker between
     // "Stable" and "Unstable" every frame due to floating-point noise, which looks terrible in the data panel
     const char* stabilityClassification(double r) const {
         double r_isco = isco();
@@ -196,7 +196,7 @@ struct Schwarzschild {
     }
 
     /*--------- Null geodesic periapsis finder ---------*/
-    // bisection search on r²/f(r) = b² — the turning point condition for a null geodesic with impact parameter b
+    // bisection search on r²/f(r) = b², the turning point condition for a null geodesic with impact parameter b
     // 200 iterations is overkill (you hit machine precision around iteration 50-60) but iterations are cheap
     // and I'd rather not have subtle accuracy issues from cutting it short
     // NOTE: returns -1.0 if b ≤ b_crit (photon is captured before reaching a turning point at all)
@@ -208,7 +208,7 @@ struct Schwarzschild {
         };
 
         // lo = 3M because the turning point is always outside the photon sphere for b > b_crit
-        // hi = max(b*10, 1e5*M) — for very large b the turning point approaches r ≈ b, so we need hi to scale with b
+        // hi = max(b*10, 1e5*M), for very large b the turning point approaches r ≈ b, so we need hi to scale with b
         double lo = 3.0 * M;
         double hi = std::max(b * 10.0, 1e5 * M);
 

@@ -1,10 +1,10 @@
 #pragma once
 // ============================================================
-// platform.hpp — Centralized OpenGL loader and platform helpers
+// platform.hpp: Centralized OpenGL loader and platform helpers
 //
 // Include this BEFORE any other OpenGL-related header throughout
 // the codebase. Never write raw #ifdef __APPLE__ / __linux__ GL
-// include blocks elsewhere — add them here instead.
+// include blocks elsewhere, add them here instead.
 // ============================================================
 
 // ── OpenGL includes ──────────────────────────────────────────
@@ -34,7 +34,7 @@
             std::fprintf(stderr, "[platform] GLEW init failed: %s\n",
                          glewGetErrorString(err));
         }
-        // GLEW often raises a spurious GL_INVALID_ENUM on init — discard it.
+        // GLEW often raises a spurious GL_INVALID_ENUM on init, discard it.
         glGetError();
     }
 
@@ -113,3 +113,27 @@
         return false;
     }
 #endif
+
+// ── Open a URL in the user's default browser ─────────────────
+// Returns true on apparent success. URL is passed through the platform's
+// default launcher (`open`, `xdg-open`, or `ShellExecute`). The URL is
+// shell-quoted naively (we just wrap it in single quotes on POSIX) so
+// callers must not pass attacker-controlled strings — only the curated
+// `learnMoreUrl` field on built-in presets is intended here.
+#include <cstdlib>
+#include <string>
+inline bool platformOpenUrl(const char* url) {
+    if (!url || !*url) return false;
+#if defined(__APPLE__)
+    std::string cmd = "open '"; cmd += url; cmd += "' >/dev/null 2>&1 &";
+    return std::system(cmd.c_str()) == 0;
+#elif defined(__linux__) || defined(__unix__)
+    std::string cmd = "xdg-open '"; cmd += url; cmd += "' >/dev/null 2>&1 &";
+    return std::system(cmd.c_str()) == 0;
+#elif defined(_WIN32)
+    return reinterpret_cast<INT_PTR>(ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL)) > 32;
+#else
+    (void)url;
+    return false;
+#endif
+}

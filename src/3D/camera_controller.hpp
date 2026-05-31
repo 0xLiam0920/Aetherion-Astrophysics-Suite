@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// camera_controller.hpp — Freelook / orbit camera controller
+// camera_controller.hpp: Freelook / orbit camera controller
 // ============================================================
 
 #include <glm/glm.hpp>
@@ -26,7 +26,7 @@ public:
 
     /*--------- Per-frame update ---------*/
     void update(float dt, const KeyState& keys) {
-        // Roll (tilt) — Q/E in both modes
+        // Roll (tilt), Q/E in both modes
         const float rollSpeed = cfg_.rotateSpeed * (keys.fast ? cfg_.fastMultiplier : 1.0f);
         if (keys.q) viewRoll_ += rollSpeed * dt;
         if (keys.e) viewRoll_ -= rollSpeed * dt;
@@ -78,14 +78,14 @@ public:
     // (it's been on the TODO list since approximately forever. the snap is jarring but functional
     void toggleMode() {
         if (freelook_) {
-            // Switching to orbit — compute orbit params from current position
+            // Switching to orbit, compute orbit params from current position
             glm::vec3 offset = position_ - focusPos_;
             orbitRadius_ = glm::length(offset);
             if (orbitRadius_ < cfg_.minOrbitRadius) orbitRadius_ = cfg_.minOrbitRadius;
             orbitYaw_   = std::atan2(offset.x, offset.z);
             orbitPitch_ = std::asin(glm::clamp(offset.y / orbitRadius_, -1.0f, 1.0f));
         } else {
-            // Switching to freelook — init view angles toward focus
+            // Switching to freelook, init view angles toward focus
             const glm::vec3 lookDir = glm::normalize(focusPos_ - position_);
             viewYaw_   = std::atan2(lookDir.x, -lookDir.z);
             viewPitch_ = std::asin(glm::clamp(lookDir.y, -1.0f, 1.0f));

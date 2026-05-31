@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// hud_panel.hpp — Panel-based HUD, overlays menu, body labels
+// hud_panel.hpp: Panel-based HUD, overlays menu, body labels
 //
 // Reuses GLBitmapFont for both text and solid-rect drawing.
 // All public functions are stateless; the caller passes in
@@ -22,7 +22,7 @@ namespace hud {
 /*--------- Overlay menu state (persistent across frames) ---------*/
 struct OverlaysState {
     bool panelOpen        = false; // toggled by 'M' key
-    bool labelView        = false; // FUNCTIONAL — draws name tags over orbiting bodies
+    bool labelView        = false; // FUNCTIONAL, draws name tags over orbiting bodies
     bool spacetimeViz     = false; // placeholder
     bool gravRedshift     = false; // placeholder
     bool ISCOSpinParam    = false; // placeholder until I can actually connect it to something
@@ -575,7 +575,7 @@ inline void drawPresetMenu(const GLBitmapFont& font, HudFrame& frame,
                { col::divider.r, col::divider.g, col::divider.b, col::divider.a * eased },
                sw, sh);
 
-    // Header text — left-aligned in the side panel
+    // Header text, left-aligned in the side panel
     {
         Color h = col::textAccent; h.a *= eased;
         drawString(font, "Available Presets",
@@ -643,7 +643,7 @@ inline void drawPresetMenu(const GLBitmapFont& font, HudFrame& frame,
     }
 
     // Description block for selected item (word-wrapped naive: just one line
-    // — descriptions in profiles are already concise.)
+    //, descriptions in profiles are already concise.)
     {
         const float dy = panelY + headerH + visible * itemH;
         drawFilled(font, panelX, dy, panelW, 1.0f,

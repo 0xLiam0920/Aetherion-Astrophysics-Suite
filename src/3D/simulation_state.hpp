@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// simulation_state.hpp — Pure-data snapshot of physics state
+// simulation_state.hpp: Pure-data snapshot of physics state
 //
 // This struct is the ONLY bridge between the physics layer
 // (camera_controller, config) and the rendering layer (shaders,
@@ -70,7 +70,7 @@ struct PhysicsSnapshot {
     /*--------- Large-scale structures ---------*/
     bool hostGalaxyEnabled; // the galaxy itself, wowie :))))))))
     bool labEnabled;        // broad-line region label overlay, not a literal lab (unfortunately)
-    bool cgmEnabled;        // circumgalactic medium — basically the galaxy's personal bubble of gas nobody talks about
+    bool cgmEnabled;        // circumgalactic medium, basically the galaxy's personal bubble of gas nobody talks about
 
     /*--------- Render settings (more steps = prettier, slower, warmer laptop) ---------*/
     int maxSteps;

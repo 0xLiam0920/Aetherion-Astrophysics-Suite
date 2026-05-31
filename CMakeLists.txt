@@ -47,9 +47,28 @@ endif()
 # Find Qt6
 find_package(Qt6 COMPONENTS Core Gui Widgets Charts Network REQUIRED)
 
-# Accept any installed SFML (2.x or 3.x). Homebrew provides SFML 3.x on macOS.
-# Use SFML component names with correct capitalization (SFML 3 expects e.g. "Graphics").
-find_package(SFML COMPONENTS Graphics Window System REQUIRED)
+# SFML 3.x is required. The API and component naming changed between 2.x and 3.x:
+#   SFML 2.x components: graphics window system     (lowercase)
+#   SFML 3.x components: Graphics Window System     (capitalized)
+# Some distros (e.g. Ubuntu 24.04 libsfml-dev) still ship SFML 2.x, which would
+# fail the capitalized component lookup with a cryptic error. Probe explicitly
+# so we can emit an actionable message.
+find_package(SFML 3 COMPONENTS Graphics Window System QUIET)
+if(NOT SFML_FOUND)
+    # Was a 2.x install detected? If so, tell the user instead of letting the
+    # find_package error spam scroll past.
+    find_package(SFML 2 COMPONENTS graphics window system QUIET)
+    if(SFML_FOUND)
+        message(FATAL_ERROR
+            "Found SFML ${SFML_VERSION}, but Aetherion requires SFML 3.x.\n"
+            "  On Ubuntu/Debian < 25.04, libsfml-dev ships SFML 2.x, build SFML 3 "
+            "from source (https://github.com/SFML/SFML/releases/tag/3.0.0) or use "
+            "the Flatpak build (see README.md).")
+    endif()
+    # Neither 3.x nor 2.x found, fall through to the canonical REQUIRED call
+    # so CMake produces its normal "package not found" diagnostic.
+    find_package(SFML 3 COMPONENTS Graphics Window System REQUIRED)
+endif()
 
 # Find GLM (package name differs between distros)
 find_package(glm CONFIG QUIET)
@@ -60,7 +79,7 @@ endif()
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
-# ── GLEW (Linux / Windows — not needed on macOS) ─────────────
+# ── GLEW (Linux / Windows, not needed on macOS) ─────────────
 # macOS uses the system OpenGL framework directly (Core Profile via
 # OpenGL/gl3.h). All other platforms need a runtime loader.
 if(NOT APPLE)
@@ -229,7 +248,7 @@ endif()
 
 # ── Shader copy: file-driven so any .frag edit triggers a re-copy ────────────
 # Using add_custom_command with OUTPUT means cmake tracks the .frag as a real
-# dependency — editing the source file causes a rebuild of the copy target,
+# dependency, editing the source file causes a rebuild of the copy target,
 # regardless of whether any C++ source changed.
 foreach(_frag BlackHole3D.frag BlackHole3D_PhotorealDisk.frag)
     add_custom_command(

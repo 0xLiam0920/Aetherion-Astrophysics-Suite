@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// config.hpp — Centralized simulation parameters and magic numbers
+// config.hpp: Centralized simulation parameters and magic numbers
 // ============================================================
 
 #include <glm/glm.hpp>

@@ -30,7 +30,7 @@ vec3 ACESFilm(vec3 x) {
 }
 
 // ── Cinematic helpers ──────────────────────────────────────
-// Integer-based hash — avoids sin() banding on some GPUs
+// Integer-based hash, avoids sin() banding on some GPUs
 float hash(vec2 p) {
     uvec2 q = uvec2(ivec2(p)) * uvec2(1597334673u, 3812015801u);
     uint n = (q.x ^ q.y) * 1597334673u;
@@ -43,7 +43,7 @@ float filmGrain(vec2 uv, float t) {
     return (hash(seed) - 0.5) * 0.018;
 }
 
-// Chromatic aberration — subtle radial RGB offset at edges
+// Chromatic aberration, subtle radial RGB offset at edges
 vec3 chromaticAberration(sampler2D tex, vec2 uv, float strength) {
     vec2 center = uv - 0.5;
     float dist = length(center);
@@ -54,7 +54,7 @@ vec3 chromaticAberration(sampler2D tex, vec2 uv, float strength) {
     return vec3(r, g, b);
 }
 
-// Cinematic vignette — darkens edges for film framing
+// Cinematic vignette, darkens edges for film framing
 float vignette(vec2 uv) {
     vec2 d = uv - 0.5;
     return 1.0 - dot(d, d) * 1.4;
@@ -95,7 +95,7 @@ void main() {
                + b3 * bloom3Weight 
                + b4 * bloom4Weight;
     
-    // Warm bloom tint — richer in cinematic mode
+    // Warm bloom tint, richer in cinematic mode
     vec3 warmTint = (cinematicMode == 1) 
         ? vec3(1.0, 0.88, 0.62) 
         : vec3(1.0, 0.9, 0.75);

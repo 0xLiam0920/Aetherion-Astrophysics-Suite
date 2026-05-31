@@ -12,7 +12,7 @@ class RayVisualizer {
 public:
     // Build colored vertices for a single photon ray into a reusable buffer.
     // Color encodes the local gravitational redshift z = 1/√f - 1.
-    // Takes an output reference to avoid per-frame heap allocation — pass the
+    // Takes an output reference to avoid per-frame heap allocation, pass the
     // same vector each frame and it will reuse its capacity after the first frame.
     static void colorByRedshift(
         const Photon& photon,

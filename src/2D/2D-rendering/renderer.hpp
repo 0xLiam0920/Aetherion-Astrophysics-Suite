@@ -1,10 +1,10 @@
 /* ------------------------------------------------ *\
-   Renderer.hpp — SFML-based 2D renderer for black hole visualization.
+   Renderer.hpp, SFML-based 2D renderer for black hole visualization.
    All visual data is pre-computed by the visualization layer; this class
    just draws shapes and sprites based on that data.
 
    Part of Aetherion Suite: https://github.com/0xLiam0920/Aetherion-Astrophysics-Suite
-\* ------------------------------------------------ */`
+\* ------------------------------------------------ */
 #pragma once
 #include <SFML/Graphics.hpp>
 #include "../2D-core/body_visual.hpp"
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <algorithm>
 
-// Renderer — keeps it dumb.  NEVER computes physics.
+// Renderer, keeps it dumb.  NEVER computes physics.
 // All visual data is pre-computed by the visualization layer.
 class Renderer {
     sf::RenderWindow& window_;
@@ -27,8 +27,19 @@ class Renderer {
     sf::Texture       diskTexture_;
     sf::Sprite        diskSprite_;
     bool              diskTextureLoaded_;
+    bool              lightMode_ = false;
 
 public:
+    // Toggle light/dark HUD palette. Affects clear colour, starfield, HUD
+    // text, and the data/controls panels. Does not retint physics visuals
+    // (horizon, jets, accretion disk) which stay scientifically meaningful.
+    void setLightMode(bool on) {
+        lightMode_ = on;
+        infoText_.setFillColor(on ? sf::Color(20, 22, 36)
+                                  : sf::Color::White);
+    }
+    bool lightMode() const { return lightMode_; }
+
     explicit Renderer(sf::RenderWindow& win)
         : window_(win)
         , horizonShape_(10.0f)
@@ -107,19 +118,53 @@ public:
     }
 
     /*--------- Frame lifecycle ---------*/
-    void beginFrame() { window_.clear(sf::Color(10, 10, 30)); }
+    void beginFrame() {
+        window_.clear(lightMode_ ? sf::Color(232, 234, 244)
+                                 : sf::Color(10, 10, 30));
+    }
     void endFrame()   { window_.display(); }
 
     /*--------- Background ---------*/
-    void drawStarfield() {
+    // Three parallax star layers with per-star twinkle and slow horizontal
+    // drift. `tSec` is total elapsed wall-clock time in seconds; pass 0 for a
+    // static field. Drift wraps modulo the viewport so there's no popping.
+    void drawStarfield(float tSec = 0.0f) {
         auto winSz = window_.getSize();
-        for (int i = 0; i < 200; ++i) {
-            float sx = std::fmod(i * 37.1234f + 300.5f, (float)winSz.x);
-            float sy = std::fmod(i * 71.4321f + 100.5f, (float)winSz.y);
-            sf::CircleShape s(1.0f);
-            s.setPosition({sx, sy});
-            s.setFillColor(sf::Color(220, 220, 255, 60));
-            window_.draw(s);
+        const float W = (float)winSz.x;
+        const float H = (float)winSz.y;
+
+        // Three layers: (count, base alpha, drift px/sec, radius, twinkle hz).
+        struct Layer { int n; float a; float vx; float r; float tw; };
+        const Layer layers[3] = {
+            { 120, 1.00f, 1.5f, 1.0f, 0.6f },  // foreground sparkle
+            {  90, 0.70f, 0.6f, 0.8f, 0.4f },  // mid
+            {  60, 0.45f, 0.25f, 0.6f, 0.25f } // distant
+        };
+
+        for (int L = 0; L < 3; ++L) {
+            const Layer& lay = layers[L];
+            for (int i = 0; i < lay.n; ++i) {
+                const float seed = (float)(i + L * 911);
+                float bx = std::fmod(seed * 37.1234f + 300.5f, W);
+                float by = std::fmod(seed * 71.4321f + 100.5f, H);
+                float sx = std::fmod(bx + tSec * lay.vx + W, W);
+                float sy = by;
+
+                // Twinkle: per-star phase, smooth sine in [0.55, 1.0].
+                float phase = seed * 1.9173f;
+                float tw = 0.775f + 0.225f * std::sin(tSec * lay.tw * 6.2831853f + phase);
+
+                sf::Color base = lightMode_ ? sf::Color(120, 130, 170)
+                                            : sf::Color(220, 220, 255);
+                base.a = (std::uint8_t)std::clamp(int(lay.a * tw * (lightMode_ ? 110.0f : 80.0f)),
+                                                  0, 255);
+
+                sf::CircleShape s(lay.r);
+                s.setOrigin({lay.r, lay.r});
+                s.setPosition({sx, sy});
+                s.setFillColor(base);
+                window_.draw(s);
+            }
         }
     }
 
@@ -139,12 +184,21 @@ public:
     }
 
     void drawAccretionDisk(sf::Vector2f center, float radiusPx) {
+        drawAccretionDisk(center, radiusPx, sf::Color::White);
+    }
+
+    // Tinted variant: applies an SFML sprite colour multiplier so the disk can
+    // be re-coloured (e.g. purple for the inspiralling secondary BH so equal-
+    // mass mergers stay visually distinguishable).
+    void drawAccretionDisk(sf::Vector2f center, float radiusPx, sf::Color tint) {
         if (!diskTextureLoaded_) return;
         float texRadius = diskTexture_.getSize().x / 2.0f;
         float scale = radiusPx / texRadius;
         diskSprite_.setScale({scale, scale});
         diskSprite_.setPosition(center);
+        diskSprite_.setColor(tint);
         window_.draw(diskSprite_);
+        diskSprite_.setColor(sf::Color::White);  // restore default for next caller
     }
 
     /*--------- Rays (vertices pre-computed by RayVisualizer) ---------*/
@@ -195,15 +249,24 @@ public:
 
     /*--------- Relativistic jet cones ---------*/
     void drawJetCones(sf::Vector2f center, float lengthPx) {
+        drawJetCones(center, lengthPx,
+                     sf::Color(120, 180, 255, 50),
+                     sf::Color(150, 200, 255, 100));
+    }
+
+    // Colour-customised jets, used by the merger renderer so the secondary BH
+    // gets purple jets matching its identity colour.
+    void drawJetCones(sf::Vector2f center, float lengthPx,
+                      sf::Color fillColor, sf::Color outlineColor) {
         // Upward jet
         sf::ConvexShape jetUp;
         jetUp.setPointCount(3);
         jetUp.setPoint(0, {center.x - 4.0f, center.y});
         jetUp.setPoint(1, {center.x + 4.0f, center.y});
         jetUp.setPoint(2, {center.x, center.y - lengthPx});
-        jetUp.setFillColor(sf::Color(120, 180, 255, 50));
+        jetUp.setFillColor(fillColor);
         jetUp.setOutlineThickness(1.0f);
-        jetUp.setOutlineColor(sf::Color(150, 200, 255, 100));
+        jetUp.setOutlineColor(outlineColor);
         window_.draw(jetUp);
 
         // Downward jet
@@ -212,9 +275,9 @@ public:
         jetDown.setPoint(0, {center.x - 4.0f, center.y});
         jetDown.setPoint(1, {center.x + 4.0f, center.y});
         jetDown.setPoint(2, {center.x, center.y + lengthPx});
-        jetDown.setFillColor(sf::Color(120, 180, 255, 50));
+        jetDown.setFillColor(fillColor);
         jetDown.setOutlineThickness(1.0f);
-        jetDown.setOutlineColor(sf::Color(150, 200, 255, 100));
+        jetDown.setOutlineColor(outlineColor);
         window_.draw(jetDown);
     }
 
@@ -262,15 +325,22 @@ public:
         float panelW = 260.0f;
         float panelX = viewW - panelW - 4.0f;
 
+        const sf::Color bgCol      = lightMode_ ? sf::Color(248, 249, 252, 235)
+                                                : sf::Color(0, 0, 0, 180);
+        const sf::Color outlineCol = lightMode_ ? sf::Color(160, 170, 200, 200)
+                                                : sf::Color(80, 120, 200, 150);
+        const sf::Color textCol    = lightMode_ ? sf::Color(20, 22, 36)
+                                                : sf::Color(200, 220, 255);
+
         sf::RectangleShape bg(sf::Vector2f(panelW, viewH - 8.0f));
         bg.setPosition({panelX, 4.0f});
-        bg.setFillColor(sf::Color(0, 0, 0, 180));
+        bg.setFillColor(bgCol);
         bg.setOutlineThickness(1.0f);
-        bg.setOutlineColor(sf::Color(80, 120, 200, 150));
+        bg.setOutlineColor(outlineCol);
         window_.draw(bg);
 
         sf::Text panelText(font_, text, 11);
-        panelText.setFillColor(sf::Color(200, 220, 255));
+        panelText.setFillColor(textCol);
         panelText.setPosition({panelX + 6.0f, 8.0f});
         window_.draw(panelText);
     }
@@ -281,16 +351,33 @@ public:
         float panelX = 4.0f;
         float panelY = 4.0f;
 
+        const sf::Color bgCol      = lightMode_ ? sf::Color(248, 249, 252, 235)
+                                                : sf::Color(0, 0, 0, 190);
+        const sf::Color outlineCol = lightMode_ ? sf::Color(150, 160, 190, 200)
+                                                : sf::Color(120, 140, 180, 150);
+        const sf::Color hdrCol     = lightMode_ ? sf::Color(180, 80, 30)
+                                                : sf::Color(255, 220, 120);
+        const sf::Color sectCol    = lightMode_ ? sf::Color(40, 80, 160, 230)
+                                                : sf::Color(160, 200, 255, 220);
+        const sf::Color lineCol    = lightMode_ ? sf::Color(30, 32, 52, 230)
+                                                : sf::Color(200, 200, 210, 200);
+        const sf::Color dividerCol = lightMode_ ? sf::Color(180, 120, 60, 200)
+                                                : sf::Color(180, 120, 60, 140);
+        const sf::Color advHdrCol  = lightMode_ ? sf::Color(180, 90, 20)
+                                                : sf::Color(220, 160, 80, 220);
+        const sf::Color advLineCol = lightMode_ ? sf::Color(60, 62, 80, 220)
+                                                : sf::Color(170, 170, 185, 180);
+
         sf::RectangleShape bg(sf::Vector2f(panelW, viewH - 8.0f));
         bg.setPosition({panelX, panelY});
-        bg.setFillColor(sf::Color(0, 0, 0, 190));
+        bg.setFillColor(bgCol);
         bg.setOutlineThickness(1.0f);
-        bg.setOutlineColor(sf::Color(120, 140, 180, 150));
+        bg.setOutlineColor(outlineCol);
         window_.draw(bg);
 
         // Header
         sf::Text header(font_, "CONTROLS  (? to hide)", 13);
-        header.setFillColor(sf::Color(255, 220, 120));
+        header.setFillColor(hdrCol);
         header.setPosition({panelX + 8.0f, panelY + 6.0f});
         window_.draw(header);
 
@@ -300,6 +387,9 @@ public:
             "--- General ---",
             "Space     Pause / resume",
             "R         Reset simulation",
+            "V         Reset view (camera)",
+            "B         Toggle light / dark",
+            "L         Open preset reference (web)",
             "- / =     Slow down / speed up",
             "?         Toggle this panel",
             "",
@@ -325,9 +415,7 @@ public:
             const char* line = primaryLines[i];
             bool isSectionHeader = (line[0] == '-');
             sf::Text lt(font_, line, 11);
-            lt.setFillColor(isSectionHeader
-                ? sf::Color(160, 200, 255, 220)
-                : sf::Color(200, 200, 210, 200));
+            lt.setFillColor(isSectionHeader ? sectCol : lineCol);
             lt.setPosition({panelX + 10.0f, y});
             window_.draw(lt);
             y += isSectionHeader ? 16.0f : 14.0f;
@@ -337,12 +425,12 @@ public:
         y += 4.0f;
         sf::RectangleShape divider(sf::Vector2f(panelW - 20.0f, 1.0f));
         divider.setPosition({panelX + 10.0f, y});
-        divider.setFillColor(sf::Color(180, 120, 60, 140));
+        divider.setFillColor(dividerCol);
         window_.draw(divider);
         y += 5.0f;
 
         sf::Text advHdr(font_, "--- Research / Debug ---", 11);
-        advHdr.setFillColor(sf::Color(220, 160, 80, 220));
+        advHdr.setFillColor(advHdrCol);
         advHdr.setPosition({panelX + 10.0f, y});
         window_.draw(advHdr);
         y += 16.0f;
@@ -363,241 +451,74 @@ public:
             "4         Tidal disruption demo",
             "5         Pulsar orbital sim",
             "6         Merger event menu",
+            "7         Custom-body creator",
+            "M         Merger pacing",
         };
         constexpr int nAdv = sizeof(advLines) / sizeof(advLines[0]);
         for (int i = 0; i < nAdv; ++i) {
             const char* line = advLines[i];
             bool isSectionHeader = (line[0] == '-');
             sf::Text lt(font_, line, 11);
-            lt.setFillColor(isSectionHeader
-                ? sf::Color(160, 200, 255, 200)
-                : sf::Color(170, 170, 185, 180));
+            lt.setFillColor(isSectionHeader ? sectCol : advLineCol);
             lt.setPosition({panelX + 10.0f, y});
             window_.draw(lt);
             y += isSectionHeader ? 16.0f : 14.0f;
         }
     }
 
-    /*--------- Pulsar body (neutron star with dynamic jets, field lines, LC ring) ---------*/
-    // spinPhase_rad  — accumulated spin rotation (drives jet direction + field line rotation)
-    // precPhase_rad  — accumulated geodetic precession (slowly tilts the spin axis)
-    // lcRadius_px    — light cylinder radius in screen pixels (<=0 = don't draw)
-    // inLC           — orbital radius is inside the light cylinder
-    // bhPos          — BH screen position (for unipolar flux tube visualization)
-    // magPower_ergs  — unipolar inductor power; controls flux tube brightness
+    /*--------- Pulsar body (clean compact-secondary look) ---------*/
+    // Mirrors drawMergerCompactSecondary's pulsar branch — kind-coloured glow +
+    // bright core + two opposed sweeping beams. Signature preserved so callers
+    // don't break; the magnetosphere / flux-tube parameters are no longer used
+    // visually (their physics is still surfaced in the HUD / data panel).
     void drawPulsarBody(sf::Vector2f screenPos,
                         float spinPhase_rad,
                         float precPhase_rad,
-                        float lcRadius_px,
-                        bool  inLC,
-                        sf::Vector2f bhPos,
-                        double magPower_ergs) {
+                        [[maybe_unused]] float lcRadius_px,
+                        [[maybe_unused]] bool  inLC,
+                        [[maybe_unused]] sf::Vector2f bhPos,
+                        [[maybe_unused]] double magPower_ergs)
+    {
+        constexpr float CORE_R    = 5.0f;
+        constexpr float GLOW_R    = 14.0f;
+        constexpr float BEAM_LEN  = 80.0f;
+        constexpr float PI        = 3.14159265f;
 
-        constexpr float NS_R       = 9.0f;   // NS core radius (px) — bright, unmistakable
-        constexpr float JET_LEN    = 110.0f; // jet half-length (px)
-        constexpr float JET_BASE   = 9.0f;   // jet half-width at NS surface (px)
-        constexpr int   N_ARC_PTS  = 20;     // arc segment count for field lines
-        constexpr float PI         = 3.14159265f;
+        // Outer soft glow
+        sf::CircleShape g(GLOW_R);
+        g.setOrigin({GLOW_R, GLOW_R});
+        g.setPosition(screenPos);
+        g.setFillColor(sf::Color(150, 200, 255, 110));
+        window_.draw(g);
 
-        // Jet direction: fast spin phase + slow geodetic precession tilt.
-        // spinPhase rotates the jet rapidly (tied to spin period);
-        // precPhase drifts the spin-axis orientation (geodetic precession).
-        float jetRad = spinPhase_rad + precPhase_rad;
-        float jcos   = std::cos(jetRad);
-        float jsin   = std::sin(jetRad);
+        // Bright core
+        sf::CircleShape c(CORE_R);
+        c.setOrigin({CORE_R, CORE_R});
+        c.setPosition(screenPos);
+        c.setFillColor(sf::Color(235, 245, 255));
+        window_.draw(c);
 
-        // ── NS core — bright cyan disc so the pulsar is unmistakably distinct ──
-        float coreR = inLC ? NS_R + 2.0f : NS_R;
-        // Outer soft glow halo
-        float haloR = coreR + 6.0f;
-        sf::CircleShape halo(haloR);
-        halo.setOrigin({haloR, haloR});
-        halo.setPosition(screenPos);
-        halo.setFillColor(sf::Color(80, 200, 255, 55));
-        halo.setOutlineThickness(0.0f);
-        window_.draw(halo);
-
-        sf::Color coreCol = inLC ? sf::Color(255, 255, 255, 255)
-                                 : sf::Color(200, 245, 255, 255);
-        sf::Color rimCol  = inLC ? sf::Color(0, 230, 255, 255)
-                                 : sf::Color(0, 200, 255, 230);
-        sf::CircleShape core(coreR);
-        core.setOrigin({coreR, coreR});
-        core.setPosition(screenPos);
-        core.setFillColor(coreCol);
-        core.setOutlineThickness(2.5f);
-        core.setOutlineColor(rimCol);
-        window_.draw(core);
-
-        // ── Relativistic jets ──────────────────────────────────────────────────
-        // Two bright tapered triangles fired from the magnetic poles, rotating
-        // with spinPhase. Uses explicit setPointCount() for SFML 3.x compatibility.
+        // Two opposed sweeping beams. Spin phase drives the sweep; precession
+        // adds a slow drift so the beam orientation isn't dead-aligned forever.
+        const float beamAng = spinPhase_rad + 0.25f * precPhase_rad;
         for (int s = 0; s < 2; ++s) {
-            float sx     = (s == 0) ? 1.0f : -1.0f;
-            float base_x = screenPos.x + sx * coreR * jcos;
-            float base_y = screenPos.y - sx * coreR * jsin;
-            float tip_x  = screenPos.x + sx * JET_LEN * jcos;
-            float tip_y  = screenPos.y - sx * JET_LEN * jsin;
-
-            // perpendicular to jet axis (Y-axis is down in screen space)
-            float px =  jsin * JET_BASE;
-            float py =  jcos * JET_BASE;
-
-            // Bright filled triangle — white-cyan, high alpha
-            sf::ConvexShape jet;
-            jet.setPointCount(3);
-            jet.setPoint(0, {tip_x,           tip_y          });
-            jet.setPoint(1, {base_x + px, base_y + py});
-            jet.setPoint(2, {base_x - px, base_y - py});
-            jet.setFillColor(sf::Color(180, 230, 255, 210));
-            jet.setOutlineThickness(1.0f);
-            jet.setOutlineColor(sf::Color(0, 210, 255, 200));
-            window_.draw(jet);
-
-            // Hot spine: bright white near NS, fading to blue at tip
-            sf::Vertex spine[2];
-            spine[0].position = {base_x, base_y};
-            spine[0].color    = sf::Color(255, 255, 255, 240);
-            spine[1].position = {tip_x,  tip_y};
-            spine[1].color    = sf::Color(40, 140, 255,  60);
-            window_.draw(spine, 2, sf::PrimitiveType::Lines);
+            const float a = beamAng + (s ? PI : 0.0f);
+            sf::Vertex line[2];
+            line[0].position = screenPos;
+            line[0].color    = sf::Color(220, 235, 255, 230);
+            line[1].position = {screenPos.x + std::cos(a) * BEAM_LEN,
+                                screenPos.y + std::sin(a) * BEAM_LEN};
+            line[1].color    = sf::Color(120, 180, 255, 0);
+            window_.draw(line, 2, sf::PrimitiveType::Lines);
         }
 
-        // ── Dipole magnetic field arcs ─────────────────────────────────────────
-        // Four dipole loops (each split into two half-arcs) that rotate with the
-        // spin phase, showing the sweeping co-rotating magnetic dipole.
-        // Arcs are gold/amber to contrast sharply with the blue jet and background.
-        for (int loop = 0; loop < 4; ++loop) {
-            float loopOffset = loop * (PI / 4.0f);
-            float arcBaseRad = jetRad + loopOffset;
-
-            // Inner loops tighter, outer loops wider — gives a 3-D layered feel.
-            float arcR = 22.0f + loop * 8.0f;
-            uint8_t arcAlpha = (uint8_t)(200 - loop * 30);  // 200, 170, 140, 110
-
-            // Alternate gold and cyan so overlapping arcs remain distinguishable.
-            sf::Color arcCol = (loop % 2 == 0)
-                ? sf::Color(255, 200,  60, arcAlpha)   // gold
-                : sf::Color( 60, 200, 255, arcAlpha);  // cyan
-
-            for (int hemi = 0; hemi < 2; ++hemi) {
-                std::vector<sf::Vertex> pts;
-                pts.reserve(N_ARC_PTS + 1);
-
-                for (int j = 0; j <= N_ARC_PTS; ++j) {
-                    float t      = (float)j / (float)N_ARC_PTS;
-                    float lambda = t * PI;
-                    float dr     = arcR * std::sin(lambda);   // dipole bulge
-                    float da     = arcBaseRad
-                                 + (hemi == 0 ? 0.0f : PI)
-                                 + (t - 0.5f) * PI;           // sweep from pole→eq→pole
-
-                    sf::Vertex v;
-                    v.position = {
-                        screenPos.x + dr * std::cos(da),
-                        screenPos.y - dr * std::sin(da)
-                    };
-                    // Fade at tips (where dr≈0) to look like field lines closing at poles
-                    float fade = std::sin(t * PI);
-                    v.color = sf::Color(arcCol.r, arcCol.g, arcCol.b,
-                                        (uint8_t)(arcAlpha * fade));
-                    pts.push_back(v);
-                }
-                window_.draw(pts.data(), pts.size(), sf::PrimitiveType::LineStrip);
-            }
-        }
-
-        // ── Light cylinder ring ────────────────────────────────────────────────
-        // Drawn as a pulsing dashed circle around the NS at screen radius lcRadius_px.
-        if (lcRadius_px > 50.0f && lcRadius_px < 2800.0f) {
-            // Animated pulse using a class-level counter (static is fine for single NS).
-            static float lcPulsePhase = 0.0f;
-            lcPulsePhase += 0.025f;
-            float pulseAlpha = 30.0f + 22.0f * std::sin(lcPulsePhase);
-            uint8_t aLC = (uint8_t)std::clamp(pulseAlpha, 8.0f, 80.0f);
-            sf::Color lcCol(100, 170, 255, aLC);
-
-            // Draw as a thin circle outline.
-            sf::CircleShape lc(lcRadius_px);
-            lc.setOrigin({lcRadius_px, lcRadius_px});
-            lc.setPosition(screenPos);
-            lc.setFillColor(sf::Color::Transparent);
-            lc.setOutlineThickness(inLC ? 1.5f : 1.0f);
-            lc.setOutlineColor(lcCol);
-            window_.draw(lc);
-
-            // Small "R_LC" label just outside the ring.
-            sf::Text lcLabel(font_, "R\u2113\u1d84", 8);
-            lcLabel.setFillColor(sf::Color(120, 180, 255, 110));
-            lcLabel.setPosition({screenPos.x + lcRadius_px + 3.0f, screenPos.y - 8.0f});
-            window_.draw(lcLabel);
-        }
-
-        // ── Unipolar flux tubes: field lines from NS magnetic poles to the BH ──
-        // Represents the magnetic coupling between the NS magnetosphere and the BH
-        // (Goldreich-Lynden-Bell unipolar inductor mechanism).
-        // Two tubes — one from each magnetic pole — arc toward the BH.
-        // Brightness scales logarithmically with magnetic power.
-        if (magPower_ergs > 1.0e20) {
-            // log10(P) mapped from ~20 (floor) to ~40 (bright compact binary)
-            float brightness = std::clamp(
-                (float)(std::log10(magPower_ergs) - 20.0) / 20.0f, 0.0f, 1.0f);
-            uint8_t tubeAlpha = (uint8_t)(20 + 100 * brightness);
-
-            sf::Vector2f ns2bh = bhPos - screenPos;
-            float dist = std::sqrt(ns2bh.x * ns2bh.x + ns2bh.y * ns2bh.y);
-
-            // Perpendicular direction (for arc bulge).
-            sf::Vector2f perp(0.0f, 0.0f);
-            if (dist > 1e-3f) perp = sf::Vector2f(-ns2bh.y / dist, ns2bh.x / dist);
-
-            // Draw two tubes, one from each pole.  The connection point on the NS
-            // rotates with the spin phase so tubes appear to sweep as the NS spins.
-            for (int pole = 0; pole < 2; ++pole) {
-                float poleAngle = jetRad + pole * PI;   // each pole is 180° apart
-                // Start point: slightly off the NS surface at the pole position.
-                sf::Vector2f start = screenPos
-                    + sf::Vector2f(std::cos(poleAngle), -std::sin(poleAngle)) * coreR;
-
-                // Control point for quadratic Bézier: bulge perpendicular to NS-BH line.
-                float bulge = dist * 0.25f * std::sin(spinPhase_rad + pole * PI);
-                sf::Vector2f ctrl = screenPos + ns2bh * 0.5f + perp * bulge;
-
-                // End point: BH horizon surface.
-                sf::Vector2f toBH = (dist > 1e-3f) ? ns2bh / dist : sf::Vector2f(1.0f, 0.0f);
-                float bhR = std::max(6.0f, dist * 0.05f);  // crude horizon radius estimate, since 
-                sf::Vector2f end = bhPos - toBH * bhR;
-
-                // Quadratic Bézier: P(t) = (1-t)² P0 + 2(1-t)t P1 + t² P2
-                const int N_TUBE = 14;
-                std::vector<sf::Vertex> pts;
-                pts.reserve(N_TUBE + 1);
-                for (int k = 0; k <= N_TUBE; ++k) {
-                    float t  = (float)k / (float)N_TUBE;
-                    float mt = 1.0f - t;
-                    sf::Vector2f p = mt * mt * start + 2.0f * mt * t * ctrl + t * t * end;
-                    // Alpha: brighter in the middle of the arc.
-                    uint8_t alpha = (uint8_t)(tubeAlpha * std::sin(t * PI));
-                    sf::Vertex v;
-                    v.position = p;
-                    // Colour: cyan-blue, slightly more orange near the BH (hot end).
-                    uint8_t r_ch = (uint8_t)(80 + (uint8_t)(60 * t));
-                    v.color = sf::Color(r_ch, 160, (uint8_t)(255 - 60 * t), alpha);
-                    pts.push_back(v);
-                }
-                window_.draw(pts.data(), pts.size(), sf::PrimitiveType::LineStrip);
-            }
-
-            // Small glow at the BH endpoint (flux tube attachment to horizon).
-            float glowR = 4.0f + 3.0f * brightness;
-            sf::CircleShape glowDot(glowR);
-            glowDot.setOrigin({glowR, glowR});
-            glowDot.setPosition(bhPos);
-            glowDot.setFillColor(sf::Color(160, 200, 255, tubeAlpha / 2));
-            glowDot.setOutlineThickness(0.0f);
-            window_.draw(glowDot);
-        }
+        // Small label so the pulsar is unmistakable.
+        sf::Text lbl(font_, "Pulsar", 10);
+        lbl.setFillColor(sf::Color(220, 230, 255));
+        lbl.setPosition({screenPos.x + GLOW_R + 3.0f, screenPos.y - 7.0f});
+        window_.draw(lbl);
     }
+
 
     /*--------- Time dilation heatmap (concentric rings) ---------*/
     void drawTimeDilationMap(sf::Vector2f center, double M, double pixelsPerM) {
@@ -671,10 +592,27 @@ public:
         window_.draw(notif);
     }
 
-    /*--------- Merger: incoming BH dot ---------*/
-    // Draws the secondary BH as a dark circle with a subtle glow, approaching the primary.
-    void drawMergerBH(sf::Vector2f pos, float radiusPx) {
-        // Outer glow
+    /*--------- Merger: incoming BH ---------*/
+    // Draws the secondary BH at `pos`. Renders (in order) accretion disk (if
+    // diskPx > 0), purple jets (if jetLenPx > 0), purple outer glow, the dark
+    // horizon core with a purple rim, and a label. The disk and jets are
+    // tinted purple so the secondary stays visually distinct from the primary
+    // even in an equal-mass merger.
+    void drawMergerBH(sf::Vector2f pos, float radiusPx,
+                      float diskPx = 0.0f, float jetLenPx = 0.0f) {
+        // Accretion disk first (drawn beneath the horizon)
+        if (diskPx > radiusPx + 0.5f) {
+            drawAccretionDisk(pos, diskPx, sf::Color(210, 140, 255, 220));
+        }
+
+        // Relativistic jets for AGN-class secondaries
+        if (jetLenPx > 0.0f) {
+            drawJetCones(pos, jetLenPx,
+                         sf::Color(200, 120, 255, 55),
+                         sf::Color(220, 160, 255, 130));
+        }
+
+        // Outer glow (always)
         float glowR = radiusPx + 6.0f;
         sf::CircleShape glow(glowR);
         glow.setOrigin({glowR, glowR});
@@ -695,6 +633,61 @@ public:
         sf::Text lbl(font_, "Incoming BH", 10);
         lbl.setFillColor(sf::Color(200, 160, 255));
         lbl.setPosition({pos.x + radiusPx + 4.0f, pos.y - 7.0f});
+        window_.draw(lbl);
+    }
+
+    // Compact / stellar secondary during inspiral. Not a black hole — just a
+    // bright point with a kind-appropriate colour and label.
+    // kindCode matches Simulation::MergerSecondaryKind: 1=NS, 2=Pulsar,
+    // 3=Star, 4=WhiteDwarf (caller passes int to avoid header coupling).
+    void drawMergerCompactSecondary(sf::Vector2f pos, int kindCode, double phase) {
+        sf::Color core, glow;
+        const char* label = "Secondary";
+        float coreR = 3.5f;
+        float glowR = 9.0f;
+        switch (kindCode) {
+            case 1: core = sf::Color(220, 235, 255); glow = sf::Color(120, 180, 255, 90);
+                    label = "Neutron star"; break;
+            case 2: core = sf::Color(235, 245, 255); glow = sf::Color(150, 200, 255, 110);
+                    label = "Pulsar";        coreR = 4.0f; break;
+            case 3: core = sf::Color(255, 230, 160); glow = sf::Color(255, 200, 100, 110);
+                    label = "Star";          coreR = 4.5f; glowR = 12.0f; break;
+            case 4: core = sf::Color(245, 245, 255); glow = sf::Color(200, 220, 255, 100);
+                    label = "White dwarf";   coreR = 3.0f; break;
+            default: core = sf::Color::White; glow = sf::Color(200, 200, 255, 80); break;
+        }
+
+        sf::CircleShape g(glowR);
+        g.setOrigin({glowR, glowR});
+        g.setPosition(pos);
+        g.setFillColor(glow);
+        window_.draw(g);
+
+        sf::CircleShape c(coreR);
+        c.setOrigin({coreR, coreR});
+        c.setPosition(pos);
+        c.setFillColor(core);
+        window_.draw(c);
+
+        // Pulsar beam — two thin opposed rays that sweep with the orbital phase.
+        if (kindCode == 2) {
+            const float beamLen = 22.0f;
+            const float beamAng = static_cast<float>(phase * 4.0); // sweeps ~4x orbit rate
+            for (int s = 0; s < 2; ++s) {
+                const float a = beamAng + (s ? 3.14159265f : 0.0f);
+                sf::Vertex line[2];
+                line[0].position = pos;
+                line[0].color    = sf::Color(220, 235, 255, 220);
+                line[1].position = {pos.x + std::cos(a) * beamLen,
+                                    pos.y + std::sin(a) * beamLen};
+                line[1].color    = sf::Color(120, 180, 255, 0);
+                window_.draw(line, 2, sf::PrimitiveType::Lines);
+            }
+        }
+
+        sf::Text lbl(font_, label, 10);
+        lbl.setFillColor(sf::Color(220, 230, 255));
+        lbl.setPosition({pos.x + glowR + 3.0f, pos.y - 7.0f});
         window_.draw(lbl);
     }
 
@@ -738,19 +731,44 @@ public:
     }
 
     /*--------- Merger: selection menu overlay ---------*/
-    // presets / numPresets: the BH preset table (includes "Custom" as the last entry)
-    // state: current menu navigation state from UIState::MergerMenuState
-    template<typename MergerMenuState, typename BHPreset>
+    // presets / numPresets: the BH preset table.
+    // secondaries / numSecondaries: compact / stellar secondaries (NS / Pulsar /
+    // Star / WD), rendered between the BH list and the trailing “Custom” row.
+    // The compact list is optional — pass nullptr/0 to render only BH presets +
+    // Custom (legacy behaviour, used by 3D / other callers).
+    template<typename MergerMenuState, typename BHPreset, typename SecondaryPreset = int>
     void drawMergerMenu(const MergerMenuState& state,
                         const BHPreset* presets, int numPresets,
-                        float viewW, float viewH)
+                        float viewW, float viewH,
+                        const SecondaryPreset* secondaries = nullptr,
+                        int numSecondaries = 0)
     {
+        // Theme palette
+        const bool L = lightMode_;
+        const sf::Color BG_FILL    = L ? sf::Color(248, 249, 252, 235) : sf::Color(8, 8, 24, 230);
+        const sf::Color BG_OUTLINE = L ? sf::Color(150, 90, 200, 220) : sf::Color(160, 80, 255, 200);
+        const sf::Color TITLE_COL  = L ? sf::Color(120, 40, 160)      : sf::Color(220, 160, 255);
+        const sf::Color SUB_COL    = L ? sf::Color(80, 80, 120, 220)  : sf::Color(160, 160, 200, 200);
+        const sf::Color DIV_COL    = L ? sf::Color(150, 90, 200, 110) : sf::Color(160, 80, 255, 120);
+        const sf::Color SEL_FILL   = L ? sf::Color(150, 90, 200, 60)  : sf::Color(160, 60, 255, 80);
+        const sf::Color ARROW_COL  = L ? sf::Color(120, 40, 160)      : sf::Color(220, 160, 255);
+        const sf::Color BH_NAME_SEL = L ? sf::Color(60, 20, 90)       : sf::Color(255, 220, 255);
+        const sf::Color BH_NAME     = L ? sf::Color(30, 32, 48)       : sf::Color(210, 210, 230);
+        const sf::Color BH_MASS     = L ? sf::Color(40, 80, 140, 200) : sf::Color(160, 200, 255, 180);
+        const sf::Color SEC_NAME_SEL = L ? sf::Color(20, 80, 50)      : sf::Color(220, 255, 230);
+        const sf::Color SEC_NAME     = L ? sf::Color(40, 100, 70)     : sf::Color(190, 230, 210);
+        const sf::Color SEC_KIND     = L ? sf::Color(40, 120, 100, 200) : sf::Color(160, 220, 200, 180);
+        const sf::Color CUST_SEL    = L ? sf::Color(140, 100, 20)     : sf::Color(255, 255, 180);
+        const sf::Color CUST_NORM   = L ? sf::Color(120, 90, 40)      : sf::Color(210, 210, 160);
+        const sf::Color DIV2_COL    = L ? sf::Color(150, 90, 200, 80) : sf::Color(160, 80, 255, 80);
+        const sf::Color HINT_COL    = L ? sf::Color(90, 90, 120, 200) : sf::Color(140, 140, 170, 180);
+
         constexpr float PANEL_W  = 440.0f;
         constexpr float ROW_H    = 18.0f;
         constexpr float HEADER_H = 48.0f;
         constexpr float FOOTER_H = 36.0f;
-        // Total rows: numPresets + 1 (Custom)
-        int totalRows = numPresets + 1;
+        // Row layout: BH presets, compact secondaries, then a single Custom row.
+        int totalRows = numPresets + numSecondaries + 1;
         float panelH  = HEADER_H + totalRows * ROW_H + FOOTER_H + 8.0f;
         float panelX  = (viewW - PANEL_W) * 0.5f;
         float panelY  = (viewH - panelH)  * 0.5f;
@@ -758,26 +776,26 @@ public:
         // Background
         sf::RectangleShape bg(sf::Vector2f(PANEL_W, panelH));
         bg.setPosition({panelX, panelY});
-        bg.setFillColor(sf::Color(8, 8, 24, 230));
+        bg.setFillColor(BG_FILL);
         bg.setOutlineThickness(2.0f);
-        bg.setOutlineColor(sf::Color(160, 80, 255, 200));
+        bg.setOutlineColor(BG_OUTLINE);
         window_.draw(bg);
 
         // Title
         sf::Text title(font_, "MERGER EVENT  (Enter: select  Esc: cancel)", 13);
-        title.setFillColor(sf::Color(220, 160, 255));
+        title.setFillColor(TITLE_COL);
         title.setPosition({panelX + 10.0f, panelY + 8.0f});
         window_.draw(title);
 
         sf::Text subtitle(font_, "Choose the merging black hole:", 11);
-        subtitle.setFillColor(sf::Color(160, 160, 200, 200));
+        subtitle.setFillColor(SUB_COL);
         subtitle.setPosition({panelX + 10.0f, panelY + 26.0f});
         window_.draw(subtitle);
 
         // Divider
         sf::RectangleShape div(sf::Vector2f(PANEL_W - 20.0f, 1.0f));
         div.setPosition({panelX + 10.0f, panelY + HEADER_H - 4.0f});
-        div.setFillColor(sf::Color(160, 80, 255, 120));
+        div.setFillColor(DIV_COL);
         window_.draw(div);
 
         // Preset rows
@@ -791,38 +809,54 @@ public:
             return os.str();
         };
 
-        for (int i = 0; i <= numPresets; ++i) {
+        for (int i = 0; i < totalRows; ++i) {
             bool isSelected = (state.selectedIdx == i);
-            bool isCustom   = (i == numPresets);
+            bool isBH       = (i < numPresets);
+            bool isSecondary = (!isBH && i < numPresets + numSecondaries);
+            bool isCustom   = (!isBH && !isSecondary);
 
             // Highlight bar
             if (isSelected) {
                 sf::RectangleShape sel(sf::Vector2f(PANEL_W - 12.0f, ROW_H - 1.0f));
                 sel.setPosition({panelX + 6.0f, rowY + 1.0f});
-                sel.setFillColor(sf::Color(160, 60, 255, 80));
+                sel.setFillColor(SEL_FILL);
                 window_.draw(sel);
             }
 
             // Cursor arrow
             sf::Text arrow(font_, isSelected ? ">" : " ", 11);
-            arrow.setFillColor(sf::Color(220, 160, 255));
+            arrow.setFillColor(ARROW_COL);
             arrow.setPosition({panelX + 8.0f, rowY + 2.0f});
             window_.draw(arrow);
 
-            if (!isCustom) {
+            if (isBH) {
                 // Name
                 sf::Text name(font_, presets[i].name, 11);
-                name.setFillColor(isSelected ? sf::Color(255, 220, 255) : sf::Color(210, 210, 230));
+                name.setFillColor(isSelected ? BH_NAME_SEL : BH_NAME);
                 name.setPosition({panelX + 22.0f, rowY + 2.0f});
                 window_.draw(name);
 
                 // Mass (right-aligned)
                 std::string massStr = formatMass(presets[i].massSolar);
                 sf::Text massText(font_, massStr, 10);
-                massText.setFillColor(sf::Color(160, 200, 255, 180));
+                massText.setFillColor(BH_MASS);
                 float massX = panelX + PANEL_W - massText.getLocalBounds().size.x - 14.0f;
                 massText.setPosition({massX, rowY + 3.0f});
                 window_.draw(massText);
+            } else if (isSecondary) {
+                const auto& sec = secondaries[i - numPresets];
+                sf::Text name(font_, sec.name, 11);
+                name.setFillColor(isSelected ? SEC_NAME_SEL : SEC_NAME);
+                name.setPosition({panelX + 22.0f, rowY + 2.0f});
+                window_.draw(name);
+
+                std::ostringstream rightOs;
+                rightOs << sec.kindLabel << "  " << formatMass(sec.massSolar);
+                sf::Text rightText(font_, rightOs.str(), 10);
+                rightText.setFillColor(SEC_KIND);
+                float rightX = panelX + PANEL_W - rightText.getLocalBounds().size.x - 14.0f;
+                rightText.setPosition({rightX, rowY + 3.0f});
+                window_.draw(rightText);
             } else {
                 // Custom row
                 std::string customLabel = "Custom BH";
@@ -832,7 +866,7 @@ public:
                     customLabel = "Custom BH  (press Enter, then type mass in solar masses)";
                 }
                 sf::Text cust(font_, customLabel, 11);
-                cust.setFillColor(isSelected ? sf::Color(255, 255, 180) : sf::Color(210, 210, 160));
+                cust.setFillColor(isSelected ? CUST_SEL : CUST_NORM);
                 cust.setPosition({panelX + 22.0f, rowY + 2.0f});
                 window_.draw(cust);
             }
@@ -843,12 +877,180 @@ public:
         // Footer hint
         sf::RectangleShape div2(sf::Vector2f(PANEL_W - 20.0f, 1.0f));
         div2.setPosition({panelX + 10.0f, rowY + 2.0f});
-        div2.setFillColor(sf::Color(160, 80, 255, 80));
+        div2.setFillColor(DIV2_COL);
         window_.draw(div2);
 
         sf::Text hint(font_, "Up/Down: navigate   Enter: confirm   Esc: cancel", 10);
-        hint.setFillColor(sf::Color(140, 140, 170, 180));
+        hint.setFillColor(HINT_COL);
         hint.setPosition({panelX + 10.0f, rowY + 6.0f});
+        window_.draw(hint);
+    }
+
+    /*--------- Custom-body creator menu overlay ---------*/
+    // Fields: 0=name, 1=type (cycled with Left/Right), 2=semi-major (M), 3=ecc.
+    // focusedField >= 4 indexes into the saved-presets list.
+    // PresetList must be iterable and each element must expose .name (string-like),
+    // .semiMajorM (double), .ecc (double), .type (GalaxyBodyType-compatible).
+    template<typename CustomBodyMenuState, typename PresetList, typename TypeNameFn>
+    void drawCustomBodyMenu(const CustomBodyMenuState& state,
+                            const char* typeLabel,
+                            const PresetList& presets,
+                            TypeNameFn typeNameFn,
+                            float viewW, float viewH)
+    {
+        // Theme palette
+        const bool L = lightMode_;
+        const sf::Color BG_FILL    = L ? sf::Color(248, 250, 249, 235) : sf::Color(10, 12, 24, 235);
+        const sf::Color BG_OUTLINE = L ? sf::Color(40, 150, 110, 220)  : sf::Color(80, 200, 160, 220);
+        const sf::Color TITLE_COL  = L ? sf::Color(20, 90, 60)         : sf::Color(200, 255, 220);
+        const sf::Color SUB_COL    = L ? sf::Color(60, 110, 90, 220)   : sf::Color(160, 200, 180, 200);
+        const sf::Color DIV_COL    = L ? sf::Color(40, 150, 110, 110)  : sf::Color(80, 200, 160, 120);
+        const sf::Color ROW_SEL    = L ? sf::Color(40, 170, 120, 65)   : sf::Color(60, 200, 160, 70);
+        const sf::Color LAB_SEL    = L ? sf::Color(10, 60, 40)         : sf::Color(220, 255, 235);
+        const sf::Color LAB_NORM   = L ? sf::Color(30, 50, 40)         : sf::Color(200, 220, 210);
+        const sf::Color VAL_SEL    = L ? sf::Color(140, 100, 20)       : sf::Color(255, 255, 200);
+        const sf::Color VAL_NORM   = L ? sf::Color(40, 80, 60)         : sf::Color(200, 230, 220);
+        const sf::Color LIST_DIV   = L ? sf::Color(40, 150, 110, 90)   : sf::Color(80, 200, 160, 80);
+        const sf::Color HDR_COL    = L ? sf::Color(30, 90, 70)         : sf::Color(180, 230, 210);
+        const sf::Color LIST_SEL   = L ? sf::Color(40, 170, 120, 85)   : sf::Color(60, 200, 160, 90);
+        const sf::Color NAME_NORM  = L ? sf::Color(30, 60, 50)         : sf::Color(210, 230, 220);
+        const sf::Color RHS_NORM   = L ? sf::Color(60, 110, 90)        : sf::Color(170, 200, 185);
+        const sf::Color RHS_SEL    = L ? sf::Color(120, 90, 20)        : sf::Color(220, 245, 230);
+        const sf::Color HINT_COL   = L ? sf::Color(70, 110, 90, 220)   : sf::Color(140, 180, 160, 200);
+
+        constexpr float PANEL_W      = 460.0f;
+        constexpr float ROW_H        = 24.0f;
+        constexpr float HEADER_H     = 46.0f;
+        constexpr float FOOTER_H     = 40.0f;
+        constexpr float PRESETS_HDR  = 22.0f;
+        const int   nInput = 4;
+        const int   nPresets = (int)presets.size();
+        const int   listRows = std::min(nPresets, 8);
+        const float listH    = listRows > 0 ? (PRESETS_HDR + listRows * ROW_H + 4.0f) : 0.0f;
+        const float panelH   = HEADER_H + nInput * ROW_H + listH + FOOTER_H + 10.0f;
+        const float panelX   = (viewW - PANEL_W) * 0.5f;
+        const float panelY   = (viewH - panelH) * 0.5f;
+
+        sf::RectangleShape bg(sf::Vector2f(PANEL_W, panelH));
+        bg.setPosition({panelX, panelY});
+        bg.setFillColor(BG_FILL);
+        bg.setOutlineThickness(1.5f);
+        bg.setOutlineColor(BG_OUTLINE);
+        window_.draw(bg);
+
+        sf::Text title(font_, "Create custom body", 14);
+        title.setStyle(sf::Text::Bold);
+        title.setFillColor(TITLE_COL);
+        title.setPosition({panelX + 12.0f, panelY + 10.0f});
+        window_.draw(title);
+
+        sf::Text sub(font_, "Spawned around the primary BH (saved to disk)", 10);
+        sub.setFillColor(SUB_COL);
+        sub.setPosition({panelX + 12.0f, panelY + 28.0f});
+        window_.draw(sub);
+
+        sf::RectangleShape div(sf::Vector2f(PANEL_W - 20.0f, 1.0f));
+        div.setPosition({panelX + 10.0f, panelY + HEADER_H - 2.0f});
+        div.setFillColor(DIV_COL);
+        window_.draw(div);
+
+        auto drawRow = [&](float y, int idx, const char* label, const std::string& value,
+                           bool isType, bool isText) {
+            const bool focused = (state.focusedField == idx);
+            if (focused) {
+                sf::RectangleShape sel(sf::Vector2f(PANEL_W - 12.0f, ROW_H - 4.0f));
+                sel.setPosition({panelX + 6.0f, y});
+                sel.setFillColor(ROW_SEL);
+                window_.draw(sel);
+            }
+            sf::Text lab(font_, label, 11);
+            lab.setFillColor(focused ? LAB_SEL : LAB_NORM);
+            lab.setPosition({panelX + 14.0f, y + 4.0f});
+            window_.draw(lab);
+
+            std::string shown = value;
+            if (focused && isText) shown += "_";
+            if (focused && isType) shown = std::string("< ") + value + " >";
+            if (shown.empty() && isText && !focused) shown = "(auto)";
+            sf::Text val(font_, shown, 11);
+            val.setFillColor(focused ? VAL_SEL : VAL_NORM);
+            float vx = panelX + PANEL_W - val.getLocalBounds().size.x - 16.0f;
+            val.setPosition({vx, y + 4.0f});
+            window_.draw(val);
+        };
+
+        const float inputBaseY = panelY + HEADER_H;
+        drawRow(inputBaseY + 0 * ROW_H + 2.0f, 0, "Name",                state.nameInput, false, true);
+        drawRow(inputBaseY + 1 * ROW_H + 2.0f, 1, "Type",                typeLabel,       true,  false);
+        drawRow(inputBaseY + 2 * ROW_H + 2.0f, 2, "Semi-major axis (M)", state.smInput,   false, true);
+        drawRow(inputBaseY + 3 * ROW_H + 2.0f, 3, "Eccentricity",        state.eccInput,  false, true);
+
+        float listY = inputBaseY + nInput * ROW_H + 6.0f;
+        if (listRows > 0) {
+            sf::RectangleShape divL(sf::Vector2f(PANEL_W - 20.0f, 1.0f));
+            divL.setPosition({panelX + 10.0f, listY});
+            divL.setFillColor(LIST_DIV);
+            window_.draw(divL);
+
+            std::ostringstream hdr;
+            hdr << "Saved presets (" << nPresets << ")";
+            sf::Text hdrT(font_, hdr.str(), 11);
+            hdrT.setStyle(sf::Text::Bold);
+            hdrT.setFillColor(HDR_COL);
+            hdrT.setPosition({panelX + 12.0f, listY + 4.0f});
+            window_.draw(hdrT);
+
+            // Scroll window: anchor so focused row stays visible.
+            int focusedPreset = state.focusedField - nInput;
+            int firstShown = 0;
+            if (focusedPreset >= 0 && nPresets > listRows) {
+                firstShown = std::clamp(focusedPreset - listRows / 2,
+                                        0, nPresets - listRows);
+            }
+
+            for (int i = 0; i < listRows; ++i) {
+                int presetIdx = firstShown + i;
+                if (presetIdx >= nPresets) break;
+                const auto& p = presets[presetIdx];
+                const float y = listY + PRESETS_HDR + i * ROW_H;
+                int rowField = nInput + presetIdx;
+                bool focused = (state.focusedField == rowField);
+                if (focused) {
+                    sf::RectangleShape sel(sf::Vector2f(PANEL_W - 12.0f, ROW_H - 4.0f));
+                    sel.setPosition({panelX + 6.0f, y});
+                    sel.setFillColor(LIST_SEL);
+                    window_.draw(sel);
+                }
+                sf::Text nameT(font_, p.name, 11);
+                nameT.setFillColor(focused ? VAL_SEL : NAME_NORM);
+                nameT.setPosition({panelX + 14.0f, y + 4.0f});
+                window_.draw(nameT);
+
+                std::ostringstream rhs;
+                rhs << typeNameFn(p.type)
+                    << "  a=" << std::fixed << std::setprecision(1) << p.semiMajorM
+                    << "M  e=" << std::setprecision(2) << p.ecc;
+                sf::Text rhsT(font_, rhs.str(), 10);
+                rhsT.setFillColor(focused ? RHS_SEL : RHS_NORM);
+                float vx = panelX + PANEL_W - rhsT.getLocalBounds().size.x - 16.0f;
+                rhsT.setPosition({vx, y + 5.0f});
+                window_.draw(rhsT);
+            }
+        }
+
+        float footY = panelY + panelH - FOOTER_H + 6.0f;
+        sf::RectangleShape div2(sf::Vector2f(PANEL_W - 20.0f, 1.0f));
+        div2.setPosition({panelX + 10.0f, footY});
+        div2.setFillColor(LIST_DIV);
+        window_.draw(div2);
+
+        const bool onPreset = (state.focusedField >= nInput);
+        const char* hintTxt = onPreset
+            ? "Up/Down: row   Enter: spawn preset   Del: remove   Esc: cancel"
+            : "Tab/Up/Down: field   Left/Right: cycle type   Enter: spawn + save   Esc: cancel";
+        sf::Text hint(font_, hintTxt, 10);
+        hint.setFillColor(HINT_COL);
+        hint.setPosition({panelX + 10.0f, footY + 6.0f});
         window_.draw(hint);
     }
 
@@ -863,9 +1065,12 @@ public:
 
     // flashPos: screen coords of disruption point
     // flashAlpha: 0 (no flash) to 1 (peak flash), derived from flashTimer/FLASH_DURATION
+    // label: short overlay text (e.g. "TIDAL DISRUPTION EVENT", "MERGER REMNANT").
+    //        If null, no label is drawn.
     void drawTidalEvent(sf::Vector2f flashPos, float flashAlpha,
                         const std::vector<TidalParticleVis>& particles,
-                        bool showLabel) {
+                        bool showLabel,
+                        const char* label = "TIDAL DISRUPTION EVENT") {
         // Localised expanding ring flash
         if (flashAlpha > 0.0f) {
             float t = 1.0f - flashAlpha;  // 0 = just triggered, 1 = faded
@@ -911,8 +1116,8 @@ public:
         }
 
         // Notification label near the disruption point
-        if (showLabel) {
-            sf::Text lbl(font_, "TIDAL DISRUPTION EVENT", 13);
+        if (showLabel && label && label[0]) {
+            sf::Text lbl(font_, label, 13);
             lbl.setFillColor(sf::Color(255, 140, 40, 220));
             lbl.setPosition({flashPos.x - 110.0f, flashPos.y + 32.0f});
             window_.draw(lbl);

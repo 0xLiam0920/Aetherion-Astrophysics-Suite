@@ -1,7 +1,7 @@
 /*
     app_state.hpp
     Shared state types for the Aetherion main menu.
-    All pages and the registry depend on this header — keep it minimal.
+    All pages and the registry depend on this header, keep it minimal.
 */
 #pragma once
 

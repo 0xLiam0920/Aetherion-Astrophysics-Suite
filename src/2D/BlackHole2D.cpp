@@ -62,8 +62,12 @@ static std::string buildHUD(const Simulation& sim, const UIState& ui) {
         double r_h_light_days = r_h_m / (units::c_SI * 86400.0);
 
         const auto& preset = BH2D_PRESETS[ui.presetIdx];
+        const double currentMsun = sim.currentMassSolar();
         ss << "Preset: " << preset.name
-           << " (" << pretty(preset.massSolar) << " Msun)\n";
+           << " (" << pretty(preset.massSolar) << " Msun";
+        if (sim.merger.completed)
+            ss << " → " << pretty(currentMsun) << " Msun post-merger";
+        ss << ")\n";
         ss << preset.description << "\n";
         ss << "M (geom) = " << pretty(M) << " m\n";
         ss << "Event horizon r_h = " << pretty(r_h_m) << " m ("
@@ -77,13 +81,17 @@ static std::string buildHUD(const Simulation& sim, const UIState& ui) {
         // Galaxy system body summary
         if (sim.galaxySystemActive) {
             int nStars = 0, nGas = 0, nCluster = 0, nDwarf = 0;
+            int nNS = 0, nWD = 0, nComp = 0;
             for (const auto& b : sim.bodies) {
                 if (!b.isGalaxyBody) continue;
                 switch (b.bodyType) {
-                    case GalaxyBodyType::Star: nStars++; break;
-                    case GalaxyBodyType::GasCloud: nGas++; break;
+                    case GalaxyBodyType::Star:           nStars++;   break;
+                    case GalaxyBodyType::GasCloud:       nGas++;     break;
                     case GalaxyBodyType::StellarCluster: nCluster++; break;
-                    case GalaxyBodyType::DwarfGalaxy: nDwarf++; break;
+                    case GalaxyBodyType::DwarfGalaxy:    nDwarf++;   break;
+                    case GalaxyBodyType::NeutronStar:    nNS++;      break;
+                    case GalaxyBodyType::WhiteDwarf:     nWD++;      break;
+                    case GalaxyBodyType::CompanionStar:  nComp++;    break;
                 }
             }
             ss << "Galaxy system: ";
@@ -91,6 +99,9 @@ static std::string buildHUD(const Simulation& sim, const UIState& ui) {
             if (nGas)     ss << nGas << " gas clouds ";
             if (nCluster) ss << nCluster << " clusters ";
             if (nDwarf)   ss << nDwarf << " dwarfs ";
+            if (nNS)      ss << nNS << " neutron stars ";
+            if (nWD)      ss << nWD << " white dwarfs ";
+            if (nComp)    ss << nComp << " companions ";
             ss << "\n";
 
             if (ui.showInfluenceZones && preset.isGalacticCenter) {
@@ -165,6 +176,7 @@ int main(int argc, char* argv[]) {
 
     Simulation sim;
     sim.rebuildPhotons(WIN_H);
+    sim.loadCustomPresets();
 
     Camera   camera{ sim.params.pixelsPerM, (float)WIN_W, (float)WIN_H };
     Renderer renderer(window);
@@ -218,7 +230,8 @@ int main(int argc, char* argv[]) {
     renderer.resetView(camera.viewWidth, camera.viewHeight);
 
     sf::Clock clock;
-    std::vector<sf::Vertex> rayVertScratch; // reusable scratch buffer — before this existed we were allocating a new vector every frame for every ray.
+    sf::Clock bgClock;   // separate clock so background drift is independent of paused state
+    std::vector<sf::Vertex> rayVertScratch; // reusable scratch buffer, before this existed we were allocating a new vector every frame for every ray.
                                              // at 120 rays × 60fps that was generating ~7200 heap allocations per second just for ray drawing.
                                              // embarrassing in retrospect but at least it's fixed now
 
@@ -248,7 +261,7 @@ int main(int argc, char* argv[]) {
             if (evOpt->is<sf::Event::Closed>()) { window.close(); continue; }
 
             // Handle window resize / fullscreen: update view + camera
-            // SFML 3.x changed how resize events work vs 2.x — this tripped me up for a while.
+            // SFML 3.x changed how resize events work vs 2.x, this tripped me up for a while.
             // the view needs to be explicitly reset or everything stays at the old dimensions
             // and you get stretched/clipped rendering. fun bug to track down at midnight.
             if (auto* resized = evOpt->getIf<sf::Event::Resized>()) {
@@ -267,13 +280,28 @@ int main(int argc, char* argv[]) {
             sim.update(dt * ui.timeScale);
         hudRefreshAccum += dt;
 
+        // Auto-zoom during merger inspiral so both BHs stay framed even at
+        // extreme mass ratios. Skip when finished or during the post-merger
+        // flash so the remnant shot isn't suddenly rescaled.
+        if (sim.merger.active && sim.merger.flashTimer <= 0.0 && sim.merger.r_M > 0.0) {
+            const double sepM = sim.merger.r_M * sim.bh.metric.M;
+            const double halfExtentM = sepM * 1.35 + 4.0 * sim.bh.metric.M;
+            const double targetHalfPx = std::min(camera.viewWidth, camera.viewHeight) * 0.40;
+            double targetPpm = targetHalfPx / std::max(halfExtentM, 1e-9);
+            // Don't let auto-zoom blow the horizon up past ~250 px wide as r→0.
+            const double ppmHorizonCap = 125.0 / std::max(sim.bh.metric.M, 1e-9);
+            targetPpm = std::min(targetPpm, ppmHorizonCap);
+            const double k = std::clamp(dt * 2.5, 0.0, 0.25);
+            sim.params.pixelsPerM = sim.params.pixelsPerM + (targetPpm - sim.params.pixelsPerM) * k;
+        }
+
         camera.pixelsPerM = sim.params.pixelsPerM;
         sf::Vector2f center = camera.center();
         double M = sim.bh.metric.M;
 
         // ── Barycentric binary mode (Gaia BH1 / BH2 / BH3) ────────────────────
         // For these systems the companion mass is significant enough that the BH
-        // visibly wobbles around the shared center of mass — exactly the signal
+        // visibly wobbles around the shared center of mass, exactly the signal
         // Gaia measured astrometrically.  The Schwarzschild physics is still
         // integrated in BH-centred coords, but at render time we:
         //   • keep the *barycenter* at screen centre
@@ -303,6 +331,28 @@ int main(int argc, char* argv[]) {
             barycentricMode = true;
         }
 
+        // Merger barycentric mode: while the secondary is spiralling in, the
+        // primary BH visibly orbits the common centre of mass too. We treat the
+        // sim origin as the barycentre and offset the primary draw position by
+        //   r_primary = -q * sep * [cos(phi), sin(phi)]
+        // All primary visualisations (horizon, disk, photon sphere, bodies)
+        // pick up this offset because they’re drawn relative to bhCenter.
+        if (sim.merger.active && sim.merger.flashTimer <= 0.0) {
+            const double q   = sim.merger.massRatioQ;
+            // Honesty gate: the primary doesn’t actually move in the body
+            // integrator (see TODO(physics-honesty) in simulation.hpp). Only
+            // wobble the renderer when the lie is visually justified — i.e.
+            // when q is high enough that a stationary primary would look
+            // obviously wrong. Below q=0.05 the offset is sub-pixel anyway
+            // and we get to be honest for free.
+            if (q >= 0.05) {
+                const double sep = sim.merger.r_M * M;
+                const double bx  = q * sep * std::cos(sim.merger.phi);
+                const double by  = q * sep * std::sin(sim.merger.phi);
+                bhCenter = camera.worldToScreen((float)(-bx), (float)(-by));
+            }
+        }
+
         // Rebuild HUD text only when relevant simulation state changes
         if (hudRefreshAccum >= HUD_REFRESH_SECONDS || hudNeedsRebuild()) {
             cachedHUD = buildHUD(sim, ui);
@@ -316,8 +366,9 @@ int main(int argc, char* argv[]) {
         }
 
         /*--------- Draw ---------*/
+        renderer.setLightMode(ui.lightMode);
         renderer.beginFrame();
-        renderer.drawStarfield();
+        renderer.drawStarfield(bgClock.getElapsedTime().asSeconds());
 
         // Influence zones (behind everything except starfield)
         if (ui.presetActive && ui.showInfluenceZones && ui.showGalaxySystem) {
@@ -355,7 +406,7 @@ int main(int argc, char* argv[]) {
         if (ui.showPhotonSphere)
             renderer.drawPhotonSphere(bhCenter, (float)(sim.bh.metric.photonSphere() * camera.pixelsPerM));
 
-        // Rays — visualization layer computes colors
+        // Rays, visualization layer computes colors
         if (ui.showRays) {
             for (const auto& photon : sim.photons) {
                 if (photon.captured) {
@@ -383,7 +434,7 @@ int main(int argc, char* argv[]) {
         if (ui.showTimeDilationMap)
             renderer.drawTimeDilationMap(center, M, camera.pixelsPerM);
 
-        // Barycenter marker — drawn before bodies so it sits behind them
+        // Barycenter marker, drawn before bodies so it sits behind them
         if (barycentricMode)
             renderer.drawBarycenterMarker(center);
 
@@ -397,7 +448,7 @@ int main(int argc, char* argv[]) {
             renderer.drawBody(bodyVis);
 
             // Pulsar-specific visual decoration (jets, magnetic field lines, LC ring, flux tubes)
-            if (sim.activeScenario == ResearchScenario::PulsarOrbital && bodyIdx == 0
+            if (sim.activeScenario == ResearchScenario::PulsarOrbital && body.isPulsar
                 && !body.captured) {
                 float lc_px = 0.0f;
                 if (sim.pulsarState.lightCylRadius_m > 0.0)
@@ -468,7 +519,10 @@ int main(int argc, char* argv[]) {
                     p.isFallback
                 });
             }
-            renderer.drawTidalEvent(flashPos, flashAlpha, pvis, showLabel);
+            renderer.drawTidalEvent(flashPos, flashAlpha, pvis, showLabel,
+                sim.tidalEvent.kind == Simulation::TidalEventKind::MergerShockwave ? "MERGER REMNANT"
+              : sim.tidalEvent.kind == Simulation::TidalEventKind::XrayBurst       ? "X-RAY BURST"
+              : "TIDAL DISRUPTION EVENT");
         }
 
         renderer.drawHUD(cachedHUD);
@@ -482,61 +536,57 @@ int main(int argc, char* argv[]) {
             renderer.drawDataPanel(sim.formatDataPanel(),
                                    camera.viewWidth, camera.viewHeight);
 
-        // Merger: draw death-spiral trails and incoming BH during inspiral
+        // Merger: draw death-spiral trails and incoming BH during inspiral.
+        // Trails are stored in barycentre-centred world coords, so the draw
+        // origin is the screen centre (= world origin = barycentre), not bhCenter.
         if (sim.merger.active && sim.merger.flashTimer <= 0.0) {
             const double q   = sim.merger.massRatioQ;
             const double sep = sim.merger.r_M * sim.bh.metric.M;
 
-            // Secondary position — orbits at r2 = sep*(1-q) from origin (CoM)
+            // Secondary BH screen position: at +(1-q)*sep from the barycentre.
             const double r2   = sep * (1.0 - q);
-            const double sx2  = r2 * std::cos(sim.merger.phi);
-            const double sy2  = r2 * std::sin(sim.merger.phi);
-            sf::Vector2f secPos = {
-                bhCenter.x + (float)(sx2 * camera.pixelsPerM),
-                bhCenter.y - (float)(sy2 * camera.pixelsPerM)
-            };
+            sf::Vector2f secPos = camera.worldToScreen(
+                (float)( r2 * std::cos(sim.merger.phi)),
+                (float)( r2 * std::sin(sim.merger.phi)));
 
-            // Draw secondary death-spiral trail (purple)
-            renderer.drawMergerTrail(sim.merger.trail2, bhCenter,
+            // Death-spiral trails. Both are drawn from the barycentre (= screen
+            // centre), so primary + secondary trace symmetrically opposite arcs
+            // around the centre of mass.
+            renderer.drawMergerTrail(sim.merger.trail2, center,
                                      camera.pixelsPerM,
-                                     sf::Color(180, 100, 255));
-
-            // Primary barycentric wobble trail (cyan) — only for similar-mass mergers
+                                     sf::Color(180, 100, 255));   // secondary (purple)
             if (q > 0.01) {
-                renderer.drawMergerTrail(sim.merger.trail1, bhCenter,
+                renderer.drawMergerTrail(sim.merger.trail1, center,
                                          camera.pixelsPerM,
-                                         sf::Color(100, 220, 255));
+                                         sf::Color(100, 220, 255)); // primary (cyan)
             }
 
-            // Incoming BH disk
-            double m2_geom = units::solarMassToGeomMeters(sim.merger.massSolar);
-            float horizonPx2 = (float)(m2_geom * camera.pixelsPerM);
-            float minPx = 4.0f;
-            renderer.drawMergerBH(secPos, std::max(minPx, horizonPx2));
-
-            // Primary barycentric wobble — shift the drawn BH center slightly
-            // for equal-mass mergers so both BHs visibly orbit the common center.
-            // (The actual simulation BH metric stays at the origin; this is display only.)
-            if (q > 0.01) {
-                const double r1  = sep * q;
-                sf::Vector2f primOffset = {
-                    bhCenter.x - (float)(r1 * std::cos(sim.merger.phi) * camera.pixelsPerM),
-                    bhCenter.y + (float)(r1 * std::sin(sim.merger.phi) * camera.pixelsPerM)
-                };
-                // Draw a subtle cyan glow at the primary's displaced position
-                float gR = std::max(4.0f, (float)(sim.bh.metric.M * 2.0 * camera.pixelsPerM));
-                sf::CircleShape primGlow(gR);
-                primGlow.setOrigin({gR, gR});
-                primGlow.setPosition(primOffset);
-                primGlow.setFillColor(sf::Color(100, 220, 255, 40));
-                primGlow.setOutlineThickness(1.5f);
-                primGlow.setOutlineColor(sf::Color(100, 220, 255, 120));
-                // (draw via the window directly isn't possible here — use renderer)
-                // Instead, we use the existing drawMergerBH with a tiny radius to
-                // represent the primary wobble as a highlight ring:
-                renderer.drawMergerBH(primOffset,
-                    std::max(2.0f, (float)(sim.bh.metric.M * camera.pixelsPerM)));
+            // Incoming secondary — black hole vs. compact / stellar object.
+            // For BH secondaries: full horizon + disk (+ jets for AGN-class).
+            // For NS/Pulsar/Star/WD: a small bright dot with kind colour.
+            if (sim.merger.secondaryKind == Simulation::MergerSecondaryKind::BlackHole) {
+                // Sized from its real mass so a TON 618-class secondary looks
+                // visibly larger than a stellar BH. Disk radius mirrors the
+                // primary’s 6M convention; jets are added for AGN-class
+                // secondaries (>= 1e6 Msun) so visually it reads as an SMBH
+                // falling in.
+                double m2_geom = units::solarMassToGeomMeters(sim.merger.massSolar);
+                float horizonPx2 = (float)(m2_geom * camera.pixelsPerM);
+                float minPx = 4.0f;
+                float diskPx2 = (float)(6.0 * m2_geom * camera.pixelsPerM);
+                float jetPx2  = (sim.merger.massSolar >= 1.0e6)
+                              ? std::max(40.0f, (float)(30.0 * m2_geom * camera.pixelsPerM))
+                              : 0.0f;
+                renderer.drawMergerBH(secPos, std::max(minPx, horizonPx2),
+                                      diskPx2, jetPx2);
+            } else {
+                renderer.drawMergerCompactSecondary(
+                    secPos, static_cast<int>(sim.merger.secondaryKind),
+                    sim.merger.phi);
             }
+            // The primary horizon/disk are already drawn at bhCenter, which has
+            // been shifted to its barycentric position, so the wobble is visible
+            // directly — no extra primary glow needed.
         }
 
         // Merger: white flash at coalescence
@@ -548,7 +598,16 @@ int main(int argc, char* argv[]) {
         // Merger menu overlay (drawn on top of everything)
         if (ui.mergerMenu.open)
             renderer.drawMergerMenu(ui.mergerMenu, BH2D_PRESETS, NUM_BH2D_PRESETS,
-                                    camera.viewWidth, camera.viewHeight);
+                                    camera.viewWidth, camera.viewHeight,
+                                    MERGER_SECONDARY_PRESETS, NUM_MERGER_SECONDARY_PRESETS);
+
+        // Custom-body creator menu (also a modal, mutually exclusive with merger)
+        if (ui.customBodyMenu.open) {
+            GalaxyBodyType t = UIState::customBodyTypes()[ui.customBodyMenu.typeIdx];
+            renderer.drawCustomBodyMenu(ui.customBodyMenu, bodyTypeName(t),
+                                        sim.customPresets, bodyTypeName,
+                                        camera.viewWidth, camera.viewHeight);
+        }
 
         // Notification (bottom)
         if (ui.notificationTimer > 0) {

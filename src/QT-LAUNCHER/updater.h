@@ -20,8 +20,8 @@ class QJsonArray;
 // Updater
 //
 // Queries the GitHub Releases API for this repository, compares the latest
-// release tag against the compiled-in AETHERION_VERSION, and — if a newer
-// version exists — prompts the user to download it.
+// release tag against the compiled-in AETHERION_VERSION, and, if a newer
+// version exists, prompts the user to download it.
 //
 // On confirmation the asset for the current platform is downloaded with a
 // progress dialog.  Once the download is complete a small helper shell script

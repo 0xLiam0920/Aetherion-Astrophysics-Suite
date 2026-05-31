@@ -13,6 +13,7 @@
 
 #include <QDir>
 #include <QJsonObject>
+#include <QSettings>
 
 #include <sstream>
 #include <iomanip>
@@ -41,8 +42,12 @@ static std::string buildHUD(const Simulation& sim, const UIState& ui) {
         double r_h_light_days = r_h_m / (units::c_SI * 86400.0);
 
         const auto& preset = BH2D_PRESETS[ui.presetIdx];
+        const double currentMsun = sim.currentMassSolar();
         ss << "Preset: " << preset.name
-           << " (" << pretty(preset.massSolar) << " Msun)\n";
+           << " (" << pretty(preset.massSolar) << " Msun";
+        if (sim.merger.completed)
+            ss << " → " << pretty(currentMsun) << " Msun post-merger";
+        ss << ")\n";
         ss << preset.description << "\n";
         ss << "M (geom) = " << pretty(M) << " m\n";
         ss << "Event horizon r_h = " << pretty(r_h_m) << " m ("
@@ -130,6 +135,11 @@ Simulation2DWidget::~Simulation2DWidget() = default;   // types are complete her
 void Simulation2DWidget::setWorkspaceName(const QString &name) {
     m_workspaceName = name;
     if (sim_) sim_->exportName = name.toStdString();
+}
+
+void Simulation2DWidget::setLightMode(bool on) {
+    if (ui_) ui_->lightMode = on;
+    // Renderer is re-synced from ui_->lightMode every frame in onUpdate().
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -242,8 +252,13 @@ void Simulation2DWidget::onInit()
     ui_       = std::make_unique<UIState>();
 
     sim_->rebuildPhotons(static_cast<int>(h));
+    sim_->loadCustomPresets();
     renderer_->resetView(w, h);
     clock_.restart();
+
+    // Adopt the global light/dark setting at startup.
+    ui_->lightMode = QSettings("Aetherion", "AetherionSuite")
+                         .value("ui/lightMode", false).toBool();
 
     // Load saved 2D keybinds (falls back to defaults automatically)
 #ifdef Q_OS_MACOS
@@ -266,7 +281,7 @@ void Simulation2DWidget::onInit()
 }
 
 // ─────────────────────────────────────────────────────────────
-// Render loop — mirrors BlackHole2D.cpp's draw block.
+// Render loop, mirrors BlackHole2D.cpp's draw block.
 // QSFMLCanvas::paintEvent calls onUpdate() then display(), so
 // we must NOT call renderer_->endFrame() (which also calls display()).
 // ─────────────────────────────────────────────────────────────
@@ -290,13 +305,45 @@ void Simulation2DWidget::onUpdate()
     if (!ui_->paused)
         sim_->update(dt * ui_->timeScale);
 
+    // Auto-zoom during merger inspiral so both BHs stay framed even at
+    // extreme mass ratios (parity with standalone BlackHole2D).
+    if (sim_->merger.active && sim_->merger.flashTimer <= 0.0 && sim_->merger.r_M > 0.0) {
+        const double sepM = sim_->merger.r_M * sim_->bh.metric.M;
+        const double halfExtentM = sepM * 1.35 + 4.0 * sim_->bh.metric.M;
+        const double targetHalfPx = std::min(camera_->viewWidth, camera_->viewHeight) * 0.40;
+        double targetPpm = targetHalfPx / std::max(halfExtentM, 1e-9);
+        const double ppmHorizonCap = 125.0 / std::max(sim_->bh.metric.M, 1e-9);
+        targetPpm = std::min(targetPpm, ppmHorizonCap);
+        const double k = std::clamp(dt * 2.5, 0.0, 0.25);
+        sim_->params.pixelsPerM = sim_->params.pixelsPerM + (targetPpm - sim_->params.pixelsPerM) * k;
+    }
+
     camera_->pixelsPerM  = sim_->params.pixelsPerM;
-    const sf::Vector2f center = camera_->center();
+    const sf::Vector2f barycentre = camera_->center();
+    sf::Vector2f center = barycentre;
     const double M = sim_->bh.metric.M;
 
+    // Merger barycentric mode: shift the primary draw position so both BHs
+    // visibly orbit the common centre of mass during inspiral. All primary
+    // visuals (horizon, disk, photon sphere, bodies) draw relative to `center`
+    // so they pick this up automatically.
+    if (sim_->merger.active && sim_->merger.flashTimer <= 0.0) {
+        const double q   = sim_->merger.massRatioQ;
+        // Skips the cosmetic wobble for extreme-mass-ratio mergers where the
+        // primary really shouldn’t budge.
+        if (q >= 0.05) {
+            const double sep = sim_->merger.r_M * M;
+            const double bx  = q * sep * std::cos(sim_->merger.phi);
+            const double by  = q * sep * std::sin(sim_->merger.phi);
+            center.x = barycentre.x - static_cast<float>(bx * camera_->pixelsPerM);
+            center.y = barycentre.y + static_cast<float>(by * camera_->pixelsPerM);
+        }
+    }
+
     // ── Draw ──────────────────────────────────────────────────
+    renderer_->setLightMode(ui_->lightMode);
     renderer_->beginFrame();
-    renderer_->drawStarfield();
+    renderer_->drawStarfield(bgClock_.getElapsedTime().asSeconds());
 
     // Influence zones
     if (ui_->presetActive && ui_->showInfluenceZones && ui_->showGalaxySystem) {
@@ -423,7 +470,10 @@ void Simulation2DWidget::onUpdate()
                 p.isFallback
             });
         }
-        renderer_->drawTidalEvent(flashPos, flashAlpha, pvis, showLabel);
+        renderer_->drawTidalEvent(flashPos, flashAlpha, pvis, showLabel,
+            sim_->tidalEvent.kind == Simulation::TidalEventKind::MergerShockwave ? "MERGER REMNANT"
+          : sim_->tidalEvent.kind == Simulation::TidalEventKind::XrayBurst       ? "X-RAY BURST"
+          : "TIDAL DISRUPTION EVENT");
     }
 
     if (ui_->showControlsPanel)
@@ -432,16 +482,44 @@ void Simulation2DWidget::onUpdate()
     if (ui_->showDataPanel)
         renderer_->drawDataPanel(sim_->formatDataPanel(), camera_->viewWidth, camera_->viewHeight);
 
-    // Merger BH (inspiral body)
+    // Merger BH (inspiral body) + death-spiral trails
     if (sim_->merger.active && sim_->merger.flashTimer <= 0.0) {
-        sf::Vector2f center = camera_->center();
-        double r_world = sim_->merger.r_M * sim_->bh.metric.M;
-        float sx = center.x + (float)(r_world * std::cos(sim_->merger.phi) * camera_->pixelsPerM);
-        float sy = center.y - (float)(r_world * std::sin(sim_->merger.phi) * camera_->pixelsPerM);
-        double m2_geom = units::solarMassToGeomMeters(sim_->merger.massSolar);
-        float horizonPx2 = (float)(m2_geom * camera_->pixelsPerM);
-        float minPx = 4.0f;
-        renderer_->drawMergerBH({sx, sy}, std::max(minPx, horizonPx2));
+        const double q   = sim_->merger.massRatioQ;
+        const double sep = sim_->merger.r_M * sim_->bh.metric.M;
+
+        // Death-spiral trails (barycentre-centred world coords → draw from screen centre)
+        renderer_->drawMergerTrail(sim_->merger.trail2, barycentre,
+                                   camera_->pixelsPerM,
+                                   sf::Color(180, 100, 255));   // secondary (purple)
+        if (q > 0.01) {
+            renderer_->drawMergerTrail(sim_->merger.trail1, barycentre,
+                                       camera_->pixelsPerM,
+                                       sf::Color(100, 220, 255)); // primary (cyan)
+        }
+
+        // Secondary BH at +(1-q)*sep from the barycentre. Disk + jets scaled
+        // from its actual mass so an SMBH secondary visibly outsizes a stellar
+        // one and AGN-class secondaries get jets. NS/Pulsar/Star/WD render as
+        // a small bright dot instead.
+        const double r2 = sep * (1.0 - q);
+        float sx = barycentre.x + static_cast<float>(r2 * std::cos(sim_->merger.phi) * camera_->pixelsPerM);
+        float sy = barycentre.y - static_cast<float>(r2 * std::sin(sim_->merger.phi) * camera_->pixelsPerM);
+        if (sim_->merger.secondaryKind == Simulation::MergerSecondaryKind::BlackHole) {
+            double m2_geom = units::solarMassToGeomMeters(sim_->merger.massSolar);
+            float horizonPx2 = static_cast<float>(m2_geom * camera_->pixelsPerM);
+            float minPx = 4.0f;
+            float diskPx2 = static_cast<float>(6.0 * m2_geom * camera_->pixelsPerM);
+            float jetPx2  = (sim_->merger.massSolar >= 1.0e6)
+                          ? std::max(40.0f, static_cast<float>(30.0 * m2_geom * camera_->pixelsPerM))
+                          : 0.0f;
+            renderer_->drawMergerBH({sx, sy}, std::max(minPx, horizonPx2),
+                                    diskPx2, jetPx2);
+        } else {
+            renderer_->drawMergerCompactSecondary(
+                {sx, sy}, static_cast<int>(sim_->merger.secondaryKind),
+                sim_->merger.phi);
+        }
+        // Primary already drawn at the shifted `center` above.
     }
 
     // Merger white flash
@@ -453,23 +531,32 @@ void Simulation2DWidget::onUpdate()
     // Merger menu overlay
     if (ui_->mergerMenu.open)
         renderer_->drawMergerMenu(ui_->mergerMenu, BH2D_PRESETS, NUM_BH2D_PRESETS,
-                                   camera_->viewWidth, camera_->viewHeight);
+                                   camera_->viewWidth, camera_->viewHeight,
+                                   MERGER_SECONDARY_PRESETS, NUM_MERGER_SECONDARY_PRESETS);
+
+    // Custom-body creator menu
+    if (ui_->customBodyMenu.open) {
+        GalaxyBodyType t = UIState::customBodyTypes()[ui_->customBodyMenu.typeIdx];
+        renderer_->drawCustomBodyMenu(ui_->customBodyMenu, bodyTypeName(t),
+                                       sim_->customPresets, bodyTypeName,
+                                       camera_->viewWidth, camera_->viewHeight);
+    }
 
     if (ui_->notificationTimer > 0) {
         renderer_->drawNotification(ui_->notification, camera_->viewWidth, camera_->viewHeight);
         ui_->notificationTimer--;
     }
-    // paintEvent calls display() after onUpdate() — do NOT call endFrame() here
+    // paintEvent calls display() after onUpdate(), do NOT call endFrame() here
 }
 
 // ─────────────────────────────────────────────────────────────
-// Input — forward to the 2D controls handler
+// Input, forward to the 2D controls handler
 // ─────────────────────────────────────────────────────────────
 
 void Simulation2DWidget::onKeyPressed(sf::Keyboard::Key code)
 {
     if (!sim_ || !ui_ || !camera_) return;
-    // handleInput() takes sf::Event — construct a KeyPressed event wrapper
+    // handleInput() takes sf::Event, construct a KeyPressed event wrapper
     sf::Event ev{ sf::Event::KeyPressed{ code, sf::Keyboard::Scancode::Unknown, false, false } };
     handleInput(ev, *sim_, *ui_, static_cast<unsigned int>(camera_->viewHeight), keyConfig_);
 }

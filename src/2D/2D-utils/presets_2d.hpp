@@ -59,9 +59,14 @@ struct BHPreset2D {
     // Barycentric binary: true when the companion mass is large enough that
     // both the BH and companion visibly orbit the shared center of mass.
     // Set for Gaia BH1/BH2/BH3 whose companions were detected via astrometric
-    // wobble — i.e. the BH offset from the barycenter is observable.
+    // wobble, i.e. the BH offset from the barycenter is observable.
     bool   isBinaryWithBarycenter = false;
     double companionMassSolar     = 0.0;  // companion mass (Msun) for mass-ratio calc
+
+    // Optional URL the user can open from the preset HUD ("L" key). Empty
+    // string means no link is available for this preset. Prefer canonical
+    // Wikipedia or NASA ADS pages over fan sites.
+    const char* learnMoreUrl      = "";
 };
 
 /*--------- Galaxy system body definitions per preset ---------*/
@@ -70,7 +75,7 @@ struct BHPreset2D {
 // Using static const would give each TU its own copy, causing an ODR
 // violation in BH2D_PRESETS (which is inline and must be identical in every TU).
 
-// TON 618 — most massive quasar, ~66 billion Msun
+// TON 618, most massive quasar, ~66 billion Msun
 inline constexpr GalaxySystemBody TON618_BODIES[] = {
     {"Inner accretion clump",   GalaxyBodyType::GasCloud,        8.0,  0.15},
     {"Tidal-stripped star",     GalaxyBodyType::Star,            15.0,  0.55},
@@ -80,7 +85,7 @@ inline constexpr GalaxySystemBody TON618_BODIES[] = {
     {"Satellite cluster",       GalaxyBodyType::StellarCluster,  80.0,  0.10},
 };
 
-// Sgr A* — Supermassive BH at the center of our Milky Way, ~4.3 million Msun
+// Sgr A*, Supermassive BH at the center of our Milky Way, ~4.3 million Msun
 inline constexpr GalaxySystemBody SGRA_BODIES[] = {
     {"S2 analog",               GalaxyBodyType::Star,            20.0,  0.88},
     {"S14-like close orbit",    GalaxyBodyType::Star,            10.0,  0.95},
@@ -89,7 +94,7 @@ inline constexpr GalaxySystemBody SGRA_BODIES[] = {
     {"S-cluster member",        GalaxyBodyType::Star,            30.0,  0.50},
 };
 
-// 3C 273 — first quasar ever detected, ~890 million Msun
+// 3C 273, first quasar ever detected, ~890 million Msun
 inline constexpr GalaxySystemBody QSO3C273_BODIES[] = {
     {"Inner jet-base cloud",    GalaxyBodyType::GasCloud,        10.0,  0.20},
     {"BLR cloud",               GalaxyBodyType::GasCloud,        20.0,  0.40},
@@ -97,7 +102,7 @@ inline constexpr GalaxySystemBody QSO3C273_BODIES[] = {
     {"Close stellar orbit",     GalaxyBodyType::Star,            35.0,  0.60},
 };
 
-// J0529-4351 — most luminous quasar, ~17 billion Msun
+// J0529-4351, most luminous quasar, ~17 billion Msun
 inline constexpr GalaxySystemBody J0529_BODIES[] = {
     {"Fast accretion blob",     GalaxyBodyType::GasCloud,         9.0,  0.10},
     {"UV-bright clump",         GalaxyBodyType::GasCloud,        18.0,  0.35},
@@ -106,7 +111,7 @@ inline constexpr GalaxySystemBody J0529_BODIES[] = {
     {"Infalling cluster",       GalaxyBodyType::StellarCluster,  65.0,  0.15},
 };
 
-// M87 — 6.5 billion Msun, EHT imaged
+// M87, 6.5 billion Msun, EHT imaged
 inline constexpr GalaxySystemBody M87_BODIES[] = {
     {"Jet-base knot",           GalaxyBodyType::GasCloud,        10.0,  0.12},
     {"Inner stellar orbit",     GalaxyBodyType::Star,            20.0,  0.45},
@@ -115,55 +120,55 @@ inline constexpr GalaxySystemBody M87_BODIES[] = {
     {"Infalling dwarf",         GalaxyBodyType::DwarfGalaxy,     70.0,  0.30},
 };
 
-// Cygnus X-1 — 21.2 Msun, HMXB with O-supergiant companion HDE 226868
+// Cygnus X-1, 21.2 Msun, HMXB with O-supergiant companion HDE 226868
 inline constexpr GalaxySystemBody CYGNUSX1_BODIES[] = {
     {"HDE 226868 (O-supergiant)",  GalaxyBodyType::CompanionStar, 25.0, 0.018},
 };
 
-// GW150914 — 62 Msun merger remnant; show pre-merger binary for educational context
+// GW150914, 62 Msun merger remnant; show pre-merger binary for educational context
 inline constexpr GalaxySystemBody GW150914_BODIES[] = {
     {"Pre-merger BH-1 (~36 Msun)", GalaxyBodyType::Star,          15.0, 0.15},
     {"Pre-merger BH-2 (~29 Msun)", GalaxyBodyType::Star,          22.0, 0.12},
 };
 
-// Intermediate-mass — 1e4 Msun; globular cluster environment
+// Intermediate-mass, 1e4 Msun; globular cluster environment
 inline constexpr GalaxySystemBody INTERMEDIATE_BODIES[] = {
     {"Globular cluster star A",     GalaxyBodyType::Star,       20.0, 0.35},
     {"Globular cluster star B",     GalaxyBodyType::Star,       35.0, 0.20},
     {"Compact remnant",             GalaxyBodyType::WhiteDwarf, 15.0, 0.50},
 };
 
-// Gaia BH1 — 9.62 Msun, quiescent, G-dwarf companion in wide orbit
+// Gaia BH1, 9.62 Msun, quiescent, G-dwarf companion in wide orbit
 inline constexpr GalaxySystemBody GAIABH1_BODIES[] = {
     {"G-dwarf companion",           GalaxyBodyType::CompanionStar, 28.0, 0.45},
 };
 
-// Gaia BH2 — 8.94 Msun, quiescent, red giant companion
+// Gaia BH2, 8.94 Msun, quiescent, red giant companion
 inline constexpr GalaxySystemBody GAIABH2_BODIES[] = {
     {"Red giant companion",         GalaxyBodyType::CompanionStar, 30.0, 0.52},
 };
 
-// Gaia BH3 — 32.7 Msun, quiescent, metal-poor giant companion
+// Gaia BH3, 32.7 Msun, quiescent, metal-poor giant companion
 inline constexpr GalaxySystemBody GAIABH3_BODIES[] = {
     {"Metal-poor giant companion",  GalaxyBodyType::CompanionStar, 22.0, 0.39},
 };
 
-// V404 Cygni — 9.0 Msun, X-ray nova microquasar, K-giant companion
+// V404 Cygni, 9.0 Msun, X-ray nova microquasar, K-giant companion
 inline constexpr GalaxySystemBody V404CYG_BODIES[] = {
     {"K-giant companion",           GalaxyBodyType::CompanionStar, 26.0, 0.034},
 };
 
-// A0620-00 — 6.61 Msun, quiescent X-ray transient, K-dwarf companion
+// A0620-00, 6.61 Msun, quiescent X-ray transient, K-dwarf companion
 inline constexpr GalaxySystemBody A062000_BODIES[] = {
     {"K-dwarf companion",           GalaxyBodyType::CompanionStar, 24.0, 0.0},
 };
 
-// GRO J1655-40 — 6.3 Msun, microquasar with relativistic jets, F-star companion
+// GRO J1655-40, 6.3 Msun, microquasar with relativistic jets, F-star companion
 inline constexpr GalaxySystemBody GROJ1655_BODIES[] = {
     {"F-star companion",            GalaxyBodyType::CompanionStar, 22.0, 0.0},
 };
 
-// NGC 1277 — 1.7e10 Msun, overmassive SMBH in compact elliptical
+// NGC 1277, 1.7e10 Msun, overmassive SMBH in compact elliptical
 inline constexpr GalaxySystemBody NGC1277_BODIES[] = {
     {"Inner stellar orbit A",       GalaxyBodyType::Star,           12.0, 0.30},
     {"Inner stellar orbit B",       GalaxyBodyType::Star,           20.0, 0.45},
@@ -171,7 +176,7 @@ inline constexpr GalaxySystemBody NGC1277_BODIES[] = {
     {"Stellar cluster",             GalaxyBodyType::StellarCluster, 75.0, 0.10},
 };
 
-// OJ 287 — 1.8e10 Msun primary, known SMBH binary with a ~1.5e8 Msun secondary
+// OJ 287, 1.8e10 Msun primary, known SMBH binary with a ~1.5e8 Msun secondary
 inline constexpr GalaxySystemBody OJ287_BODIES[] = {
     {"Secondary SMBH (~1.5e8 Msun)", GalaxyBodyType::Star,     15.0, 0.66},
     {"Accretion blob",               GalaxyBodyType::GasCloud, 22.0, 0.30},
@@ -181,57 +186,94 @@ inline constexpr GalaxySystemBody OJ287_BODIES[] = {
 /*--------- Preset table ---------*/
 inline constexpr BHPreset2D BH2D_PRESETS[] = {
     {"TON 618",           6.6e10,  "Most massive known quasar BH (~6.6e10 Msun)",
-     true,  TON618_BODIES, 6, {12.0, 100.0, 120.0, true}},
+     true,  TON618_BODIES, 6, {12.0, 100.0, 120.0, true},
+     false, 0.0, "https://en.wikipedia.org/wiki/TON_618"},
 
     {"Sgr A*",            4.3e6,   "Milky Way center (~4.3e6 Msun)",
-     true,  SGRA_BODIES,   5, {15.0, 80.0,  100.0, false}},
+     true,  SGRA_BODIES,   5, {15.0, 80.0,  100.0, false},
+     false, 0.0, "https://en.wikipedia.org/wiki/Sagittarius_A*"},
 
     {"3C 273",            8.86e8,  "First quasar identified (~8.9e8 Msun)",
-     true,  QSO3C273_BODIES, 4, {12.0, 90.0, 110.0, true}},
+     true,  QSO3C273_BODIES, 4, {12.0, 90.0, 110.0, true},
+     false, 0.0, "https://en.wikipedia.org/wiki/3C_273"},
 
     {"J0529-4351",        1.7e10,  "Most luminous quasar (~1.7e10 Msun)",
-     true,  J0529_BODIES,  5, {11.0, 95.0, 130.0, true}},
+     true,  J0529_BODIES,  5, {11.0, 95.0, 130.0, true},
+     false, 0.0, "https://en.wikipedia.org/wiki/J0529-4351"},
 
     {"M87",               6.5e9,   "M87 galaxy BH (~6.5e9 Msun, EHT image)",
-     true,  M87_BODIES,    5, {13.0, 85.0, 115.0, true}},
+     true,  M87_BODIES,    5, {13.0, 85.0, 115.0, true},
+     false, 0.0, "https://en.wikipedia.org/wiki/Messier_87"},
 
     {"Cygnus X-1",        21.2,    "Famous stellar-mass HMXB black hole (~21 Msun)",
-     true,  CYGNUSX1_BODIES,    1, {8.0, 12.0, 30.0, false}},
+     true,  CYGNUSX1_BODIES,    1, {8.0, 12.0, 30.0, false},
+     false, 0.0, "https://en.wikipedia.org/wiki/Cygnus_X-1"},
 
     {"LIGO GW150914",     62.0,    "First gravitational wave merger remnant (~62 Msun)",
-     true,  GW150914_BODIES,    2, {8.0, 15.0, 35.0, false}},
+     true,  GW150914_BODIES,    2, {8.0, 15.0, 35.0, false},
+     false, 0.0, "https://en.wikipedia.org/wiki/GW150914"},
 
     {"Intermediate-mass", 1e4,     "Hypothetical intermediate-mass BH (~1e4 Msun)",
-     true,  INTERMEDIATE_BODIES, 3, {10.0, 40.0, 60.0, false}},
+     true,  INTERMEDIATE_BODIES, 3, {10.0, 40.0, 60.0, false},
+     false, 0.0, "https://en.wikipedia.org/wiki/Intermediate-mass_black_hole"},
 
     {"Primordial",        1e-5,    "Tiny primordial black hole (~1e-5 Msun)",
-     false, nullptr, 0,    {0, 0, 0, false}},
+     false, nullptr, 0,    {0, 0, 0, false},
+     false, 0.0, "https://en.wikipedia.org/wiki/Primordial_black_hole"},
 
     {"Gaia BH1",          9.62,    "Nearest dormant BH, G-dwarf companion in wide orbit (~9.6 Msun)",
      true,  GAIABH1_BODIES,     1, {8.0, 12.0, 32.0, false},
-     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/0.93},
+     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/0.93,
+     "https://en.wikipedia.org/wiki/Gaia_BH1"},
 
     {"Gaia BH2",          8.94,    "Dormant BH with red giant companion (~8.9 Msun)",
      true,  GAIABH2_BODIES,     1, {8.0, 12.0, 35.0, false},
-     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/1.07},
+     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/1.07,
+     "https://en.wikipedia.org/wiki/Gaia_BH2"},
 
     {"Gaia BH3",          32.7,    "Most massive nearby dormant BH, metal-poor giant companion (~33 Msun)",
      true,  GAIABH3_BODIES,     1, {8.0, 12.0, 28.0, false},
-     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/0.76},
+     /*isBinaryWithBarycenter=*/true, /*companionMassSolar=*/0.76,
+     "https://en.wikipedia.org/wiki/Gaia_BH3"},
 
     {"V404 Cygni",        9.0,     "X-ray nova microquasar with K-giant companion (~9 Msun)",
-     true,  V404CYG_BODIES,     1, {8.0, 12.0, 30.0, true}},
+     true,  V404CYG_BODIES,     1, {8.0, 12.0, 30.0, true},
+     false, 0.0, "https://en.wikipedia.org/wiki/V404_Cygni"},
 
     {"A0620-00",          6.61,    "First confirmed stellar BH, quiescent K-dwarf binary (~6.6 Msun)",
-     true,  A062000_BODIES,     1, {8.0, 12.0, 28.0, false}},
+     true,  A062000_BODIES,     1, {8.0, 12.0, 28.0, false},
+     false, 0.0, "https://en.wikipedia.org/wiki/A0620-00"},
 
     {"GRO J1655-40",      6.3,     "Microquasar with relativistic jets, F-star companion (~6.3 Msun)",
-     true,  GROJ1655_BODIES,    1, {8.0, 12.0, 26.0, true}},
+     true,  GROJ1655_BODIES,    1, {8.0, 12.0, 26.0, true},
+     false, 0.0, "https://en.wikipedia.org/wiki/GRO_J1655-40"},
 
     {"NGC 1277",          1.7e10,  "Overmassive SMBH in compact elliptical galaxy (~1.7e10 Msun)",
-     true,  NGC1277_BODIES,     4, {11.0, 88.0, 120.0, false}},
+     true,  NGC1277_BODIES,     4, {11.0, 88.0, 120.0, false},
+     false, 0.0, "https://en.wikipedia.org/wiki/NGC_1277"},
 
     {"OJ 287",            1.8e10,  "SMBH binary system with known orbital outbursts (~1.8e10 Msun primary)",
-     true,  OJ287_BODIES,       3, {10.0, 85.0, 115.0, true}}
+     true,  OJ287_BODIES,       3, {10.0, 85.0, 115.0, true},
+     false, 0.0, "https://en.wikipedia.org/wiki/OJ_287"}
 };
 inline constexpr int NUM_BH2D_PRESETS = sizeof(BH2D_PRESETS) / sizeof(BH2D_PRESETS[0]);
+
+// ── Compact / stellar secondaries the BH can swallow during a merger event ──
+// These appear in the merger menu below the BH presets. Each maps to a
+// Simulation::MergerSecondaryKind enum value (matched by name in controls.hpp
+// rather than via include to avoid a header cycle).
+struct CompactSecondaryPreset {
+    const char* name;            // display label
+    const char* kindLabel;       // short kind tag for the right column
+    double      massSolar;
+    int         kind;            // matches MergerSecondaryKind enum: 1=NS,2=Pulsar,3=Star,4=WD
+};
+
+inline constexpr CompactSecondaryPreset MERGER_SECONDARY_PRESETS[] = {
+    {"Solar-mass neutron star", "NS",     1.4,  1},
+    {"PSR J0108-1431 (pulsar)", "Pulsar", 1.4,  2},
+    {"Sun-like star",           "Star",   1.0,  3},
+    {"Sirius B (white dwarf)",  "WD",     1.02, 4},
+};
+inline constexpr int NUM_MERGER_SECONDARY_PRESETS =
+    sizeof(MERGER_SECONDARY_PRESETS) / sizeof(MERGER_SECONDARY_PRESETS[0]);

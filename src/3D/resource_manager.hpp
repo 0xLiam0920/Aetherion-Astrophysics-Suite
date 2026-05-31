@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// resource_manager.hpp — Asset path resolution
+// resource_manager.hpp: Asset path resolution
 // ============================================================
 
 #include "platform.hpp"   // provides platformExeDir()
@@ -30,7 +30,7 @@ public:
         }
 
 #if defined(__linux__) || defined(__unix__)
-        // XDG data directories — populated by Flatpak (/app/share:/usr/share)
+        // XDG data directories, populated by Flatpak (/app/share:/usr/share)
         // and by regular system/user installs.  Appended after the exe-dir so
         // development builds (where the binary sits next to the assets) still
         // take priority over installed data.

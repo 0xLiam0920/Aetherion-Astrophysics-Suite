@@ -41,16 +41,38 @@ struct OrbitingBody {
     GalaxyBodyType bodyType = GalaxyBodyType::Star;
     bool           isGalaxyBody = false;
 
+    // Pulsar marker: when true this body is the neutron-star companion driven
+    // by the pulsar scenario (GW adiabatic inspiral + jet/LC visualisation).
+    // Set by Simulation::togglePulsarOrbital().
+    bool           isPulsar = false;
+
+    // Which research scenario (if any) spawned this body.  Used by the
+    // simulation to toggle whole scenarios on/off additively without
+    // disturbing unrelated orbiters.  None == created outside any scenario
+    // (default test body, galaxy presets, etc).
+    ResearchScenario scenarioTag = ResearchScenario::None;
+
     Measurement measurement;
     bool captured = false;
 
     // When true the body has been flung free of the BH system and moves in a
-    // straight line (Cartesian) — no more geodesic integration.
+    // straight line (Cartesian), no more geodesic integration.
     bool   ejected   = false;
     double x_eject   = 0.0;   // world position (geometric units) at ejection
     double y_eject   = 0.0;
     double vx_eject  = 0.0;   // world velocity (geometric units / wall-second)
     double vy_eject  = 0.0;
+
+    // Hot-spot photon emitter. When true, the simulation periodically fires
+    // a small fan of null geodesics outward from the body's current position,
+    // letting the user see how light from a compact emitter near the BH gets
+    // lensed/captured in real time. This is independent of the global
+    // "test photon" sweep that buildLensingData() consumes.
+    bool   emitsPhotons   = false;
+    double emitInterval   = 0.6;   // wall-seconds between emission pulses
+    double emitTimer      = 0.0;   // counts down toward next pulse
+    int    emitFanCount   = 9;     // photons per pulse (fanned in α ∈ [0, π])
+    double emitWavelength_nm = 550.0; // rest-frame emission wavelength (batch 2 #1)
 
     // Convert current geodesic state → Cartesian ejection velocity and mark body ejected.
     // Uses proper-velocity components (dx/dτ) which are good enough for visual linear flight.
@@ -145,7 +167,7 @@ struct OrbitingBody {
         // E = sqrt(f(r0)) is the specific energy for an object at rest at r0.
         // dropping from rest at finite r rather than infinity means E < 1, which is correct
         // it takes energy to have been assembled at r0 against gravity.
-        // L=0 means pure radial infall — no angular momentum, just falls straight in.
+        // L=0 means pure radial infall, no angular momentum, just falls straight in.
         // this is one of those cases where the GR result is genuinely different from Newtonian:
         // the proper-time fall is finite even though coordinate time diverges at the horizon.
         double fr = bh.f(r0);
@@ -174,7 +196,7 @@ struct OrbitingBody {
     void update(const Schwarzschild& bh, double dt) {
         if (captured) return;
 
-        // Ejected bodies fly in a straight line — no more geodesic pull.
+        // Ejected bodies fly in a straight line, no more geodesic pull.
         if (ejected) {
             x_eject += vx_eject * dt;
             y_eject += vy_eject * dt;
@@ -203,11 +225,11 @@ struct OrbitingBody {
 
         // Adaptive sub-stepping for numerical stability
         // Scale step size with M so that nSteps stays reasonable at any mass
-        // the 0.05*M step limit was found by trial and error — any larger and energy starts drifting
+        // the 0.05*M step limit was found by trial and error, any larger and energy starts drifting
         // noticeably near the horizon. any smaller and we're burning CPU for no benefit at large r.
         double maxStep = 0.05 * bh.M;
         int nSteps = std::max(1, static_cast<int>(std::abs(dtau_total) / maxStep) + 1);
-        nSteps = std::min(nSteps, 4000);  // safety cap — if we ever hit 4000 something is very wrong and we'd rather be slightly inaccurate than freeze the frame
+        nSteps = std::min(nSteps, 4000);  // safety cap, if we ever hit 4000 something is very wrong and we'd rather be slightly inaccurate than freeze the frame
         double h = dtau_total / nSteps;
 
         TimelikeState state = { r, phi, vr };

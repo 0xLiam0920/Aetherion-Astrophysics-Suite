@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// gl_types.hpp — Move-only RAII wrappers for core OpenGL objects
+// gl_types.hpp: Move-only RAII wrappers for core OpenGL objects
 // ============================================================
 
 #include "platform.hpp"
@@ -12,7 +12,7 @@
 #include <utility>
 
 // ────────────────────────────────────────────────────────────
-// GLShader — owns a single GL shader object
+// GLShader, owns a single GL shader object
 // (it's just a number but we guard it with our lives)
 // ────────────────────────────────────────────────────────────
 class GLShader {
@@ -58,7 +58,7 @@ private:
 };
 
 // ────────────────────────────────────────────────────────────
-// GLProgram — owns a linked program + caches uniform locations
+// GLProgram, owns a linked program + caches uniform locations
 // TODO: consider wrapping uniform setters in a templated helper
 //       so we stop writing glUniform1f/glUniform3f/etc by hand
 // ────────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ public:
 
     void use() const { glUseProgram(id_); }
 
-    // Cached uniform lookup — first call does glGetUniformLocation, later ones return cached value
+    // Cached uniform lookup, first call does glGetUniformLocation, later ones return cached value
     GLint uniform(const char* name) {
         auto it = uniforms_.find(name);
         if (it != uniforms_.end()) return it->second;
@@ -139,7 +139,7 @@ private:
 };
 
 // ────────────────────────────────────────────────────────────
-// GLTexture2D — owns a single GL_TEXTURE_2D
+// GLTexture2D, owns a single GL_TEXTURE_2D
 // ────────────────────────────────────────────────────────────
 class GLTexture2D {
 public:
@@ -171,7 +171,7 @@ private:
 };
 
 // ────────────────────────────────────────────────────────────
-// GLVertexArray — owns a VAO + its associated VBO
+// GLVertexArray, owns a VAO + its associated VBO
 // ────────────────────────────────────────────────────────────
 class GLVertexArray {
 public:

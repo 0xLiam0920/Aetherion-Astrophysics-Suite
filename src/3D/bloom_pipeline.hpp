@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================
-// bloom_pipeline.hpp — Multi-level bloom with RAII
+// bloom_pipeline.hpp: Multi-level bloom with RAII
 // ============================================================
 
 #include "platform.hpp"
@@ -112,7 +112,7 @@ struct BloomPipeline {
             blurProg.set2f("direction", 0.0f, 1.0f);
             quad.drawQuad();
 
-            // Additional blur passes for larger mips (capped at 2 for performance) — your GPU said please.
+            // Additional blur passes for larger mips (capped at 2 for performance), your GPU said please.
             int extraPasses = std::min(mip + 1, 2);
             for (int extra = 0; extra < extraPasses; ++extra) {
                 blurTempFBO[mip].bind();

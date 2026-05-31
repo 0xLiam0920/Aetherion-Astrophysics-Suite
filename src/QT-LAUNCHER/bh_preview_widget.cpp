@@ -358,7 +358,7 @@ void BlackHolePreviewWidget::drawCompanion(QPainter &p, QPointF c,
 // Per-object paint methods
 // ---------------------------------------------------------------------------
 
-// Sgr A*: sub-Eddington RIAF — dim wispy disc, dense galactic star field,
+// Sgr A*: sub-Eddington RIAF, dim wispy disc, dense galactic star field,
 // dusty haze, no jets.
 void BlackHolePreviewWidget::paintSgrA(QPainter &p)
 {
@@ -620,13 +620,13 @@ void BlackHolePreviewWidget::paintGaiaBH2(QPainter &p)
     drawBackground(p, QColor(10,6,14), QColor(4,2,8));
     drawStarfield(p);
 
-    // Red giant companion — larger than in BH1 since it's evolved
+    // Red giant companion, larger than in BH1 since it's evolved
     float compAngle = m_angle * 0.18f;   // slow orbit (1277-day period)
     float orbitR    = W * 0.300f;
     float starR     = H * 0.055f;        // notably larger than BH1's companion
     drawCompanion(p, c, orbitR, starR, compAngle, QColor(255, 120, 60));
 
-    // Faint Roche-lobe hint — ellipse stretched toward BH
+    // Faint Roche-lobe hint, ellipse stretched toward BH
     float phase = qDegreesToRadians(compAngle);
     QPointF compPos(c.x() + orbitR * std::cos(phase),
                     c.y() + orbitR * std::sin(phase) * 0.55f);
@@ -668,7 +668,7 @@ void BlackHolePreviewWidget::paintGaiaBH3(QPainter &p)
     drawBackground(p, QColor(6,8,14), QColor(2,3,10));
     drawStarfield(p, true);   // denser starfield for nearby location (~590 ly)
 
-    // Metal-poor subgiant — bluish-white, dimmer
+    // Metal-poor subgiant, bluish-white, dimmer
     float compAngle = m_angle * 0.08f;   // ~11.6-year period → very slow
     float orbitR    = W * 0.310f;
     float starR     = H * 0.033f;
@@ -725,7 +725,7 @@ void BlackHolePreviewWidget::paintV404Cygni(QPainter &p)
     drawDiscHalf(p, c, bR * 1.20f, bR * 3.2f, sY,
                  QColor(255,240,180), QColor(255,210,130), QColor(200,100,40), 0.8f, false);
 
-    // X-ray flickering — vary brightness with phase
+    // X-ray flickering, vary brightness with phase
     float flick = 0.5f + 0.5f * std::sin(m_phase * 5.3f);
     int fa = int(40 + 60 * flick);
     QRadialGradient xray(c, bR * 2.8f);
@@ -768,7 +768,7 @@ void BlackHolePreviewWidget::paintPhoenixA(QPainter &p)
         }
     }
 
-    // Host galaxy haze — massive elliptical BCG
+    // Host galaxy haze, massive elliptical BCG
     QRadialGradient bcg(c, W * 0.42f);
     bcg.setColorAt(0.0f, QColor(220,200,160,55));
     bcg.setColorAt(0.5f, QColor(180,160,120,20));
@@ -797,7 +797,7 @@ void BlackHolePreviewWidget::paintPhoenixA(QPainter &p)
     float discSY = 0.30f;
     drawPhotonRing(p, c, bR, discSY, QColor(255,180,100,220));
 
-    // Massive disc — wide and thick
+    // Massive disc, wide and thick
     drawDiscHalf(p, c, bR * 1.15f, bR * 4.5f, discSY,
                  QColor(255,230,160), QColor(255,200,120), QColor(180,80,30), 1.0f, true);
     drawDiscHalf(p, c, bR * 1.15f, bR * 4.5f, discSY,
@@ -894,7 +894,7 @@ void BlackHolePreviewWidget::paintIscoUnstable(QPainter &p)
     float iscoR = bR * 2.5f;
     p.drawEllipse(c, iscoR, iscoR * 0.38f);
 
-    // Spiralling path — tight inward arc
+    // Spiralling path, tight inward arc
     QPainterPath spiral;
     bool started = false;
     for (int i = 0; i <= 180; ++i) {
@@ -941,7 +941,7 @@ void BlackHolePreviewWidget::paintIscoCritical(QPainter &p)
     p.setPen(ip); p.setBrush(Qt::NoBrush);
     p.drawEllipse(c, iscoR, iscoR * 0.40f);
 
-    // Body at ISCO — slightly perturbed radially
+    // Body at ISCO, slightly perturbed radially
     float wobble = iscoR * (1.f + 0.04f * std::sin(m_phase * 2.0f));
     float ang = m_angle * PI / 180.f;
     QPointF body(c.x() + wobble * std::cos(ang), c.y() + wobble * 0.40f * std::sin(ang));
@@ -1097,7 +1097,7 @@ void BlackHolePreviewWidget::paintTidalDisrupt(QPainter &p)
         if (!started) { stream.moveTo(sx, sy); started = true; }
         else          { stream.lineTo(sx, sy); }
     }
-    // Outer half — fading escape arm
+    // Outer half, fading escape arm
     QLinearGradient streamGrad(c.x(), c.y() - aStar, c.x() + aStar * 1.4f, c.y());
     streamGrad.setColorAt(0.0, QColor(255,140,80,200));
     streamGrad.setColorAt(0.6, QColor(255,80,40,100));
@@ -1107,7 +1107,7 @@ void BlackHolePreviewWidget::paintTidalDisrupt(QPainter &p)
 
     drawContextBH(p, c, bR, false, 0.f, 0.f, Qt::white);
 
-    // Stretched star at pericentre — elongated ellipse
+    // Stretched star at pericentre, elongated ellipse
     float periAng = (m_angle * 0.3f + 90.f) * PI / 180.f;
     float periR   = aStar * 0.4f;
     QPointF peri(c.x() + periR * std::cos(periAng), c.y() + periR * 0.50f * std::sin(periAng));
@@ -1167,7 +1167,7 @@ void BlackHolePreviewWidget::paintPulsarInspiral(QPainter &p)
 // Helper: draws galactic-centre background (dense star field + dusty haze)
 static void sgraBg(BlackHolePreviewWidget *self, QPainter &p, QPointF c, float bR)
 {
-    // Dusty warm haze — draw as semi-transparent gradient wash
+    // Dusty warm haze, draw as semi-transparent gradient wash
     QRadialGradient haze(c, bR * 7.f);
     haze.setColorAt(0.0f, QColor(60,40,20,55));
     haze.setColorAt(0.5f, QColor(30,20,8,30));
@@ -1186,7 +1186,7 @@ void BlackHolePreviewWidget::paintSgraS2(QPainter &p)
     drawStarfield(p, true);
     sgraBg(this, p, c, bR);
 
-    // Precessing orbit — semi-major axis oriented by m_angle * 0.06 (slow)
+    // Precessing orbit, semi-major axis oriented by m_angle * 0.06 (slow)
     float orbitA = bR * 3.8f, orbitB = orbitA * 0.30f;
     float precess = m_angle * 0.06f; // slow precession
     drawOrbitPath(p, c, orbitA, orbitB, precess, QColor(200,200,255), 0.55f, true);
@@ -1215,7 +1215,7 @@ void BlackHolePreviewWidget::paintSgraS14(QPainter &p)
     drawStarfield(p, true);
     sgraBg(this, p, c, bR);
 
-    // Very tight orbit — small semi-major axis, faster precession
+    // Very tight orbit, small semi-major axis, faster precession
     float orbitA = bR * 2.6f, orbitB = orbitA * 0.20f;
     float precess = m_angle * 0.18f;
     // Draw several ghost orbit ellipses to show precession rosette
@@ -1253,7 +1253,7 @@ void BlackHolePreviewWidget::paintSgraIrs16(QPainter &p)
 
     drawContextBH(p, c, bR, true, bR * 2.0f, 0.22f, QColor(90,70,55));
 
-    // OB star — bright blue-white, large
+    // OB star, bright blue-white, large
     float ang = m_angle * PI / 180.f;
     QPointF star(c.x() + orbitA * std::cos(ang), c.y() + orbitB * std::sin(ang));
     for (int i = 3; i >= 1; --i) {
@@ -1281,7 +1281,7 @@ void BlackHolePreviewWidget::paintSgraGasClump(QPainter &p)
 
     drawContextBH(p, c, bR, true, bR * 2.0f, 0.22f, QColor(90,70,55));
 
-    // Gas clump — elongated, colour based on phase (near pericentre = hotter)
+    // Gas clump, elongated, colour based on phase (near pericentre = hotter)
     float ang = m_angle * PI / 180.f;
     float dist = std::sqrt(std::pow(orbitA * std::cos(ang),2) + std::pow(orbitB * std::sin(ang),2));
     float heating = 1.f - std::min(dist / (orbitA * 1.1f), 1.f);
@@ -1325,7 +1325,7 @@ void BlackHolePreviewWidget::paintSgraSMember(QPainter &p)
 // TON 618 system paint methods
 // ---------------------------------------------------------------------------
 
-// Helper: TON 618 context — blazing purple-white quasar background
+// Helper: TON 618 context, blazing purple-white quasar background
 static void ton618Bg(QPainter &p, int w, int h)
 {
     QRadialGradient qg(QPointF(w*0.5f, h*0.5f), h * 1.1f);
@@ -1449,7 +1449,7 @@ void BlackHolePreviewWidget::paintTon618Plunge(QPainter &p)
 
     drawContextBH(p, c, bR, true, bR * 2.5f, 0.20f, QColor(200,160,255));
 
-    // Near-radial plunge path — almost a straight line from upper-right
+    // Near-radial plunge path, almost a straight line from upper-right
     float startX = c.x() + W * 0.35f, startY = c.y() - H * 0.34f;
     float phase  = std::fmod(m_phase * 0.4f, 1.0f);
     float bodyX  = startX + (c.x() - bR * 1.05f - startX) * phase;
@@ -1461,7 +1461,7 @@ void BlackHolePreviewWidget::paintTon618Plunge(QPainter &p)
     p.setPen(tp); p.setBrush(Qt::NoBrush);
     p.drawLine(QPointF(startX, startY), QPointF(c.x(), c.y() - bR * 1.05f));
 
-    // Body (no flare — swallowed whole)
+    // Body (no flare, swallowed whole)
     QPointF body(bodyX, bodyY);
     float alpha = 1.f - phase * 0.85f;
     QRadialGradient bg(body, 6.f);
@@ -1511,7 +1511,7 @@ void BlackHolePreviewWidget::paintTon618Cluster(QPainter &p)
     ton618Bg(p, width(), height());
 
     float orbitA = bR * 5.8f, orbitB = orbitA * 0.55f;
-    // Decaying orbit — slightly smaller each pass
+    // Decaying orbit, slightly smaller each pass
     float decay = std::fmod(m_phase * 0.15f, 1.f);
     float curA  = orbitA * (1.f - decay * 0.18f);
     float curB  = orbitB * (1.f - decay * 0.18f);
@@ -1596,7 +1596,7 @@ void BlackHolePreviewWidget::paint3c273Blr(QPainter &p)
 
     float ang = m_angle * PI / 180.f;
     QPointF cloud(c.x() + orbitR * std::cos(ang), c.y() + orbitR * 0.38f * std::sin(ang));
-    // Photoionised gas blob — warm yellow
+    // Photoionised gas blob, warm yellow
     QRadialGradient cg(cloud, 10.f);
     cg.setColorAt(0.f, QColor(255,210,100,200)); cg.setColorAt(1.f, Qt::transparent);
     p.setBrush(cg); p.setPen(Qt::NoPen);
@@ -1647,7 +1647,7 @@ void BlackHolePreviewWidget::paint3c273CloseStar(QPainter &p)
     drawStarfield(p);
     c3273Bg(p, width(), height(), c, bR);
 
-    // Radiation pressure perturbs the orbit — eccentricity oscillates
+    // Radiation pressure perturbs the orbit, eccentricity oscillates
     float ecc = 0.60f + 0.10f * std::sin(m_phase * 0.7f);
     float a = bR * 4.0f, b = a * (1.f - ecc);
     drawOrbitPath(p, c, a, b, m_angle * 0.05f, QColor(255,200,100), 0.50f, true);
@@ -1701,7 +1701,7 @@ void BlackHolePreviewWidget::paintJ0529FastBlob(QPainter &p)
     // Fast orbiting blob
     float orbitR = bR * 2.0f;
     drawOrbitPath(p, c, orbitR, orbitR * 0.30f, 0.f, QColor(80,220,140), 0.45f, true);
-    float ang = m_angle * 1.4f * PI / 180.f; // faster orbit — near-Eddington inner disc
+    float ang = m_angle * 1.4f * PI / 180.f; // faster orbit, near-Eddington inner disc
     QPointF blob(c.x() + orbitR * std::cos(ang), c.y() + orbitR * 0.30f * std::sin(ang));
     QRadialGradient bg(blob, 8.f);
     bg.setColorAt(0.f, QColor(100,255,180,220)); bg.setColorAt(1.f, Qt::transparent);
@@ -1722,7 +1722,7 @@ void BlackHolePreviewWidget::paintJ0529UvClump(QPainter &p)
 
     drawContextBH(p, c, bR, true, bR * 2.6f, 0.20f, QColor(80,220,140));
 
-    // UV ionisation cone — faint wedge from disc
+    // UV ionisation cone, faint wedge from disc
     QPainterPath cone;
     float coneHalf = 28.f * PI / 180.f;
     float cLen = H * 0.42f;
@@ -1777,7 +1777,7 @@ void BlackHolePreviewWidget::paintJ0529TdeStar(QPainter &p)
 
     drawContextBH(p, c, bR, true, bR * 2.4f, 0.20f, QColor(80,220,140));
 
-    // Star body — slightly elongated, partly disrupted
+    // Star body, slightly elongated, partly disrupted
     float stAng = m_angle * 0.25f * PI / 180.f;
     QPointF star(c.x() + a * 0.50f * std::cos(stAng), c.y() + a * 0.42f * 0.50f * std::sin(stAng));
     p.save(); p.translate(star); p.rotate(m_angle * 0.25f);
@@ -1944,7 +1944,7 @@ void BlackHolePreviewWidget::paintM87HotGas(QPainter &p)
         }
     }
 
-    // Hot ICM gas fill — X-ray orange glow
+    // Hot ICM gas fill, X-ray orange glow
     QRadialGradient xrayGlow(c, bR * 5.5f);
     xrayGlow.setColorAt(0.0f, QColor(255,80,20,35));
     xrayGlow.setColorAt(0.5f, QColor(200,50,10,18));
@@ -1988,7 +1988,7 @@ void BlackHolePreviewWidget::paintM87Globular(QPainter &p)
     p.setBrush(gc); p.drawEllipse(clCentre, 7.f, 7.f);
 }
 
-// Infalling stripped dwarf galaxy — potential IMBH binary
+// Infalling stripped dwarf galaxy, potential IMBH binary
 void BlackHolePreviewWidget::paintM87Dwarf(QPainter &p)
 {
     const float W = width(), H = height();
@@ -2006,7 +2006,7 @@ void BlackHolePreviewWidget::paintM87Dwarf(QPainter &p)
 
     float ang = m_angle * PI / 180.f;
     QPointF nuc(c.x() + orbitA * std::cos(ang), c.y() + orbitB * std::sin(ang));
-    // Stripped dwarf nucleus — diffuse elliptical halo + compact centre
+    // Stripped dwarf nucleus, diffuse elliptical halo + compact centre
     QRadialGradient halo(nuc, 13.f);
     halo.setColorAt(0.0f, QColor(255,220,140,160));
     halo.setColorAt(0.5f, QColor(200,170,100,80));

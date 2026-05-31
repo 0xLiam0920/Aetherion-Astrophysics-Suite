@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# bundle_app.sh — Package and optionally install Aetherion
+# bundle_app.sh: Package and optionally install Aetherion
 #
 # Usage:
 #   ./bundle_app.sh                           # auto-detect platform
@@ -118,7 +118,7 @@ copy_resources() {
 }
 
 # ══════════════════════════════════════════════════════════════
-# macOS — .app bundle
+# macOS, .app bundle
 # ══════════════════════════════════════════════════════════════
 bundle_mac() {
     local BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
@@ -131,7 +131,7 @@ bundle_mac() {
     rm -rf "${BUNDLE}"
     mkdir -p "${MACOS_DIR}" "${RESOURCES}" "${FRAMEWORKS}"
 
-    # Executables — unified build produces blackhole-sim; legacy targets are optional
+    # Executables, unified build produces blackhole-sim; legacy targets are optional
     local copied_exe=false
     for exe in blackhole-sim blackhole-2D blackhole-3D; do
         if [ -f "${BUILD_DIR}/${exe}" ]; then
@@ -172,7 +172,7 @@ PLIST
     # ── Step 1: Deploy Qt with macdeployqt ───────────────────────────────────
     # macdeployqt copies Qt frameworks + the macOS platform plugin (libqcocoa),
     # writes qt.conf, and rewrites all Qt load paths in the executables to
-    # @executable_path/../Frameworks — no hardcoded Homebrew paths left behind.
+    # @executable_path/../Frameworks, no hardcoded Homebrew paths left behind.
     local MACDEPLOYQT=""
     for _candidate in \
         "$(command -v macdeployqt 2>/dev/null || true)" \
@@ -233,10 +233,10 @@ PLIST
                 install_name_tool -add_rpath "@loader_path/../../Frameworks" "${_plug}" 2>/dev/null || true
             done
         else
-            echo "  WARNING: Qt plugins directory not found under ${_QT_PREFIX} — app may not start."
+            echo "  WARNING: Qt plugins directory not found under ${_QT_PREFIX}, app may not start."
         fi
     else
-        echo "  WARNING: macdeployqt not found — falling back to manual Qt copy."
+        echo "  WARNING: macdeployqt not found, falling back to manual Qt copy."
         echo "           Install Qt via Homebrew:  brew install qt"
         local _HB_FB
         _HB_FB="$(brew --prefix 2>/dev/null || echo /opt/homebrew)"
@@ -257,7 +257,7 @@ PLIST
 
     # ── Step 2: Bundle non-Qt dylibs (SFML, freetype, libpng, etc.) ─────────
     # We discover every non-system, non-Qt dylib the executables need at runtime
-    # via `otool -L`, then recursively collect transitive dependencies — no
+    # via `otool -L`, then recursively collect transitive dependencies, no
     # hardcoded library names or Homebrew paths anywhere.
 
     # Match system paths and already-relative (@-prefixed) references to skip.
@@ -284,7 +284,7 @@ PLIST
         local _dst="${FRAMEWORKS}/${_name}"
         [[ -f "${_dst}" ]] && return 0   # already bundled
         if [[ ! -f "${_src}" ]]; then
-            echo "    WARNING: ${_src} not found — skipping."
+            echo "    WARNING: ${_src} not found, skipping."
             return 0
         fi
         cp -Lf "${_src}" "${_dst}"       # -L dereferences symlinks
@@ -311,13 +311,13 @@ PLIST
     _dylib_count="$(find "${FRAMEWORKS}" -maxdepth 1 -name '*.dylib' 2>/dev/null | wc -l | tr -d ' ')"
     echo "  Bundled ${_dylib_count} dylib(s) into Frameworks/."
 
-    # ── Step 3: Fix executables — rewrite load paths and set RPATH ──────────
+    # ── Step 3: Fix executables, rewrite load paths and set RPATH ──────────
     # Each executable gets:
     #   • Absolute Homebrew dep paths → @rpath/name.dylib
     #   • All existing LC_RPATH entries removed (Homebrew dirs, build dirs, etc.)
     #   • A single new LC_RPATH: @executable_path/../Frameworks
-    #     This makes the dynamic linker resolve every @rpath/... reference —
-    #     both our flat dylibs and any Qt frameworks — from inside the bundle.
+    #     This makes the dynamic linker resolve every @rpath/... reference -
+    #     both our flat dylibs and any Qt frameworks, from inside the bundle.
 
     _mac_fix_exe() {
         local _bin="$1"
@@ -366,11 +366,11 @@ PLIST
         done
         codesign --force -s - "${BUNDLE}" 2>/dev/null \
             && echo "  Code signed (ad-hoc)." \
-            || echo "  WARNING: codesign failed — the app may still run normally."
+            || echo "  WARNING: codesign failed, the app may still run normally."
     else
         echo "  Code signing with: ${SIGN_IDENTITY}"
         # Sign bundled dylibs first, then frameworks, then each executable,
-        # then the bundle itself — innermost components must be signed first.
+        # then the bundle itself, innermost components must be signed first.
         for dylib in "${FRAMEWORKS}"/*.dylib; do
             [[ -f "${dylib}" ]] || continue
             codesign --force --options runtime --timestamp \
@@ -410,7 +410,7 @@ install_mac() {
 }
 
 # ══════════════════════════════════════════════════════════════
-# Linux — self-contained directory with launcher + .desktop entry
+# Linux, self-contained directory with launcher + .desktop entry
 # ══════════════════════════════════════════════════════════════
 bundle_linux() {
     local OUT="${BUILD_DIR}/Aetherion-linux"
@@ -430,7 +430,7 @@ bundle_linux() {
     # Collect runtime shared libraries via ldd.
     # We bundle SFML, Qt6, GLEW, freetype, libpng, and their transitive non-system deps.
     # Core system libs (libc, libm, libpthread, X11, GL drivers) are intentionally
-    # left to the host — bundling them causes more problems than it solves.
+    # left to the host, bundling them causes more problems than it solves.
     local SKIP_PATTERN
     SKIP_PATTERN='linux-vdso|ld-linux|libdl\.so|libpthread|libm\.so|libc\.so|librt\.so'
     SKIP_PATTERN+="|libgcc_s|libstdc\+\+|libX11|libxcb|libGL\.so|libEGL|libnvidia|libdrm|libwayland|libdbus"
@@ -447,11 +447,11 @@ bundle_linux() {
         done < <(ldd "${BIN_DIR}/blackhole-sim" 2>/dev/null)
         echo "  Runtime libs collected ($(ls "${LIB_DIR}" | wc -l) file(s))."
     else
-        echo "  WARNING: ldd not found — skipping automatic library collection."
+        echo "  WARNING: ldd not found, skipping automatic library collection."
         echo "           Manually place required .so files in ${LIB_DIR}/."
     fi
 
-    # Qt xcb platform plugin — required for SFML embedding inside Qt widgets
+    # Qt xcb platform plugin, required for SFML embedding inside Qt widgets
     local QT_XCB_DIRS=(
         "/usr/lib/x86_64-linux-gnu/qt6/plugins/platforms"
         "/usr/lib/qt6/plugins/platforms"
@@ -473,7 +473,7 @@ bundle_linux() {
         patchelf --set-rpath '$ORIGIN/../lib' "${BIN_DIR}/blackhole-sim"
         echo "  RPATH set to \$ORIGIN/../lib."
     else
-        echo "  NOTE: patchelf not found — launcher will use LD_LIBRARY_PATH instead."
+        echo "  NOTE: patchelf not found, launcher will use LD_LIBRARY_PATH instead."
         echo "        Install with: sudo apt install patchelf"
     fi
 
@@ -492,7 +492,7 @@ export LD_LIBRARY_PATH="${SCRIPT_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 # Point Qt to the bundled platform plugin
 export QT_PLUGIN_PATH="${SCRIPT_DIR}/plugins"
 
-# SFML embeds via X11/XCB native window handle — force XCB backend
+# SFML embeds via X11/XCB native window handle, force XCB backend
 # unless the caller has already set a preference
 if [[ -z "${QT_QPA_PLATFORM:-}" ]]; then
     export QT_QPA_PLATFORM=xcb
@@ -557,7 +557,7 @@ install_linux() {
 }
 
 # ══════════════════════════════════════════════════════════════
-# Windows — portable folder + zip archive
+# Windows, portable folder + zip archive
 # ══════════════════════════════════════════════════════════════
 bundle_windows() {
     local OUT="${BUILD_DIR}/Aetherion-windows"
@@ -621,7 +621,7 @@ README
         (cd "${BUILD_DIR}" && zip -r "Aetherion-windows-${VERSION}.zip" "Aetherion-windows/" -x '*.zip' -q)
         printf '  Archive: %s  (%s)\n' "${ZIP}" "$(du -sh "${ZIP}" | cut -f1)"
     else
-        echo "  NOTE: zip not found — skipping archive. Install with: brew install zip / apt install zip"
+        echo "  NOTE: zip not found, skipping archive. Install with: brew install zip / apt install zip"
     fi
 
     printf '\n  Output: %s  (%s)\n' "${OUT}" "$(du -sh "${OUT}" | cut -f1)"

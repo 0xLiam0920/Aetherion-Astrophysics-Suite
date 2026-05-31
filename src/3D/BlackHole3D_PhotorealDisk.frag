@@ -1,6 +1,6 @@
 // BlackHole3D_PhotorealDisk.frag
 // ============================================================================
-// TON 618 — Physically-motivated black hole visualization
+// TON 618, Physically-motivated black hole visualization
 // ============================================================================
 //
 // TON 618 is one of the most massive black holes known:
@@ -85,7 +85,7 @@ uniform int   numOrbBodies;                    // Number of active orbiting bodi
 uniform int   showOrbBody;                     // Toggle body visibility
 uniform int   maxStepsOverride; // Runtime step limit (200=fast, 300=cinematic)
 
-// Body type constants — must mirror profiles::GalaxyBody3DType (presets.hpp).
+// Body type constants, must mirror profiles::GalaxyBody3DType (presets.hpp).
 #define BODY_STAR      0
 #define BODY_GASCLOUD  1
 #define BODY_CLUSTER   2
@@ -143,7 +143,7 @@ float hash13(vec3 p);
 // True for body archetypes that have a hard photospheric surface and
 // occlude what's behind them. Diffuse / extended objects (gas clouds,
 // star clusters, dwarf galaxies) are rendered as additive volumes
-// instead — they don't block anything behind them.
+// instead, they don't block anything behind them.
 bool isOpaqueBody(int t) {
     return t == BODY_STAR     || t == BODY_COMPANION
         || t == BODY_NEUTRON  || t == BODY_WDWARF;
@@ -194,7 +194,7 @@ vec3 shadeOrbBody(int type, vec3 hitPos, vec3 normal,
         float mu   = max(dot(normal, -view), 0.0);
         float limb = 0.55 + 0.45 * mu;
         // Soft white core, falling off toward the limb where the body
-        // colour saturates — gives a glowing-but-coloured pulsar look.
+        // colour saturates, gives a glowing-but-coloured pulsar look.
         vec3  hot  = mix(bodyColor, vec3(1.0), pow(mu, 2.0) * 0.6);
         return hot * limb * 14.0;
     }
@@ -208,7 +208,7 @@ vec3 shadeOrbBody(int type, vec3 hitPos, vec3 normal,
         return hot * limb * 10.0;
     }
     if (type == BODY_COMPANION) {
-        // Companion stars: typical late-type giant — bigger granules,
+        // Companion stars: typical late-type giant, bigger granules,
         // stronger limb reddening, slightly cooler.
         return shadeStarSurface(hitPos, normal, bodyCenter, bodyColor,
                                 3.0, 0.20,
@@ -216,7 +216,7 @@ vec3 shadeOrbBody(int type, vec3 hitPos, vec3 normal,
                                 vec3(1.0, 0.55, 0.20),
                                 5.0);
     }
-    // Default: BODY_STAR — Sun-like main-sequence photosphere.
+    // Default: BODY_STAR, Sun-like main-sequence photosphere.
     return shadeStarSurface(hitPos, normal, bodyCenter, bodyColor,
                             4.0, 0.15,
                             vec3(1.0),
@@ -225,7 +225,7 @@ vec3 shadeOrbBody(int type, vec3 hitPos, vec3 normal,
 }
 
 // Additive volumetric / glow contribution from one orbiting body for the
-// current ray. Used for both opaque and extended bodies — opaque ones get
+// current ray. Used for both opaque and extended bodies, opaque ones get
 // a corona halo, extended ones get a soft Gaussian volume in place of a
 // surface. Returns RGB to add to the scene.
 vec3 orbBodyEmission(int idx, vec3 ro, vec3 rd) {
@@ -325,7 +325,7 @@ vec3 orbBodyEmission(int idx, vec3 ro, vec3 rd) {
             float ang = abs(dot(dirC, mag));         // 0..1 along axis
             // Two-sided narrow cone (both magnetic poles)
             beam = pow(smoothstep(0.985, 1.0, ang), 2.0);
-            // Falloff with distance — beam stays visible far from the star.
+            // Falloff with distance, beam stays visible far from the star.
             beam *= exp(-lenC * lenC / (60.0 * r * r));
         }
         vec3 coronaCol = mix(col, vec3(1.0), 0.5) * 4.0;
@@ -408,7 +408,7 @@ float valueNoise3D(vec3 p) {
 }
 
 // Cheap pseudo-cellular noise: approximates Worley billow structure
-// using abs(noise) trick — much faster than real Worley (no 27-cell search)
+// using abs(noise) trick, much faster than real Worley (no 27-cell search)
 float billowNoise3D(vec3 p) {
     return abs(valueNoise3D(p) * 2.0 - 1.0);
 }
@@ -426,7 +426,7 @@ float fbm3D(vec3 p, int octaves) {
     return val;
 }
 
-// Billow FBM — gives cauliflower-like cumulus structure cheaply
+// Billow FBM, gives cauliflower-like cumulus structure cheaply
 float billowFbm3D(vec3 p, int octaves) {
     float val = 0.0;
     float amp = 0.5;
@@ -478,7 +478,7 @@ float fbm(vec2 p, int octaves) {
 }
 
 // ============================================================================
-// SPECTRAL FREQUENCY SHIFT — for background starlight and general color
+// SPECTRAL FREQUENCY SHIFT, for background starlight and general color
 // ============================================================================
 // Redistributes RGB energy to approximate a spectral wavelength shift.
 // freqRatio > 1: blueshift (light gained energy), < 1: redshift (light lost energy).
@@ -529,7 +529,7 @@ vec3 applyFrequencyShift(vec3 color, float freqRatio) {
 }
 
 // ============================================================================
-// BLACKBODY & DISK PHYSICS — TON 618
+// BLACKBODY & DISK PHYSICS, TON 618
 // ============================================================================
 
 vec3 kelvinToRGB(float K) {
@@ -585,7 +585,7 @@ float computeISCO(float a) {
 }
 
 // Novikov-Thorne flux profile: F(r) ∝ [1 - √(rISCO/r)] / r³
-// This is T(r)^4 from diskTemperature() — extracted here for clarity
+// This is T(r)^4 from diskTemperature(), extracted here for clarity
 float novikovThorneFlux(float r, float rISCO) {
     if (r < rISCO) return 0.0;
     float x = r / rISCO;
@@ -667,7 +667,7 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     // This is the physically correct Planck spectrum shift:
     //   Redshift uniformly scales frequency → shifts the blackbody peak.
     //   kelvinToRGB(T_obs) then maps the shifted Planck spectrum to visible color.
-    //   No per-channel RGB hack needed — the Planck function handles it.
+    //   No per-channel RGB hack needed, the Planck function handles it.
     float freqShift = D * grav;
     
     // Radial color gradient: use disk position directly for visible color.
@@ -682,13 +682,13 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     T_display = clamp(T_display, 600.0, 25000.0);
     vec3 color = kelvinToRGB(T_display);
     
-    // Boost saturation — per-preset values
+    // Boost saturation, per-preset values
     float satBoost = mix(diskSatBoostInner, diskSatBoostOuter, radialColorGradient);
     float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
     color = max(mix(vec3(lum), color, satBoost), 0.0);
     
     // === BEAM STRUCTURE (spiral arms + radial streaks + filaments) ===
-    // Prominent logarithmic spiral arms — the dominant rotating feature.
+    // Prominent logarithmic spiral arms, the dominant rotating feature.
     // Two-arm pattern (m=2) like simulated MHD turbulence.
     float spiralPhase = angle * 2.0 - log(max(r / rIn, 0.01)) * 5.0;
     float spiralArm = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(spiralPhase), 3.0);
@@ -698,10 +698,10 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
                     exp(-pow(mod(hotspotAngle, 6.2832) - 3.14159, 2.0) * 2.0) * 2.0;
     // Radial streaks emanating outward (rotate with disk)
     float streaks = 0.55 + 0.45 * pow(abs(sin(angle * 6.0)), 2.5);
-    // Fine filaments from MHD turbulence — slowly evolving in time
+    // Fine filaments from MHD turbulence, slowly evolving in time
     float turbTime = uTime * 0.35;  // Turbulent evolution rate
     float filaments = 0.70 + 0.30 * fbm(vec2(angle * 6.0 + turbTime * 0.7, r * 2.0 + turbTime * 0.3), 2);
-    // Concentric density waves — spiral inward over time
+    // Concentric density waves, spiral inward over time
     float wavePropagation = uTime * 0.5;  // Inward-propagating density waves
     float waves = 0.82 + 0.18 * sin(r * 5.0 + angle * 2.0 - wavePropagation) * sin(r * 3.0 + wavePropagation * 0.5);
     
@@ -719,11 +719,11 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     flux = mix(flux, sqrt(flux), 0.65);
     
     // Relativistic surface brightness: I_obs ∝ D^3 × I_emit  (Liouville's theorem)
-    // Full D^3 beaming — essential for scientific accuracy
+    // Full D^3 beaming, essential for scientific accuracy
     float dopplerBright = pow(clamp(D, 0.2, 4.0), 3.0);
     dopplerBright = mix(1.0, dopplerBright, 0.65);  // Stronger asymmetry (was 0.35)
     
-    // Inner hot region boost — TON 618 is hyperluminous, ISCO region blazing
+    // Inner hot region boost, TON 618 is hyperluminous, ISCO region blazing
     float innerBoost = 1.0 + 5.0 * exp(-(r - rISCO * 1.36) * (r - rISCO * 1.36) * 0.3);
     // Additional broad inner glow out to ~5 Rs
     innerBoost += 1.5 * smoothstep(6.0, rISCO, r);
@@ -755,14 +755,14 @@ vec3 diskAtmosphere(vec3 pos, vec3 bhPos, float rIn, float rOut) {
     float puffHeight = mix(0.15, 0.9, pow(tRad, 0.7));
     if (y > puffHeight) return vec3(0.0);
     
-    // Vertical density falloff — tighter Gaussian for thinner profile
+    // Vertical density falloff, tighter Gaussian for thinner profile
     float verticalDensity = exp(-y * y / (puffHeight * puffHeight * 0.2));
     
     // Radial density: peaks in mid-outer region, fades at edge
     float radialDensity = smoothstep(outerStart, outerStart + 1.5, rXZ) 
                         * smoothstep(rOut * 1.3, rOut * 0.85, rXZ);
     
-    // Turbulent puffing structure — rotates with Keplerian flow and evolves
+    // Turbulent puffing structure, rotates with Keplerian flow and evolves
     float angle = atan(rel.z, rel.x);
     float atmoOmega = 1.5 * pow(max(rXZ, rIn), -1.5);
     float rotatedAngle = angle + uTime * atmoOmega;
@@ -782,7 +782,7 @@ vec3 diskAtmosphere(vec3 pos, vec3 bhPos, float rIn, float rOut) {
 }
 
 // ============================================================================
-// BROAD LINE REGION — volumetric storm-cloud torus
+// BROAD LINE REGION, volumetric storm-cloud torus
 // Uses 3D noise (FBM + Worley) for realistic cumulus structure,
 // density remapping for hard cloud edges, Beer-powder lighting,
 // and time-based animation for slow churning motion.
@@ -837,7 +837,7 @@ vec3 blrDensity(vec3 pos, vec3 bhPos) {
     bool hiQuality = (maxStepsOverride >= 300);
 
     // Domain warp (cinematic only): slow FBM displacement makes clouds look like
-    // storm systems — irregular overhangs and tendrils without extra march steps.
+    // storm systems, irregular overhangs and tendrils without extra march steps.
     if (hiQuality) {
         vec3 wp = noisePos * 0.5 + vec3(t * 0.025);
         vec3 warp = vec3(
@@ -893,7 +893,7 @@ vec3 blrDensity(vec3 pos, vec3 bhPos) {
     return cloudColor * density * 0.18;
 }
 // ============================================================================
-// JET EMISSION — wide volumetric conical jets
+// JET EMISSION, wide volumetric conical jets
 // ============================================================================
 
 // Relativistic jet emission for TON 618
@@ -1035,7 +1035,7 @@ void traceRay(
     bool diskHit = false;  // First disk crossing
     int diskCrossings = 0; // Count disk plane crossings for photon ring
     
-    // Orbiting bodies — pre-compute intersections along initial ray
+    // Orbiting bodies, pre-compute intersections along initial ray
     // (We test against the straight-line ray; lensing will be minor at body distance)
     float orbBodyDist = -1.0;
     vec3 orbBodyHitColor = vec3(0.0);
@@ -1048,7 +1048,7 @@ void traceRay(
     vec3 coronaAcc = vec3(0.0);
     if (showOrbBody != 0) {
         for (int i = 0; i < numOrbBodies; ++i) {
-            // Opaque body types occlude what's behind them — test the
+            // Opaque body types occlude what's behind them, test the
             // straight ray for a hard surface hit. Extended types (gas
             // clouds, clusters, dwarf galaxies) skip this and contribute
             // purely additively below.
@@ -1067,7 +1067,7 @@ void traceRay(
         }
         // Pre-shade the nearest opaque body using the straight-ray hit. The
         // straight ray is what determines screen-space visibility from the
-        // camera — gravitational lensing of the body itself is a secondary
+        // camera, gravitational lensing of the body itself is a secondary
         // effect we ignore here so the body never appears transparent
         // through lensed disk/photon-ring features.
         if (hitBodyIndex >= 0) {
@@ -1193,7 +1193,7 @@ void traceRay(
         }
         
         // ================================================================
-        // Kerr geodesic — velocity Verlet (symplectic) integrator
+        // Kerr geodesic, velocity Verlet (symplectic) integrator
         // ================================================================
         // Verlet is 2nd-order and symplectic: conserves phase-space volume,
         // eliminates the systematic energy drift of Euler integration.
@@ -1201,7 +1201,7 @@ void traceRay(
         //
         // Force model: Schwarzschild 1/r² + Lense-Thirring frame-dragging.
         // This is NOT full Kerr geodesic integration in Boyer-Lindquist
-        // coordinates — it's an effective-potential approximation that
+        // coordinates, it's an effective-potential approximation that
         // captures the correct qualitative behavior (lensing, frame-dragging
         // asymmetry, photon sphere) at real-time shader cost.
         // ================================================================
@@ -1244,7 +1244,7 @@ void traceRay(
         vec3 newDir = normalize(halfDir + accel2 * (stepLen * 0.5));
         
         // === DISK PLANE CROSSING TEST ===
-        // Accumulate ALL crossings — secondary/tertiary images
+        // Accumulate ALL crossings, secondary/tertiary images
         // create the iconic Einstein ring from Interstellar.
         float newSide = (newPos - bhPos).y;
         if (sign(newSide) != sign(lastSide)) {
@@ -1264,7 +1264,7 @@ void traceRay(
                 // === PHOTON RING ===
                 // Rays grazing the photon sphere (1.5 Rs) orbit the BH
                 // and cross the disk multiple times, creating thin bright
-                // rings — the n=1,2,3... photon sub-rings.
+                // rings, the n=1,2,3... photon sub-rings.
                 diskCrossings++;
                 float rPhoton = 1.5 * blackHoleRadius;  // Photon sphere
                 // How close this crossing is to the photon sphere radius
@@ -1317,7 +1317,7 @@ void traceRay(
     // infinity (distant stars) with a frequency ratio:
     //   f_obs / f_∞ = 1 / √(1 - Rs/r_obs)
     // Deep in the gravitational well, the entire external universe appears as a
-    // warped, blue-shifted halo — background stars become brighter and bluer.
+    // warped, blue-shifted halo, background stars become brighter and bluer.
     // Near the event horizon, this blueshift becomes extreme and light shifts
     // beyond the visible spectrum into UV/X-ray.
     if (!absorbed && showBlueshift != 0) {
@@ -1334,7 +1334,7 @@ void traceRay(
 
     // Composite layers: body acts as opaque "background" when hit (the
     // ray-march already stopped at the body, so BLR/disk/jet accumulators
-    // only contain emission BETWEEN camera and body — i.e. in front of it).
+    // only contain emission BETWEEN camera and body, i.e. in front of it).
     vec3 result = bgColor;
 
     // Layer opaque orbiting body over the sky/BH background first
@@ -1342,7 +1342,7 @@ void traceRay(
         result = mix(result, orbBodyHitColor, orbBodyHitAlpha);
     }
 
-    // Stellar corona — additive halo around every body, visible whether or
+    // Stellar corona, additive halo around every body, visible whether or
     // not the ray hits the body's surface. This is what gives stars their
     // characteristic glow and makes them readable as suns rather than spheres.
     result += coronaAcc;
@@ -1367,7 +1367,7 @@ void main() { // note, we chose void here since we're returning early on absorpt
     vec3 rayDir = getRayDir(fragUV, cameraPos, cameraDir, cameraUp, fov); // Compute initial ray direction from camera through pixel (janky ahh approach but it works)
     vec3 rayOrigin = cameraPos;
     
-    // No early sphere test here — the ray marcher handles absorption
+    // No early sphere test here, the ray marcher handles absorption
     // after accumulating any disk/BLR/jet emission in front of the BH.
     
     vec3 color; // Nothing beats a jet 2 holiday - I mean the color of a ray after tracing through the scene
@@ -1377,7 +1377,7 @@ void main() { // note, we chose void here since we're returning early on absorpt
     traceRay(rayOrigin, rayDir, blackHolePos, blackHoleRadius, color, alpha, absorbed);
     
     // ================================================================
-    // PHOTON RING — thin bright ring at the black hole shadow boundary.
+    // PHOTON RING, thin bright ring at the black hole shadow boundary.
     // The shadow edge corresponds to the critical impact parameter:
     //   b_crit = 3√3/2 × Rs ≈ 2.598 Rs  (Schwarzschild)
     // Light at this impact parameter orbits the BH multiple times,
@@ -1415,7 +1415,7 @@ void main() { // note, we chose void here since we're returning early on absorpt
             float shadowAngular = bCrit / zDist;
             float shadowScreen = shadowAngular / (2.0 * tanHalfFov);
             
-            // Bright ring at the shadow edge — razor-thin photon ring
+            // Bright ring at the shadow edge, razor-thin photon ring
             float ringDist = abs(distFromBH - shadowScreen);
             float ringWidth = shadowScreen * 0.04;  // Thin, physically correct
             float ring = exp(-ringDist * ringDist / (ringWidth * ringWidth));
@@ -1424,7 +1424,7 @@ void main() { // note, we chose void here since we're returning early on absorpt
             float glowWidth = shadowScreen * 0.15;
             float glow = exp(-ringDist * ringDist / (glowWidth * glowWidth)) * 0.3;
             
-            // Only brighten at/outside the shadow edge — NO bleed inside
+            // Only brighten at/outside the shadow edge, NO bleed inside
             float insideShadow = smoothstep(shadowScreen * 0.92, shadowScreen, distFromBH);
             float outerFalloff = smoothstep(shadowScreen * 1.25, shadowScreen * 1.02, distFromBH);
             float edgeBright = insideShadow * outerFalloff;

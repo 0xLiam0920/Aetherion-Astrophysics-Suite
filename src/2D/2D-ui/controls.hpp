@@ -4,6 +4,7 @@
 #include "../2D-utils/presets_2d.hpp"
 #include "../2D-utils/key_config_2d.hpp"
 #include "../2D-physics/units.hpp"
+#include "../../platform.hpp"
 #include <algorithm>
 #include <string>
 
@@ -28,6 +29,7 @@ struct UIState {
     bool   showNumericalError = false;
     bool   showControlsPanel  = true;   // toggleable controls list
     bool   highResLensing    = false;   // log-spaced extra rays near b_crit
+    bool   lightMode         = false;   // light theme for the 2D HUD overlays
     std::string notification;
     int    notificationTimer = 0;
 
@@ -41,6 +43,36 @@ struct UIState {
         std::string customInput      = "10.0";  // raw digit string
         double      customMassSolar  = 10.0;    // last parsed custom mass
     } mergerMenu;
+
+    // ── Custom-body creator menu ─────────────────────────────────────────────
+    // Lets the user spawn a free-form body around the primary BH and save it
+    // as a reusable preset. Fields 0..3 are input rows (name, type, sm, ecc).
+    // focusedField >= kCustomBodyInputCount selects a saved preset row.
+    static constexpr int kCustomBodyInputCount = 4;
+    struct CustomBodyMenuState {
+        bool        open            = false;
+        int         focusedField    = 0;
+        int         typeIdx         = 0;        // index into customBodyTypes()
+        std::string nameInput;                  // optional; auto-named if empty
+        std::string smInput         = "20.0";
+        std::string eccInput        = "0.3";
+    } customBodyMenu;
+
+    // Fixed type list for the custom-body creator. Order is independent of the
+    // GalaxyBodyType enum order so the menu can present a curated lineup.
+    static constexpr int kCustomBodyTypeCount = 7;
+    static const GalaxyBodyType* customBodyTypes() {
+        static const GalaxyBodyType kTypes[kCustomBodyTypeCount] = {
+            GalaxyBodyType::Star,
+            GalaxyBodyType::GasCloud,
+            GalaxyBodyType::StellarCluster,
+            GalaxyBodyType::DwarfGalaxy,
+            GalaxyBodyType::NeutronStar,
+            GalaxyBodyType::WhiteDwarf,
+            GalaxyBodyType::CompanionStar,
+        };
+        return kTypes;
+    }
 };
 
 // Process a single SFML event and update UI / simulation state.
@@ -64,7 +96,7 @@ inline void handleInput(
             } else if (c == 8 || c == 127) { // backspace / delete
                 if (!ui.mergerMenu.customInput.empty())
                     ui.mergerMenu.customInput.pop_back();
-            } else if (c == 13) { // Enter — confirm
+            } else if (c == 13) { // Enter, confirm
                 try {
                     double m = std::stod(ui.mergerMenu.customInput);
                     if (m > 0.0) {
@@ -76,8 +108,39 @@ inline void handleInput(
                         ui.notificationTimer = 150;
                     }
                 } catch (...) {
-                    ui.notification      = "Invalid mass — enter a positive number";
+                    ui.notification      = "Invalid mass, enter a positive number";
                     ui.notificationTimer = 120;
+                }
+            }
+        }
+    }
+
+    // ── Text entry for the custom-body creator (name + sm + ecc fields) ──
+    if (ui.customBodyMenu.open) {
+        const int f = ui.customBodyMenu.focusedField;
+        if (f == 0 || f == 2 || f == 3) {
+            if (auto* te = ev.getIf<sf::Event::TextEntered>()) {
+                std::string* buf = nullptr;
+                if      (f == 0) buf = &ui.customBodyMenu.nameInput;
+                else if (f == 2) buf = &ui.customBodyMenu.smInput;
+                else             buf = &ui.customBodyMenu.eccInput;
+                char32_t c = te->unicode;
+                if (f == 0) {
+                    // Name field: any printable ASCII except tab/newline.
+                    if (c >= 0x20 && c < 0x7f && c != '\t' && buf->size() < 40) {
+                        *buf += (char)c;
+                    } else if (c == 8 || c == 127) {
+                        if (!buf->empty()) buf->pop_back();
+                    }
+                } else {
+                    // Numeric fields.
+                    if (c >= '0' && c <= '9') {
+                        *buf += (char)c;
+                    } else if (c == '.') {
+                        if (buf->find('.') == std::string::npos) *buf += '.';
+                    } else if (c == 8 || c == 127) {
+                        if (!buf->empty()) buf->pop_back();
+                    }
                 }
             }
         }
@@ -90,21 +153,28 @@ inline void handleInput(
     const double bh_isco = sim.bh.metric.isco();
 
     // ── Merger menu navigation (intercepts all keys while open) ─────────────
+    // Row layout:
+    //   [0 .. NUM_BH2D_PRESETS-1]            BH presets
+    //   [NUM_BH2D_PRESETS .. +N_SEC-1]       Compact / stellar secondaries
+    //   [last]                               Custom BH (mass typed by user)
     if (ui.mergerMenu.open) {
+        const int kBHEnd     = NUM_BH2D_PRESETS;                          // exclusive
+        const int kSecEnd    = kBHEnd + NUM_MERGER_SECONDARY_PRESETS;      // exclusive
+        const int kCustomIdx = kSecEnd;                                    // single custom row
+        const int kTotalRows = kCustomIdx + 1;
         if (code == sf::Keyboard::Key::Escape) {
             ui.mergerMenu.open            = false;
             ui.mergerMenu.inputtingCustom = false;
         } else if (code == sf::Keyboard::Key::Up) {
-            int total = NUM_BH2D_PRESETS + 1;
-            ui.mergerMenu.selectedIdx = (ui.mergerMenu.selectedIdx - 1 + total) % total;
+            ui.mergerMenu.selectedIdx = (ui.mergerMenu.selectedIdx - 1 + kTotalRows) % kTotalRows;
             ui.mergerMenu.inputtingCustom = false;
         } else if (code == sf::Keyboard::Key::Down) {
-            int total = NUM_BH2D_PRESETS + 1;
-            ui.mergerMenu.selectedIdx = (ui.mergerMenu.selectedIdx + 1) % total;
+            ui.mergerMenu.selectedIdx = (ui.mergerMenu.selectedIdx + 1) % kTotalRows;
             ui.mergerMenu.inputtingCustom = false;
         } else if (code == sf::Keyboard::Key::Enter) {
-            if (ui.mergerMenu.selectedIdx == NUM_BH2D_PRESETS) {
-                // Custom option — begin text entry
+            const int idx = ui.mergerMenu.selectedIdx;
+            if (idx == kCustomIdx) {
+                // Custom option, begin text entry
                 if (!ui.mergerMenu.inputtingCustom) {
                     ui.mergerMenu.inputtingCustom = true;
                     ui.mergerMenu.customInput     = "10.0";
@@ -121,20 +191,82 @@ inline void handleInput(
                             ui.notificationTimer = 150;
                         }
                     } catch (...) {
-                        ui.notification      = "Invalid mass — enter a positive number";
+                        ui.notification      = "Invalid mass, enter a positive number";
                         ui.notificationTimer = 120;
                     }
                 }
+            } else if (idx >= kBHEnd && idx < kSecEnd) {
+                // Compact / stellar secondary
+                const auto& sec = MERGER_SECONDARY_PRESETS[idx - kBHEnd];
+                auto kind = static_cast<Simulation::MergerSecondaryKind>(sec.kind);
+                sim.startMerger(sec.massSolar, windowHeight, kind);
+                ui.mergerMenu.open = false;
+                ui.notification = std::string("Merger with ") + sec.name + " initiated!";
+                ui.notificationTimer = 150;
             } else {
-                double massSolar = BH2D_PRESETS[ui.mergerMenu.selectedIdx].massSolar;
+                double massSolar = BH2D_PRESETS[idx].massSolar;
                 sim.startMerger(massSolar, windowHeight);
                 ui.mergerMenu.open = false;
                 ui.notification = std::string("Merger with ") +
-                                  BH2D_PRESETS[ui.mergerMenu.selectedIdx].name + " initiated!";
+                                  BH2D_PRESETS[idx].name + " initiated!";
                 ui.notificationTimer = 150;
             }
         }
         return; // swallow all keypresses while menu is open
+    }
+
+    // ── Custom-body creator menu navigation ─────────────────────────────────
+    if (ui.customBodyMenu.open) {
+        auto& m = ui.customBodyMenu;
+        const int nPresets = (int)sim.customPresets.size();
+        const int nFields  = UIState::kCustomBodyInputCount;     // 4
+        const int nRows    = nFields + nPresets;
+        if (code == sf::Keyboard::Key::Escape) {
+            m.open = false;
+        } else if (code == sf::Keyboard::Key::Tab || code == sf::Keyboard::Key::Down) {
+            m.focusedField = (m.focusedField + 1) % nRows;
+        } else if (code == sf::Keyboard::Key::Up) {
+            m.focusedField = (m.focusedField + nRows - 1) % nRows;
+        } else if (m.focusedField == 1 &&
+                   (code == sf::Keyboard::Key::Left || code == sf::Keyboard::Key::Right)) {
+            int delta = (code == sf::Keyboard::Key::Right) ? 1 : -1;
+            m.typeIdx = (m.typeIdx + delta + UIState::kCustomBodyTypeCount)
+                        % UIState::kCustomBodyTypeCount;
+        } else if (code == sf::Keyboard::Key::Delete && m.focusedField >= nFields) {
+            int presetIdx = m.focusedField - nFields;
+            std::string nm = sim.customPresets[presetIdx].name;
+            sim.removeCustomPreset(presetIdx);
+            int newRowCount = nFields + (int)sim.customPresets.size();
+            if (m.focusedField >= newRowCount) m.focusedField = std::max(0, newRowCount - 1);
+            ui.notification = "Deleted preset: " + nm;
+            ui.notificationTimer = 120;
+        } else if (code == sf::Keyboard::Key::Enter) {
+            if (m.focusedField >= nFields) {
+                const auto& p = sim.customPresets[m.focusedField - nFields];
+                sim.addCustomBody(p.type, p.semiMajorM, p.ecc, p.name.c_str());
+                m.open = false;
+                ui.notification = "Spawned preset: " + p.name;
+                ui.notificationTimer = 150;
+            } else {
+                double sm  = 20.0;
+                double ecc = 0.3;
+                try { sm  = std::stod(m.smInput);  } catch (...) {}
+                try { ecc = std::stod(m.eccInput); } catch (...) {}
+                if (sm < 2.5 || ecc < 0.0 || ecc >= 1.0) {
+                    ui.notification = "Bad input: need sm >= 2.5 M and 0 <= e < 1";
+                    ui.notificationTimer = 150;
+                } else {
+                    GalaxyBodyType t = UIState::customBodyTypes()[m.typeIdx];
+                    std::string nm = sim.appendCustomPreset(m.nameInput, t, sm, ecc);
+                    sim.addCustomBody(t, sm, ecc, nm.c_str());
+                    m.open = false;
+                    m.nameInput.clear();
+                    ui.notification = "Spawned + saved: " + nm;
+                    ui.notificationTimer = 150;
+                }
+            }
+        }
+        return;
     }
 
     // ── Simulation ────────────────────────────────────────────────────────────
@@ -143,6 +275,7 @@ inline void handleInput(
 
     } else if (code == cfg.togglePreset) {
         ui.presetActive = !ui.presetActive;
+        sim.clearTransientEvents();
         if (ui.presetActive) {
             sim.bh.metric.M       = units::solarMassToGeomMeters(BH2D_PRESETS[ui.presetIdx].massSolar);
             sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
@@ -160,6 +293,7 @@ inline void handleInput(
 
     } else if (code == cfg.nextPreset) {
         if (ui.presetActive) {
+            sim.clearTransientEvents();
             ui.presetIdx = (ui.presetIdx + 1) % NUM_BH2D_PRESETS;
             sim.bh.metric.M       = units::solarMassToGeomMeters(BH2D_PRESETS[ui.presetIdx].massSolar);
             sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
@@ -174,6 +308,7 @@ inline void handleInput(
 
     } else if (code == cfg.prevPreset) {
         if (ui.presetActive) {
+            sim.clearTransientEvents();
             ui.presetIdx = (ui.presetIdx - 1 + NUM_BH2D_PRESETS) % NUM_BH2D_PRESETS;
             sim.bh.metric.M       = units::solarMassToGeomMeters(BH2D_PRESETS[ui.presetIdx].massSolar);
             sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
@@ -191,6 +326,39 @@ inline void handleInput(
         ui.presetActive       = false;
         sim.params.pixelsPerM = ui.defaultPixelsPerM;
         sim.rebuildPhotons(windowHeight);
+
+    } else if (code == cfg.resetView) {
+        // Snap the camera back to a sensible default for the current scenario
+        // without disturbing physics state (orbits, merger, etc.).
+        if (ui.presetActive) {
+            sim.params.pixelsPerM = UIState::presetHorizonPixelsTarget / (2.0 * sim.bh.metric.M);
+        } else {
+            sim.params.pixelsPerM = ui.defaultPixelsPerM;
+        }
+        ui.notification = "View reset";
+        ui.notificationTimer = 90;
+
+    } else if (code == cfg.toggleLightMode) {
+        ui.lightMode = !ui.lightMode;
+        ui.notification = ui.lightMode ? "Light mode" : "Dark mode";
+        ui.notificationTimer = 90;
+
+    } else if (code == cfg.learnMore) {
+        // Open the active preset's Wikipedia / reference URL in the user's
+        // default browser. Only built-in `BH2D_PRESETS` carry URLs; custom
+        // presets and the merger menu are intentionally URL-less.
+        if (ui.presetActive && ui.presetIdx >= 0 && ui.presetIdx < NUM_BH2D_PRESETS) {
+            const char* url = BH2D_PRESETS[ui.presetIdx].learnMoreUrl;
+            if (url && *url) {
+                platformOpenUrl(url);
+                ui.notification = std::string("Opening ") + BH2D_PRESETS[ui.presetIdx].name + " reference...";
+            } else {
+                ui.notification = "No reference URL for this preset";
+            }
+        } else {
+            ui.notification = "Activate a preset (T) to open its reference";
+        }
+        ui.notificationTimer = 120;
 
     // ── Orbital control ───────────────────────────────────────────────────
     } else if (code == cfg.zoomIn) {
@@ -334,38 +502,61 @@ inline void handleInput(
 
     // ── Test scenarios ────────────────────────────────────────────────────
     } else if (code == cfg.testIsco) {
+        bool wasActive = sim.anyBodyWithScenarioTag(ResearchScenario::ISCOTest);
         sim.startISCOTest();
         sim.rebuildPhotons(windowHeight);
-        ui.notification      = "ISCO validation: 5M/6M/7M test";
+        ui.notification      = wasActive
+            ? "ISCO test bodies removed"
+            : "ISCO validation: 5M/6M/7M test added";
         ui.notificationTimer = 120;
 
     } else if (code == cfg.testPhoton) {
         sim.startPhotonSphereTest();
         sim.rebuildPhotons(windowHeight);
-        ui.notification      = "Photon sphere test active";
+        ui.notification      = std::string("Photon sweep: ") + sim.photonSphereSweepName();
         ui.notificationTimer = 120;
 
     } else if (code == cfg.testInfall) {
+        bool wasActive = sim.anyBodyWithScenarioTag(ResearchScenario::RadialInfall);
         sim.startRadialInfall();
         sim.rebuildPhotons(windowHeight);
-        ui.notification      = "Radial infall from 20M";
+        ui.notification      = wasActive
+            ? "Radial infall body removed"
+            : "Radial infall from 20M added";
         ui.notificationTimer = 120;
 
     } else if (code == cfg.testTidal) {
+        bool wasActive = sim.anyBodyWithScenarioTag(ResearchScenario::TidalDisruption);
         sim.startTidalDisruption();
         sim.rebuildPhotons(windowHeight);
-        ui.notification      = "Tidal disruption demo";
+        ui.notification      = wasActive
+            ? "Tidal test body removed"
+            : "Tidal disruption demo added";
         ui.notificationTimer = 120;
 
     } else if (code == cfg.testPulsar) {
-        sim.startPulsarOrbital();
+        bool wasActive = (sim.findPulsarIdx() >= 0);
+        sim.togglePulsarOrbital();
         sim.rebuildPhotons(windowHeight);
-        ui.notification      = "Pulsar orbital sim — enable preset (T) for physical GW values";
+        ui.notification      = wasActive
+            ? "Pulsar removed"
+            : "Pulsar added, enable preset (T) for physical GW values";
         ui.notificationTimer = 150;
 
     } else if (code == cfg.mergerMenu) {
         ui.mergerMenu.open            = !ui.mergerMenu.open;
         ui.mergerMenu.inputtingCustom = false;
         ui.mergerMenu.selectedIdx     = 0;
+
+    } else if (code == cfg.customBodyMenu) {
+        ui.customBodyMenu.open         = !ui.customBodyMenu.open;
+        ui.customBodyMenu.focusedField = 0;
+
+    } else if (code == cfg.cycleMergerSpeed) {
+        int next = (static_cast<int>(sim.merger.timeScale) + 1) % 3;
+        sim.merger.timeScale = static_cast<Simulation::MergerState::TimeScale>(next);
+        ui.notification = std::string("Merger pacing: ") +
+                          Simulation::MergerState::timeScaleName(sim.merger.timeScale);
+        ui.notificationTimer = 120;
     }
 }

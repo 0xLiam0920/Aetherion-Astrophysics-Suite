@@ -74,7 +74,7 @@ static qint64 processResidentKB() {
     if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
                   reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS)
         return static_cast<qint64>(info.resident_size / 1024);
-    return -1; // query failed — caller will show "N/A", no reason to nuke the whole app
+    return -1; // query failed, caller will show "N/A", no reason to nuke the whole app
 }
 
 #elif defined(Q_OS_LINUX)
@@ -99,7 +99,7 @@ MainWindow::MainWindow(QWidget *parent)
       memoryTimer(nullptr)
 {
     setWindowTitle("Aetherion Astrophysics Suite");
-    // Best-effort window icon — exe-adjacent icon.png is POST_BUILD copied by CMake.
+    // Best-effort window icon, exe-adjacent icon.png is POST_BUILD copied by CMake.
     {
         QStringList iconCandidates = {
             QApplication::applicationDirPath() + "/icon.png",
@@ -211,7 +211,7 @@ MainWindow::~MainWindow()
 }
 
 // ---------------------------------------------------------------------------
-// eventFilter — application-level intercept for global shortcuts.
+// eventFilter, application-level intercept for global shortcuts.
 // Handles Cmd+Q (quit) and F11 (fullscreen toggle) even when the SFML canvas's
 // native NSView holds OS-level keyboard focus and bypasses Qt's normal chain.
 // ---------------------------------------------------------------------------
@@ -237,7 +237,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 }
 
 // ---------------------------------------------------------------------------
-// changeEvent — restore SFML canvas focus whenever the window state changes
+// changeEvent, restore SFML canvas focus whenever the window state changes
 // (e.g. entering/leaving fullscreen via the macOS green traffic-light button).
 // ---------------------------------------------------------------------------
 void MainWindow::changeEvent(QEvent *event)
@@ -248,7 +248,7 @@ void MainWindow::changeEvent(QEvent *event)
 }
 
 // ---------------------------------------------------------------------------
-// refocusSimCanvas — gives keyboard focus to the active simulation tab so
+// refocusSimCanvas, gives keyboard focus to the active simulation tab so
 // that SFML key events are delivered after any window-state transition.
 // ---------------------------------------------------------------------------
 void MainWindow::refocusSimCanvas()
@@ -503,6 +503,15 @@ void MainWindow::toggleTheme(bool lightMode)
     QSettings s("Aetherion", "AetherionSuite");
     s.setValue("ui/lightMode", lightModeEnabled);
     applyStyles();
+
+    // Propagate to every open 2D simulation tab so their HUD palette follows
+    // the global theme without requiring the user to reopen the tab.
+    if (simTabs) {
+        for (int i = 0; i < simTabs->count(); ++i) {
+            if (auto *w2d = qobject_cast<Simulation2DWidget*>(simTabs->widget(i)))
+                w2d->setLightMode(lightModeEnabled);
+        }
+    }
 }
 
 void MainWindow::applyChartTheme()
@@ -700,6 +709,73 @@ void MainWindow::applyStyles()
             QSplitter::handle          { background-color: #c8cad8; }
             QSplitter::handle:horizontal { width: 1px; }
             QSplitter::handle:vertical   { height: 1px; }
+
+            /* ── Settings page ──────────────────────────────────────────── */
+            QFrame#settingsCard {
+                background-color: #ffffff;
+                border: 1px solid #c8cad8;
+                border-radius: 6px;
+            }
+            QLabel#settingsGroupHdr {
+                color: #2669bb;
+                font-size: 9pt;
+                font-weight: bold;
+                letter-spacing: 1px;
+                padding-top: 6px;
+                padding-bottom: 2px;
+                border-bottom: 1px solid #c8cad8;
+            }
+            QListWidget#settingsNav {
+                background-color: #e4e6ee;
+                border-right: 1px solid #c0c2cc;
+            }
+            QListWidget#settingsNav::item {
+                height: 36px;
+                padding-left: 8px;
+                color: #5a5c72;
+                font-size: 11pt;
+                border-left: 3px solid transparent;
+            }
+            QListWidget#settingsNav::item:selected {
+                background-color: #ffffff;
+                color: #1a3060;
+                border-left: 3px solid #2669bb;
+            }
+            QListWidget#settingsNav::item:hover:!selected {
+                background-color: #d8dae6;
+                color: #2a2c40;
+            }
+
+            /* ── Simulation tabs ─────────────────────────────────────────── */
+            QTabWidget#simTabs::pane { border: none; }
+            QTabBar#simTabsBar::tab {
+                background-color: #dcdee8;
+                color: #2a2c40;
+                padding: 8px 15px;
+                border: none;
+                margin-right: 2px;
+            }
+            QTabBar#simTabsBar::tab:selected { background-color: #2669bb; color: #ffffff; }
+            QTabBar#simTabsBar::tab:hover    { background-color: #ccd0e4; }
+
+            /* ── Keybind page widgets ────────────────────────────────────── */
+            QLabel#kbRowLabel { color: #2a2c40; font-size: 10pt; }
+            QLabel#kbHint     { color: #5a5c72; font-size: 9pt; margin-bottom: 4px; }
+            QPushButton#resetKeybindsBtn {
+                background-color: #e4e6ee; color: #2a2c40;
+                border: 1px solid #c0c2cc; border-radius: 4px;
+                padding: 6px 14px;
+            }
+            QPushButton#resetKeybindsBtn:hover {
+                background-color: #d8dae6; color: #1a1c2c;
+            }
+            QPushButton#saveKeybindsBtn {
+                background-color: #2669bb; color: #ffffff;
+                border: none; border-radius: 4px;
+                padding: 6px 18px; font-weight: bold;
+            }
+            QPushButton#saveKeybindsBtn:hover  { background-color: #3d7acc; }
+            QPushButton#saveKeybindsBtn:pressed{ background-color: #1f5aa0; }
         )");
     } else {
         // ── Dark mode palette (original) ─────────────────────────────────────
@@ -958,6 +1034,73 @@ void MainWindow::applyStyles()
         QSplitter::handle { background-color: #222232; }
         QSplitter::handle:horizontal { width: 1px; }
         QSplitter::handle:vertical   { height: 1px; }
+
+        /* ── Settings page ──────────────────────────────────────────── */
+        QFrame#settingsCard {
+            background-color: #0e0e1a;
+            border: 1px solid #252535;
+            border-radius: 6px;
+        }
+        QLabel#settingsGroupHdr {
+            color: #4d78cc;
+            font-size: 9pt;
+            font-weight: bold;
+            letter-spacing: 1px;
+            padding-top: 6px;
+            padding-bottom: 2px;
+            border-bottom: 1px solid #2a2a44;
+        }
+        QListWidget#settingsNav {
+            background-color: #090910;
+            border-right: 1px solid #2a2a3a;
+        }
+        QListWidget#settingsNav::item {
+            height: 36px;
+            padding-left: 8px;
+            color: #909098;
+            font-size: 11pt;
+            border-left: 3px solid transparent;
+        }
+        QListWidget#settingsNav::item:selected {
+            background-color: #101020;
+            color: #d0d8f8;
+            border-left: 3px solid #4477cc;
+        }
+        QListWidget#settingsNav::item:hover:!selected {
+            background-color: #0e0e1c;
+            color: #b0b8d8;
+        }
+
+        /* ── Simulation tabs ─────────────────────────────────────────── */
+        QTabWidget#simTabs::pane { border: none; }
+        QTabBar#simTabsBar::tab {
+            background-color: #1a1a26;
+            color: #ededed;
+            padding: 8px 15px;
+            border: none;
+            margin-right: 2px;
+        }
+        QTabBar#simTabsBar::tab:selected { background-color: #2669bb; }
+        QTabBar#simTabsBar::tab:hover    { background-color: #242430; }
+
+        /* ── Keybind page widgets ────────────────────────────────────── */
+        QLabel#kbRowLabel { color: #c0c8dc; font-size: 10pt; }
+        QLabel#kbHint     { color: #707088; font-size: 9pt; margin-bottom: 4px; }
+        QPushButton#resetKeybindsBtn {
+            background-color: #161622; color: #a0a8c0;
+            border: 1px solid #333348; border-radius: 4px;
+            padding: 6px 14px;
+        }
+        QPushButton#resetKeybindsBtn:hover {
+            background-color: #1e1e34; color: #c0c8e0;
+        }
+        QPushButton#saveKeybindsBtn {
+            background-color: #2669bb; color: #ededed;
+            border: none; border-radius: 4px;
+            padding: 6px 18px; font-weight: bold;
+        }
+        QPushButton#saveKeybindsBtn:hover  { background-color: #3d7acc; }
+        QPushButton#saveKeybindsBtn:pressed{ background-color: #1f5aa0; }
     )";
     
         qApp->setStyleSheet(styleSheet);
@@ -1098,24 +1241,10 @@ QWidget* MainWindow::createSimulationPage()
     layout->addLayout(customRow);
 
     simTabs = new QTabWidget();
+    simTabs->setObjectName("simTabs");
+    simTabs->tabBar()->setObjectName("simTabsBar");
     simTabs->setTabsClosable(true);
     simTabs->setMovable(true);
-    simTabs->setStyleSheet(R"(
-        QTabWidget::pane { border: none; }
-        QTabBar::tab {
-            background-color: #1a1a26;
-            color: #ededed;
-            padding: 8px 15px;
-            border: none;
-            margin-right: 2px;
-        }
-        QTabBar::tab:selected {
-            background-color: #2669bb;
-        }
-        QTabBar::tab:hover {
-            background-color: #242430;
-        }
-    )");
 
     simEmptyStateLabel = new QLabel("No open simulation tabs. Use controls above to open 2D, 3D, a preset, or custom simulation.");
     simEmptyStateLabel->setObjectName("description");
@@ -1197,7 +1326,7 @@ QWidget* MainWindow::createSimulationPage()
         connect(cancelBtn,   &QPushButton::clicked, &dlg, &QDialog::reject);
 
         const int result = dlg.exec();
-        if (result == QDialog::Rejected) return;   // Cancel — leave tab open
+        if (result == QDialog::Rejected) return;   // Cancel, leave tab open
 
         if (result == QDialog::Accepted) {
             QString name = nameEdit->text().trimmed();
@@ -1363,7 +1492,7 @@ QWidget* MainWindow::createDataAnalysisPage()
     // Apply initial theme colors to all freshly-created charts
     applyChartTheme();
 
-    // ── Axis styling helper — respects current theme ────────────────────────
+    // ── Axis styling helper, respects current theme ────────────────────────
     auto styleAxes = [this](QChart *chart) {
         const QColor axisLabel  = lightModeEnabled ? QColor(0x14, 0x16, 0x24) : Qt::white;
         const QColor axisLine   = lightModeEnabled ? QColor(0x90, 0x92, 0xaa) : QColor(0x60, 0x60, 0x80);
@@ -1606,7 +1735,7 @@ QWidget* MainWindow::createDataAnalysisPage()
         return {};
     };
 
-    // accretion: [time_M, mdotBondi_kgs, mdotBHL_kgs, Lbol_W] (FITS only — no CSV/bin)
+    // accretion: [time_M, mdotBondi_kgs, mdotBHL_kgs, Lbol_W] (FITS only, no CSV/bin)
     auto parseAccretion = [=](const QString &folder) -> QVector<QVector<double>> {
         if (QFileInfo::exists(folder + "/accretion.fits")) {
             int nRows = 0;
@@ -1698,7 +1827,7 @@ QWidget* MainWindow::createDataAnalysisPage()
         loadedLabel->show();
 
         // Per-body data lives in body_<n>_<label>/ inside the session folder.
-        // Deflection data is at the session root — use `folder` for that one.
+        // Deflection data is at the session root, use `folder` for that one.
         const QString bodyFolder = resolveBodyFolder(folder);
 
         // Orbit path
@@ -1846,7 +1975,7 @@ QWidget* MainWindow::createDataAnalysisPage()
             }
         }
 
-        // Bolometric light curve  L_bol(t)  — reuses accretion.fits, col 3
+        // Bolometric light curve  L_bol(t) , reuses accretion.fits, col 3
         lcChart->removeAllSeries();
         for (auto *a : lcChart->axes()) lcChart->removeAxis(a);
         {
@@ -1931,7 +2060,7 @@ QWidget* MainWindow::createDataAnalysisPage()
             }
         }
 
-        // Spectral energy distribution  νLν(ν)  — log-log
+        // Spectral energy distribution  νLν(ν) , log-log
         sedChart->removeAllSeries();
         for (auto *a : sedChart->axes()) sedChart->removeAxis(a);
         {
@@ -2213,7 +2342,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Ultramassive BH", "Phoenix A Galaxy Cluster BCG",
           "The most massive black hole candidate ever identified, residing at the centre of "
           "the Phoenix A brightest cluster galaxy. Estimates from stellar dynamics and the "
-          "M-sigma relation place its mass at ~100 billion solar masses — an order of "
+          "M-sigma relation place its mass at ~100 billion solar masses, an order of "
           "magnitude above M87*. The host cluster is also one of the most X-ray luminous "
           "and most rapidly star-forming galaxy clusters known, suggesting the black hole "
           "is caught at an unusual moment of simultaneously rapid growth and feedback.",
@@ -2224,7 +2353,7 @@ QWidget* MainWindow::createObjectLibraryPage()
 
         // ── Research Scenarios ───────────────────────────────────────────────
         { "Research Scenarios",
-          "ISCO Test — Unstable (5M)",
+          "ISCO Test, Unstable (5M)",
           "Test Body", "Generic BH",
           "Circular orbit placed just inside the innermost stable circular orbit. Receives a "
           "tiny inward radial kick so instability accumulates over time rather than sitting "
@@ -2235,10 +2364,10 @@ QWidget* MainWindow::createObjectLibraryPage()
           "isco_unstable" },
 
         { "Research Scenarios",
-          "ISCO Test — Critical (6M)",
+          "ISCO Test, Critical (6M)",
           "Test Body", "Generic BH",
           "Circular orbit at exactly the innermost stable circular orbit for a Schwarzschild "
-          "black hole. Receives a tiny outward kick. Marginally stable — small perturbations "
+          "black hole. Receives a tiny outward kick. Marginally stable, small perturbations "
           "grow slowly. Used to benchmark the integrator against the analytic ISCO condition "
           "r = 6M.",
           "Orbital radius: 6 M\nInitial eccentricity: ~0 (circular)\nOutcome: marginal\n"
@@ -2246,7 +2375,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "isco_critical" },
 
         { "Research Scenarios",
-          "ISCO Test — Stable (7M)",
+          "ISCO Test, Stable (7M)",
           "Test Body", "Generic BH",
           "Circular orbit well outside the ISCO. Receives a small outward kick; orbit remains "
           "bound and stable over many periods. Demonstrates the contrast with the 5M and 6M "
@@ -2303,7 +2432,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "pulsar_inspiral" },
 
         // ── Sgr A* System ────────────────────────────────────────────────────
-        { "Sgr A* — Galactic Centre",
+        { "Sgr A*, Galactic Centre",
           "S2 Analog",
           "S-cluster Star", "Sgr A* (4.3 × 10⁶ M☉)",
           "Analogue of S2, the most-studied star in the Galactic Centre S-cluster. S2 has an "
@@ -2314,7 +2443,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: Schwarzschild precession, gravitational redshift at pericentre",
           "sgra_s2" },
 
-        { "Sgr A* — Galactic Centre",
+        { "Sgr A*, Galactic Centre",
           "S14-like Close Orbit",
           "S-cluster Star", "Sgr A* (4.3 × 10⁶ M☉)",
           "Inspired by S14 and other tightly bound members of the S-cluster. Extreme pericentre "
@@ -2325,17 +2454,17 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: strong-field Schwarzschild precession, measurable time dilation",
           "sgra_s14" },
 
-        { "Sgr A* — Galactic Centre",
+        { "Sgr A*, Galactic Centre",
           "IRS 16 Cluster Star",
           "S-cluster Star", "Sgr A* (4.3 × 10⁶ M☉)",
           "Member of the IRS 16 complex, a concentration of massive young stars within ~0.04 pc "
-          "of Sgr A*. Their presence close to the black hole is puzzling — the gravitational "
+          "of Sgr A*. Their presence close to the black hole is puzzling, the gravitational "
           "tidal forces should inhibit in-situ star formation (the 'paradox of youth').",
           "Semi-major axis: 40 M\nEccentricity: 0.30\nBody type: Massive OB star\n"
           "Key effect: paradox of youth, disk-star interaction models",
           "sgra_irs16" },
 
-        { "Sgr A* — Galactic Centre",
+        { "Sgr A*, Galactic Centre",
           "Circumnuclear Gas Clump",
           "Gas Cloud", "Sgr A* (4.3 × 10⁶ M☉)",
           "Fragment of the Circumnuclear Disk (CND), a torus of molecular gas at ~1.5–7 pc. "
@@ -2346,7 +2475,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: accretion feeding, tidal stretching at pericentre",
           "sgra_gasclump" },
 
-        { "Sgr A* — Galactic Centre",
+        { "Sgr A*, Galactic Centre",
           "S-cluster Member",
           "S-cluster Star", "Sgr A* (4.3 × 10⁶ M☉)",
           "Generic member of the dense stellar population within the inner 0.04 pc of Sgr A*. "
@@ -2356,7 +2485,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "sgra_smember" },
 
         // ── TON 618 System ───────────────────────────────────────────────────
-        { "TON 618 — Ultramassive Quasar",
+        { "TON 618, Ultramassive Quasar",
           "Inner Accretion Clump",
           "Gas Cloud", "TON 618 (6.6 × 10¹⁰ M☉)",
           "Dense blob of accreting plasma deep in the broad-line region (BLR) of TON 618. "
@@ -2367,7 +2496,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: reverberation mapping target, radiation pressure dynamics",
           "ton618_blr" },
 
-        { "TON 618 — Ultramassive Quasar",
+        { "TON 618, Ultramassive Quasar",
           "Tidal-stripped Star",
           "Star", "TON 618 (6.6 × 10¹⁰ M☉)",
           "A star that has already lost its outer envelope to tidal forces during a previous "
@@ -2378,7 +2507,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: repeated partial TDE, mass-transfer stream",
           "ton618_tdstar" },
 
-        { "TON 618 — Ultramassive Quasar",
+        { "TON 618, Ultramassive Quasar",
           "Hot Gas Filament",
           "Gas Cloud", "TON 618 (6.6 × 10¹⁰ M☉)",
           "Elongated filament of hot shocked gas from a previous tidal disruption event. The "
@@ -2388,18 +2517,18 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: disk-feeding, Keplerian shear, circularisation timescale",
           "ton618_gasfilm" },
 
-        { "TON 618 — Ultramassive Quasar",
+        { "TON 618, Ultramassive Quasar",
           "Plunging Star",
           "Star", "TON 618 (6.6 × 10¹⁰ M☉)",
           "A star on a nearly-radial orbit that will cross the ISCO and plunge before "
           "completing another orbit. For an ultramassive BH like TON 618 the tidal disruption "
-          "radius lies inside the event horizon for solar-type stars — the star is swallowed "
+          "radius lies inside the event horizon for solar-type stars, the star is swallowed "
           "whole, producing no bright flare.",
           "Semi-major axis: 12 M\nEccentricity: 0.80\nBody type: Star\n"
           "Key effect: direct capture (no TDE flare for solar-type star)",
           "ton618_plunge" },
 
-        { "TON 618 — Ultramassive Quasar",
+        { "TON 618, Ultramassive Quasar",
           "Outer Stellar Orbit",
           "Star", "TON 618 (6.6 × 10¹⁰ M☉)",
           "Distant stellar orbit in the gravitational sphere of influence of the SMBH. At "
@@ -2409,7 +2538,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Semi-major axis: 50 M\nEccentricity: 0.20\nBody type: Star",
           "ton618_outerstar" },
 
-        { "TON 618 — Ultramassive Quasar",
+        { "TON 618, Ultramassive Quasar",
           "Satellite Stellar Cluster",
           "Stellar Cluster", "TON 618 (6.6 × 10¹⁰ M☉)",
           "A dense globular or nuclear star cluster inspiraling towards the SMBH via dynamical "
@@ -2421,7 +2550,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "ton618_cluster" },
 
         // ── 3C 273 System ────────────────────────────────────────────────────
-        { "3C 273 — First Identified Quasar",
+        { "3C 273, First Identified Quasar",
           "Inner Jet-base Cloud",
           "Gas Cloud", "3C 273 (8.9 × 10⁸ M☉)",
           "Dense plasma blob at the base of 3C 273's relativistic jet. The jet extends ~60 kpc "
@@ -2432,7 +2561,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: superluminal motion, jet ejection",
           "3c273_jetblob" },
 
-        { "3C 273 — First Identified Quasar",
+        { "3C 273, First Identified Quasar",
           "Broad-line Region Cloud",
           "Gas Cloud", "3C 273 (8.9 × 10⁸ M☉)",
           "Gas cloud in the broad-line region, orbiting at ~0.1 pc in a flattened, disc-like "
@@ -2443,7 +2572,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: reverberation mapping, broad-line emission",
           "3c273_blr" },
 
-        { "3C 273 — First Identified Quasar",
+        { "3C 273, First Identified Quasar",
           "Stripped Dwarf Remnant",
           "Dwarf Galaxy", "3C 273 (8.9 × 10⁸ M☉)",
           "Core of a dwarf galaxy that has been tidally stripped by 3C 273's host galaxy and "
@@ -2454,7 +2583,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: galaxy stripping, potential IMBH binary",
           "3c273_dwarf" },
 
-        { "3C 273 — First Identified Quasar",
+        { "3C 273, First Identified Quasar",
           "Close Stellar Orbit",
           "Star", "3C 273 (8.9 × 10⁸ M☉)",
           "Star on a bound orbit within the BLR, subject to both gravitational and radiation "
@@ -2465,18 +2594,18 @@ QWidget* MainWindow::createObjectLibraryPage()
           "3c273_closestar" },
 
         // ── J0529-4351 System ────────────────────────────────────────────────
-        { "J0529-4351 — Most Luminous Quasar",
+        { "J0529-4351, Most Luminous Quasar",
           "Fast Accretion Blob",
           "Gas Cloud", "J0529-4351 (1.7 × 10¹⁰ M☉)",
           "High-velocity blob of accreting gas spiralling in from the inner accretion disc. "
-          "J0529-4351 accretes at ~400 M☉/yr — near or above the Eddington limit — driving "
+          "J0529-4351 accretes at ~400 M☉/yr, near or above the Eddington limit, driving "
           "powerful disc winds that can reach ~0.3c. Such outflows carry more kinetic power "
           "than most AGN jets.",
           "Semi-major axis: 9 M\nEccentricity: 0.10\nBody type: Gas Cloud\n"
           "Key effect: super-Eddington accretion, disc wind",
           "j0529_fastblob" },
 
-        { "J0529-4351 — Most Luminous Quasar",
+        { "J0529-4351, Most Luminous Quasar",
           "UV-bright Clump",
           "Gas Cloud", "J0529-4351 (1.7 × 10¹⁰ M☉)",
           "Clump of highly photoionised gas that contributes to the extreme UV luminosity of "
@@ -2487,7 +2616,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: UV photoionisation, extreme luminosity",
           "j0529_uvclump" },
 
-        { "J0529-4351 — Most Luminous Quasar",
+        { "J0529-4351, Most Luminous Quasar",
           "Tidally Disrupting Star",
           "Star", "J0529-4351 (1.7 × 10¹⁰ M☉)",
           "Star undergoing active tidal disruption, with its leading edge already inside the "
@@ -2498,7 +2627,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: tidal disruption event (TDE), mass stream",
           "j0529_tdestar" },
 
-        { "J0529-4351 — Most Luminous Quasar",
+        { "J0529-4351, Most Luminous Quasar",
           "Outer Gas Stream",
           "Gas Cloud", "J0529-4351 (1.7 × 10¹⁰ M☉)",
           "Outer accretion stream feeding the disc from a disrupted companion or infalling "
@@ -2507,7 +2636,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Semi-major axis: 45 M\nEccentricity: 0.20\nBody type: Gas Cloud",
           "j0529_gasstream" },
 
-        { "J0529-4351 — Most Luminous Quasar",
+        { "J0529-4351, Most Luminous Quasar",
           "Infalling Stellar Cluster",
           "Stellar Cluster", "J0529-4351 (1.7 × 10¹⁰ M☉)",
           "Dense stellar cluster sinking toward J0529's SMBH via dynamical friction. The "
@@ -2517,7 +2646,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "j0529_cluster" },
 
         // ── M87 System ───────────────────────────────────────────────────────
-        { "M87 — EHT Image Black Hole",
+        { "M87, EHT Image Black Hole",
           "Jet-base Knot",
           "Gas Cloud", "M87 (6.5 × 10⁹ M☉)",
           "Compact emission knot at the base of M87's famous 6-kpc relativistic jet. The EHT "
@@ -2528,27 +2657,27 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: relativistic jet, frame-dragging, superluminal motion",
           "m87_jetknot" },
 
-        { "M87 — EHT Image Black Hole",
+        { "M87, EHT Image Black Hole",
           "Inner Stellar Orbit",
           "Star", "M87 (6.5 × 10⁹ M☉)",
           "Star deep in M87's nuclear star cluster, within the SMBH sphere of influence "
-          "(≈100 pc). Stellar dynamics here — including the velocity dispersion and the nuclear "
-          "stellar cusp slope — were key inputs to the 6.5 × 10⁹ M☉ mass estimate prior to "
+          "(≈100 pc). Stellar dynamics here, including the velocity dispersion and the nuclear "
+          "stellar cusp slope, were key inputs to the 6.5 × 10⁹ M☉ mass estimate prior to "
           "the EHT image.",
           "Semi-major axis: 20 M\nEccentricity: 0.45\nBody type: Star",
           "m87_innerstar" },
 
-        { "M87 — EHT Image Black Hole",
+        { "M87, EHT Image Black Hole",
           "Hot Gas Shell Fragment",
           "Gas Cloud", "M87 (6.5 × 10⁹ M☉)",
           "Shell of hot X-ray emitting plasma swept up by the jet. M87 is embedded in the "
           "Virgo cluster intracluster medium (ICM); the jet inflates giant cavities in the "
-          "ICM ('radio bubbles') that prevent runaway cooling — a key AGN feedback mechanism.",
+          "ICM ('radio bubbles') that prevent runaway cooling, a key AGN feedback mechanism.",
           "Semi-major axis: 35 M\nEccentricity: 0.25\nBody type: Gas Cloud (ICM shell)\n"
           "Key effect: AGN feedback, radio bubble inflation",
           "m87_hotgas" },
 
-        { "M87 — EHT Image Black Hole",
+        { "M87, EHT Image Black Hole",
           "Globular Cluster",
           "Stellar Cluster", "M87 (6.5 × 10⁹ M☉)",
           "One of M87's ~15,000 globular clusters on an orbit that has decayed to within the "
@@ -2559,7 +2688,7 @@ QWidget* MainWindow::createObjectLibraryPage()
           "Key effect: dynamical friction, tidal stripping, nuclear cusp building",
           "m87_globular" },
 
-        { "M87 — EHT Image Black Hole",
+        { "M87, EHT Image Black Hole",
           "Infalling Dwarf Galaxy",
           "Dwarf Galaxy", "M87 (6.5 × 10⁹ M☉)",
           "Dwarf galaxy on a plunging orbit into M87's nucleus. Stellar-mass tidal stripping "
@@ -2586,7 +2715,7 @@ QWidget* MainWindow::createObjectLibraryPage()
     outerLayout->addWidget(headerLabel);
 
     QLabel *subtitleLabel = new QLabel(
-        "All orbital objects in the 2D simulation — click any entry to see details.");
+        "All orbital objects in the 2D simulation, click any entry to see details.");
     subtitleLabel->setObjectName("subtext");
     outerLayout->addWidget(subtitleLabel);
 
@@ -2837,28 +2966,7 @@ QWidget* MainWindow::createSettingsPage()
     navList->addItem("  2D Keybinds");
     navList->addItem("  3D Keybinds");
     navList->setCurrentRow(0);
-    navList->setStyleSheet(R"(
-        QListWidget#settingsNav {
-            background-color: #090910;
-            border-right: 1px solid #2a2a3a;
-        }
-        QListWidget#settingsNav::item {
-            height: 36px;
-            padding-left: 8px;
-            color: #909098;
-            font-size: 11pt;
-            border-left: 3px solid transparent;
-        }
-        QListWidget#settingsNav::item:selected {
-            background-color: #101020;
-            color: #d0d8f8;
-            border-left: 3px solid #4477cc;
-        }
-        QListWidget#settingsNav::item:hover:!selected {
-            background-color: #0e0e1c;
-            color: #b0b8d8;
-        }
-    )");
+    // Styled via applyStyles() so it follows the active light/dark theme.
 
     // Right stacked widget
     QStackedWidget *rightStack = new QStackedWidget();
@@ -2874,14 +2982,7 @@ QWidget* MainWindow::createSettingsPage()
     // ── Helper: make a group-header label ───────────────────────────────────
     auto makeGroupHdr = [](const QString &text) {
         QLabel *lbl = new QLabel(text);
-        lbl->setStyleSheet(
-            "color: #4d78cc;"
-            "font-size: 9pt;"
-            "font-weight: bold;"
-            "letter-spacing: 1px;"
-            "padding-top: 6px;"
-            "padding-bottom: 2px;"
-            "border-bottom: 1px solid #2a2a44;");
+        lbl->setObjectName("settingsGroupHdr");
         return lbl;
     };
 
@@ -2889,18 +2990,11 @@ QWidget* MainWindow::createSettingsPage()
     auto makeCard = [](QWidget *parent = nullptr) {
         QFrame *card = new QFrame(parent);
         card->setObjectName("settingsCard");
-        card->setStyleSheet(
-            "QFrame#settingsCard {"
-            "  background-color: #0e0e1a;"
-            "  border: 1px solid #252535;"
-            "  border-radius: 6px;"
-            "}"
-        );
         return card;
     };
 
     // ────────────────────────────────────────────────────────────────────────
-    // PAGE 0 — GENERAL
+    // PAGE 0, GENERAL
     // ────────────────────────────────────────────────────────────────────────
     {
         QScrollArea *scroll = new QScrollArea();
@@ -3003,7 +3097,7 @@ QWidget* MainWindow::createSettingsPage()
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // PAGES 1 & 2 — KEYBIND PAGES (shared helper)
+    // PAGES 1 & 2, KEYBIND PAGES (shared helper)
     // ────────────────────────────────────────────────────────────────────────
 
     // Conflict-checker: mark any button red if two buttons share the same key
@@ -3020,7 +3114,7 @@ QWidget* MainWindow::createSettingsPage()
     auto addKBRow = [](QGridLayout *grid, int row, const QString &label,
                        KeyBindButton *btn) {
         QLabel *lbl = new QLabel(label);
-        lbl->setStyleSheet("color: #c0c8dc; font-size: 10pt;");
+        lbl->setObjectName("kbRowLabel");
         grid->addWidget(lbl, row, 0);
         grid->addWidget(btn, row, 1, Qt::AlignRight);
     };
@@ -3057,7 +3151,7 @@ QWidget* MainWindow::createSettingsPage()
             "Click a key button then press the key you want to assign.  "
             "Escape cancels.  Conflicting keys are shown in \xE2\x9C\x95 red.");
         hint->setWordWrap(true);
-        hint->setStyleSheet("color: #707088; font-size: 9pt; margin-bottom: 4px;");
+        hint->setObjectName("kbHint");
         lay->addWidget(hint);
 
         auto checker = makeConflictChecker(btnList);
@@ -3065,12 +3159,6 @@ QWidget* MainWindow::createSettingsPage()
         for (auto &section : sections) {
             QFrame *card = new QFrame();
             card->setObjectName("settingsCard");
-            card->setStyleSheet(
-                "QFrame#settingsCard {"
-                "  background-color: #0e0e1a;"
-                "  border: 1px solid #252535;"
-                "  border-radius: 6px;"
-                "}");
 
             QGridLayout *grid = new QGridLayout(card);
             grid->setContentsMargins(16, 10, 16, 14);
@@ -3103,7 +3191,7 @@ QWidget* MainWindow::createSettingsPage()
     };
 
     // ────────────────────────────────────────────────────────────────────────
-    // PAGE 1 — 2D KEYBINDS
+    // PAGE 1, 2D KEYBINDS
     // ────────────────────────────────────────────────────────────────────────
     auto btns2D = std::make_shared<QVector<KeyBindButton*>>();
     QString usedCfg2D;
@@ -3154,7 +3242,7 @@ QWidget* MainWindow::createSettingsPage()
     rightStack->addWidget(buildKBPage(cfg2DPath, sections2D, usedCfg2D, btns2D));
 
     // ────────────────────────────────────────────────────────────────────────
-    // PAGE 2 — 3D KEYBINDS
+    // PAGE 2, 3D KEYBINDS
     // ────────────────────────────────────────────────────────────────────────
     auto btns3D = std::make_shared<QVector<KeyBindButton*>>();
     QString usedCfg3D;
@@ -3177,9 +3265,19 @@ QWidget* MainWindow::createSettingsPage()
             { "toggle_blueshift",  "Toggle Blueshift",   "U"      },
             { "toggle_render",     "Cinematic Mode",     "P"      },
         }},
+        { "PHYSICS OVERLAYS", {
+            { "toggle_rk4_orbits", "RK4 GR Orbits",      "K"      },
+            { "toggle_rk4_photons","Photon Geodesics",   "L"      },
+            { "toggle_spacetime",  "Spacetime Curvature","T"      },
+            { "toggle_overlays",   "Overlays Panel",     "M"      },
+        }},
         { "SIMULATION", {
             { "cycle_anim_speed",  "Cycle Anim Speed",   "Y"      },
+            { "speed_up",          "Speed Up",           "="      },
+            { "speed_down",        "Speed Down",         "-"      },
             { "toggle_hud",        "Toggle HUD",         "H"      },
+            { "toggle_debug_hud",  "Toggle Debug HUD",   "B"      },
+            { "reset_tilt",        "Reset Camera Tilt",  "R"      },
             { "next_profile",      "Next Preset Profile","N"      },
         }},
     };
@@ -3193,19 +3291,12 @@ QWidget* MainWindow::createSettingsPage()
     btnHL->setSpacing(10);
 
     QPushButton *resetBtn = new QPushButton("Reset Keybinds");
-    resetBtn->setStyleSheet(
-        "QPushButton { background-color:#161622; color:#a0a8c0;"
-        "  border:1px solid #333348; border-radius:4px; padding:6px 14px; }"
-        "QPushButton:hover { background-color:#1e1e34; color:#c0c8e0; }");
+    resetBtn->setObjectName("resetKeybindsBtn");
     btnHL->addWidget(resetBtn);
     btnHL->addStretch();
 
     QPushButton *saveBtn = new QPushButton("Save Settings");
-    saveBtn->setStyleSheet(
-        "QPushButton { background-color:#2669bb; color:#ededed;"
-        "  border:none; border-radius:4px; padding:6px 18px; font-weight:bold; }"
-        "QPushButton:hover  { background-color:#3d7acc; }"
-        "QPushButton:pressed{ background-color:#1f5aa0; }");
+    saveBtn->setObjectName("saveKeybindsBtn");
     btnHL->addWidget(saveBtn);
 
     pageVBox->addWidget(btnBar);
@@ -3257,7 +3348,7 @@ QWidget* MainWindow::createSettingsPage()
                 sections3D, *btns3D);
 
             if (ok2D && ok3D)
-                statusLabel->setText("Settings saved — reopen simulation tabs to apply keybinds");
+                statusLabel->setText("Settings saved, reopen simulation tabs to apply keybinds");
             else if (!ok2D)
                 statusLabel->setText("Warning: could not write 2D keybind file");
             else
@@ -3295,7 +3386,7 @@ QWidget* MainWindow::createSettingsPage()
             }
             QFile::remove(cfg2DPath);
             QFile::remove(cfg3DPath);
-            statusLabel->setText("Keybinds reset to defaults — reopen tabs to apply");
+            statusLabel->setText("Keybinds reset to defaults, reopen tabs to apply");
         });
 
     return page;

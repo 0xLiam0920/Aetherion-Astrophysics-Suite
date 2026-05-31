@@ -21,11 +21,11 @@ class QGroupBox;
  * simulation widget.
  *
  * Outputs:
- *   - is3D()          — whether the 3D renderer was requested
- *   - tabName()       — user-supplied tab title
- *   - bhMass()        — 2D: geometric mass M (metres, ≥ 1e3)
- *   - toJsonState()   — full 2D state blob for Simulation2DWidget::setPendingState()
- *   - to3DConfig()    — struct usable by Simulation3DWidget::setPendingConfig()
+ *   - is3D()         , whether the 3D renderer was requested
+ *   - tabName()      , user-supplied tab title
+ *   - bhMass()       , 2D: geometric mass M (metres, ≥ 1e3)
+ *   - toJsonState()  , full 2D state blob for Simulation2DWidget::setPendingState()
+ *   - to3DConfig()   , struct usable by Simulation3DWidget::setPendingConfig()
  */
 
 // ── 3D config bundle (mirrors cfg::SimConfig subset, no GL headers needed) ──

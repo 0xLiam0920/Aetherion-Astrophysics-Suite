@@ -5,7 +5,7 @@
 #include <cmath>
 #include "research_data.hpp"
 
-// Forward declarations — avoid circular includes
+// Forward declarations, avoid circular includes
 struct Photon;
 struct OrbitingBody;
 

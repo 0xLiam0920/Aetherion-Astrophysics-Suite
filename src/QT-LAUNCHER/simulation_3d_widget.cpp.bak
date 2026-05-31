@@ -1,5 +1,5 @@
 // ============================================================
-// simulation_3d_widget.cpp — 3D black hole simulation embedded in Qt.
+// simulation_3d_widget.cpp: 3D black hole simulation embedded in Qt.
 // Mirrors the BlackHole3D.cpp render loop inside onInit/onUpdate.
 // ============================================================
 
@@ -424,7 +424,7 @@ static void drawHUD(const GLBitmapFont& font, const ActionKeybinds& kb,
     primary += "  |  FPS: "    + std::to_string(static_cast<int>(fps     + 0.5f));
     font.drawText(primary, 10.f, 10.f, 0.86f, 0.86f, 0.86f, 0.78f, w, h);
 
-    // Debug/research key hint — dimmer, shown at the bottom of the HUD block
+    // Debug/research key hint, dimmer, shown at the bottom of the HUD block
     const std::string debugHint =
         "[" + std::string(keyToString(kb.toggleDebugHUD)) + "] Debug overlay";
     // Approximate line height ~14px per line; primary has ~5 lines
@@ -492,7 +492,7 @@ static std::vector<OrbitalBody> makeBodies(const BlackHoleProfile& prof) {
 } // anonymous namespace
 
 // ─────────────────────────────────────────────────────────────
-// Sim3DState — all simulation + GL state for one widget instance
+// Sim3DState, all simulation + GL state for one widget instance
 // ─────────────────────────────────────────────────────────────
 struct Sim3DState {
     // Profiles and current config
@@ -748,7 +748,7 @@ void Simulation3DWidget::onInit()
 }
 
 // ─────────────────────────────────────────────────────────────
-// Render loop — mirrors BlackHole3D.cpp's main loop body.
+// Render loop, mirrors BlackHole3D.cpp's main loop body.
 // QSFMLCanvas::paintEvent calls onUpdate() then display().
 // ─────────────────────────────────────────────────────────────
 void Simulation3DWidget::onUpdate()
@@ -905,11 +905,11 @@ void Simulation3DWidget::onUpdate()
     }
 
     while (glGetError() != GL_NO_ERROR) {}
-    // paintEvent calls display() after onUpdate() — do NOT call window.display() here
+    // paintEvent calls display() after onUpdate(), do NOT call window.display() here
 }
 
 // ─────────────────────────────────────────────────────────────
-// Input — keyboard
+// Input, keyboard
 // ─────────────────────────────────────────────────────────────
 
 void Simulation3DWidget::onKeyPressed(sf::Keyboard::Key code)
@@ -972,7 +972,7 @@ void Simulation3DWidget::onKeyReleased(sf::Keyboard::Key code)
 }
 
 // ─────────────────────────────────────────────────────────────
-// Input — mouse
+// Input, mouse
 // ─────────────────────────────────────────────────────────────
 
 void Simulation3DWidget::onMouseMoved(float x, float y)
