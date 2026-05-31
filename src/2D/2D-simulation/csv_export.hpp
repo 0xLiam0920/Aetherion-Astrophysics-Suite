@@ -68,10 +68,13 @@ inline bool exportPrecessionData(
     if (!out) return false;
     out << "orbit_number,periapsis_phi_rad,precession_rad,precession_deg\n";
     for (size_t i = 0; i < tracker.precessionPerOrbit.size(); ++i) {
-        out << (i + 1) << ","
-            << (i + 1 < tracker.periapsisAngles.size() ? tracker.periapsisAngles[i+1] : 0.0) << ","
-            << tracker.precessionPerOrbit[i] << ","
-            << (tracker.precessionPerOrbit[i] * 180.0 / M_PI) << "\n";
+        // Emit empty cell when periapsis angle is unavailable rather than
+        // writing a false 0.0 that downstream analyses would treat as real.
+        out << (i + 1) << ",";
+        if (i + 1 < tracker.periapsisAngles.size())
+            out << tracker.periapsisAngles[i + 1];
+        out << "," << tracker.precessionPerOrbit[i]
+            << "," << (tracker.precessionPerOrbit[i] * 180.0 / M_PI) << "\n";
     }
     return true;
 }

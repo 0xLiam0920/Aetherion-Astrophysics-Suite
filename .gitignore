@@ -25,3 +25,5 @@ __pycache__/
 .flatpak-builder/
 build-flatpak/
 *.flatpak
+
+*.bak

@@ -29,6 +29,7 @@
 #include "integrator.hpp"
 #include <cmath>
 #include <algorithm>
+#include <vector>
 
 struct Kerr {
     double M = 1.0;
@@ -103,14 +104,16 @@ inline KerrPathResult integrateKerrEquatorial(
         if (s.r <= rH) { out.captured = true; break; }
         if (s.r > rMax) break;
 
-        const double r  = s.r;
-        const double Δ  = std::max(1e-9, kerr.delta(r));
+        // Defensive: integrator may have stepped just inside rH this tick.
+        // Clamp before any 1/r term so render verts stay finite.
+        const double r  = std::max(s.r, rH);
+        const double Delta = std::max(1e-9, kerr.delta(r));
         const double r2 = r * r;
 
         // dt/dλ and dφ/dλ from the standard equatorial Kerr null geodesic.
         const double a  = kerr.a;
         const double Mm = kerr.M;
-        const double dphi_dl = ( (2.0 * Mm * a / r) * E + (1.0 - 2.0 * Mm / r) * L ) / Δ;
+        const double dphi_dl = ( (2.0 * Mm * a / r) * E + (1.0 - 2.0 * Mm / r) * L ) / Delta;
         // |dr/dλ|² = R(r) / r⁴
         const double R = kerr.R_radial(r, E, L);
         double dr_abs = (R > 0.0) ? std::sqrt(R) / r2 : 0.0;
@@ -121,10 +124,15 @@ inline KerrPathResult integrateKerrEquatorial(
         }
         const double dr_dl = s.pr_sign * dr_abs;
 
+        // TODO(beta3): this is forward Euler — the rest of the engine uses
+        // RK4/RKF45. Periapsis converges to ~1e-4 in coord units at the default
+        // dlam, and the turning-point handler (flip pr_sign, set dr_abs=1e-6)
+        // is an unphysical radial nudge. Upgrade to RK4 and add a regression
+        // test (Kerr equatorial photon ring closure) once tests cover it.
         s.r   += dr_dl   * dlam;
         s.phi += dphi_dl * dlam;
         // (we don't render t, but advance it so callers could compute it later)
-        const double dt_dl = ( (r2 + a*a + 2.0*Mm*a*a/r) * E - (2.0*Mm*a/r) * L ) / Δ;
+        const double dt_dl = ( (r2 + a*a + 2.0*Mm*a*a/r) * E - (2.0*Mm*a/r) * L ) / Delta;
         s.t   += dt_dl   * dlam;
 
         pushVert(s.r, s.phi);

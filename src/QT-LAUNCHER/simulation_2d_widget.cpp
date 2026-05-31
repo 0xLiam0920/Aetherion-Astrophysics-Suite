@@ -323,6 +323,27 @@ void Simulation2DWidget::onUpdate()
     sf::Vector2f center = barycentre;
     const double M = sim_->bh.metric.M;
 
+    // Barycentric binary mode (Gaia BH1/2/3, OJ 287): shift the primary off
+    // screen-centre by  -q * r_comp  so both objects visibly orbit the shared
+    // center of mass. The companion world coords are scaled by baryScale at
+    // render time.
+    bool  barycentricMode = false;
+    float baryScale       = 1.0f;
+    if (ui_->presetActive && ui_->showGalaxySystem
+        && BH2D_PRESETS[ui_->presetIdx].isBinaryWithBarycenter
+        && !sim_->bodies.empty()) {
+        const auto&  preset = BH2D_PRESETS[ui_->presetIdx];
+        const double M_comp = preset.companionMassSolar;
+        const double M_bh   = preset.massSolar;
+        const double q      = M_comp / (M_bh + M_comp);
+        baryScale = static_cast<float>(1.0 - q);
+        const double cx = sim_->bodies[0].worldX();
+        const double cy = sim_->bodies[0].worldY();
+        center = camera_->worldToScreen(static_cast<float>(-cx * q),
+                                        static_cast<float>(-cy * q));
+        barycentricMode = true;
+    }
+
     // Merger barycentric mode: shift the primary draw position so both BHs
     // visibly orbit the common centre of mass during inspiral. All primary
     // visuals (horizon, disk, photon sphere, bodies) draw relative to `center`
@@ -398,14 +419,26 @@ void Simulation2DWidget::onUpdate()
     if (ui_->showTimeDilationMap)
         renderer_->drawTimeDilationMap(center, M, camera_->pixelsPerM);
 
+    // Barycenter marker (drawn before bodies so it sits behind them)
+    if (barycentricMode)
+        renderer_->drawBarycenterMarker(barycentre);
+
     // Bodies and orbit paths
     for (size_t bodyIdx = 0; bodyIdx < sim_->bodies.size(); ++bodyIdx) {
         const auto& body     = sim_->bodies[bodyIdx];
-        const auto bodyVis   = OrbitVisualizer::computeBodyVisual(body, sim_->bh.metric, *camera_);
-        renderer_->drawBody(bodyVis);
+        const float scale    = (barycentricMode && body.isGalaxyBody) ? baryScale : 1.0f;
+        const auto bodyVis   = OrbitVisualizer::computeBodyVisual(body, sim_->bh.metric, *camera_, scale);
+        if (body.isSecondaryBH) {
+            const float secHorizonPx = 6.0f;
+            const float secDiskPx    = 16.0f;
+            renderer_->drawMergerBH(bodyVis.screenPos, secHorizonPx,
+                                    secDiskPx, 0.0f, body.label.c_str());
+        } else {
+            renderer_->drawBody(bodyVis);
+        }
 
         // Pulsar-specific visual decoration (jets, magnetic field lines, LC ring, flux tubes)
-        if (sim_->activeScenario == ResearchScenario::PulsarOrbital && bodyIdx == 0
+        if (sim_->activeScenario == ResearchScenario::PulsarOrbital && body.isPulsar
             && !body.captured) {
             float lc_px = 0.0f;
             if (sim_->pulsarState.lightCylRadius_m > 0.0)
@@ -421,10 +454,10 @@ void Simulation2DWidget::onUpdate()
             );
         }
 
-        const auto orbitPath = OrbitVisualizer::computeOrbitPath(body, sim_->bh.metric, *camera_);
+        const auto orbitPath = OrbitVisualizer::computeOrbitPath(body, sim_->bh.metric, *camera_, scale);
         renderer_->drawOrbitPath(orbitPath);
 
-        if (body.isGalaxyBody && ui_->showGalaxySystem && !body.label.empty()) {
+        if (body.isGalaxyBody && ui_->showGalaxySystem && !body.label.empty() && !body.isSecondaryBH) {
             sf::Color labelColor;
             switch (body.bodyType) {
                 case GalaxyBodyType::Star:           labelColor = sf::Color(255, 240, 200); break;

@@ -181,6 +181,13 @@ struct Photon {
 
         double phi_inf = ext_phi + std::atan2(ext_u, -ext_du);
 
+        if (!std::isfinite(phi_inf)) {
+        // Asymptotic extrapolation failed (degenerate state near critical b).
+        // Mark as captured so this ray is excluded from lensing analytics
+        // and FITS export instead of poisoning them with NaN.
+            captured = true;
+            return;
+        }
         double phi_offset = M_PI + phi_inf;
 
         // Deflection = 2·φ_∞ - π  (straight line sweeps π)
@@ -190,8 +197,9 @@ struct Photon {
 
         // Symmetric trajectory: outgoing half == incoming half (time-reversal symmetry),
         // so the full-path totals are just 2× the one-sided accumulators.
-        coordTime    = 2.0 * t_half;
-        shapiroDelay = 2.0 * shapiro_half;
+
+        coordTime    = std::isfinite(t_half)       ? 2.0 * t_half       : 0.0;
+        shapiroDelay = std::isfinite(shapiro_half) ? 2.0 * shapiro_half : 0.0;
 
         // Build full-resolution path for export BEFORE downsampling.
         // Cap to MAX_EXPORT_HALF to prevent unbounded allocation on near-critical-impact photons.

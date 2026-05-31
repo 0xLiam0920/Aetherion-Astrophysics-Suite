@@ -110,7 +110,6 @@ struct KeyConfig2D {
     sf::Keyboard::Key toggleData         = sf::Keyboard::Key::D;
     sf::Keyboard::Key toggleDilation     = sf::Keyboard::Key::F;
     sf::Keyboard::Key toggleCaustics     = sf::Keyboard::Key::C;
-    sf::Keyboard::Key toggleError        = sf::Keyboard::Key::N;
     sf::Keyboard::Key cycleBody          = sf::Keyboard::Key::H;
     sf::Keyboard::Key toggleControls     = sf::Keyboard::Key::Slash;
     sf::Keyboard::Key exportData         = sf::Keyboard::Key::X;   // format set by exportFormat
@@ -185,7 +184,6 @@ inline KeyConfig2D loadKeyConfig2D(const std::string &path)
         else if (action == "toggle_data")     cfg.toggleData     = k;
         else if (action == "toggle_dilation") cfg.toggleDilation = k;
         else if (action == "toggle_caustics") cfg.toggleCaustics = k;
-        else if (action == "toggle_error")    cfg.toggleError    = k;
         else if (action == "cycle_body")      cfg.cycleBody      = k;
         else if (action == "toggle_controls") cfg.toggleControls = k;
         else if (action == "export_data")     cfg.exportData     = k;

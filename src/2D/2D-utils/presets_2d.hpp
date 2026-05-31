@@ -176,7 +176,9 @@ inline constexpr GalaxySystemBody NGC1277_BODIES[] = {
     {"Stellar cluster",             GalaxyBodyType::StellarCluster, 75.0, 0.10},
 };
 
-// OJ 287, 1.8e10 Msun primary, known SMBH binary with a ~1.5e8 Msun secondary
+// OJ 287, 1.8e10 Msun primary, known SMBH binary with a ~1.5e8 Msun secondary.
+// The secondary's GalaxyBodyType is cosmetic only; the SMBH render path is
+// triggered by the "Secondary SMBH" label in Simulation::spawnGalaxySystem.
 inline constexpr GalaxySystemBody OJ287_BODIES[] = {
     {"Secondary SMBH (~1.5e8 Msun)", GalaxyBodyType::Star,     15.0, 0.66},
     {"Accretion blob",               GalaxyBodyType::GasCloud, 22.0, 0.30},
@@ -254,7 +256,7 @@ inline constexpr BHPreset2D BH2D_PRESETS[] = {
 
     {"OJ 287",            1.8e10,  "SMBH binary system with known orbital outbursts (~1.8e10 Msun primary)",
      true,  OJ287_BODIES,       3, {10.0, 85.0, 115.0, true},
-     false, 0.0, "https://en.wikipedia.org/wiki/OJ_287"}
+     true,  1.5e8, "https://en.wikipedia.org/wiki/OJ_287"}
 };
 inline constexpr int NUM_BH2D_PRESETS = sizeof(BH2D_PRESETS) / sizeof(BH2D_PRESETS[0]);
 

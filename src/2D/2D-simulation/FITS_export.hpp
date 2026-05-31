@@ -83,7 +83,12 @@ static std::string keyVal(const std::string& key, int val, const std::string& co
 // Overload for string values (e.g. EXTNAME), which need to be quoted in FITS headers
 static std::string keyVal(const std::string& key, const std::string& val, const std::string& comment = "") {
     char buf[81] = {};
-    std::string quoted = "'" + val + "'";
+    // FITS 3.0 §4.2.1.1: character values are space-padded to a minimum of
+    // 8 characters inside the quotes (so a 5-char EXTNAME like "ORBIT" is
+    // written as 'ORBIT   ', not 'ORBIT').
+    std::string padded = val;
+    if (padded.size() < 8) padded.append(8 - padded.size(), ' ');
+    std::string quoted = "'" + padded + "'";
     if (comment.empty())
         snprintf(buf, 81, "%-8s= %-20s", key.c_str(), quoted.c_str());
     else
@@ -204,7 +209,12 @@ static void writeBinTableHDU(
     writeData(f);
 
     // Pads the data block to a 2880-byte boundary with zeros, otherwise the FITS reader is going to throw a fit (insert laughtrack here).
-        long pos = (long)f.tellp();
+    // Guard against a bad stream / tellp() failure: rem = (-1) % 2880 is
+    // implementation-defined and would have us writing 2881 garbage bytes.
+    if (!f.good()) return;
+    std::streampos sp = f.tellp();
+    if (sp == std::streampos(-1)) return;
+    long pos = static_cast<long>(sp);
     long rem = pos % 2880L;
     if (rem != 0) {
         long padSize = 2880L - rem;
@@ -238,8 +248,10 @@ inline bool exportOrbitData(
                 double r = std::hypot(x, y);
                 double p = std::atan2(y, x);
                 double vals[4] = {x, y, r, p};
-                for (double v : vals) out.write(
-                    reinterpret_cast<char*>(&(v = swapDouble(v))), 8);
+                for (double v : vals) {
+                    double be = swapDouble(v);
+                    out.write(reinterpret_cast<const char*>(&be), 8);
+                }
             }
         });
     return true;

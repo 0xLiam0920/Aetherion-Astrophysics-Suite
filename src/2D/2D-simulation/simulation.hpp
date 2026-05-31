@@ -442,6 +442,53 @@ public:
         startMerger(massSolar, windowHeight, MergerSecondaryKind::BlackHole);
     }
 
+    // Choose an initial angle for the in-spiraling secondary that avoids
+    // landing on top of any existing body — both at the same radius (real
+    // collision risk) AND at the same projected screen angle (visual
+    // overlap, since label sprites occlude regardless of radial depth).
+    // Algorithm: collect the wrapped phi of every uncaptured body, but
+    // weight bodies near spawnR_M more heavily so the picker still prefers
+    // sectors that are radially clear when possible.
+    double pickMergerSpawnPhi(double spawnR_M) const {
+        constexpr double kTwoPi = 2.0 * M_PI;
+        const double M = bh.metric.M;
+        const double spawnR = spawnR_M * M;
+        struct Blocker { double phi; double weight; };
+        std::vector<Blocker> blockers;
+        blockers.reserve(bodies.size());
+        for (const auto& body : bodies) {
+            if (body.captured) continue;
+            double a = std::fmod(body.phi, kTwoPi);
+            if (a < 0.0) a += kTwoPi;
+            // Weight: 1.0 if within ±25% of spawn radius (true collision risk),
+            // 0.35 otherwise (visual-overlap-only, still avoid if possible).
+            double rRatio = (spawnR > 0.0) ? body.r / spawnR : 1.0;
+            double w = (rRatio > 0.75 && rRatio < 1.25) ? 1.0 : 0.35;
+            blockers.push_back({a, w});
+        }
+        if (blockers.empty()) return M_PI / 4.0;
+        constexpr int kSamples = 360;                     // 1° resolution
+        double bestPhi = M_PI / 4.0;
+        double bestScore = -1.0;
+        for (int i = 0; i < kSamples; ++i) {
+            double phi = (double(i) / kSamples) * kTwoPi;
+            // Score = weighted minimum angular distance. Use the smallest
+            // weighted gap so a heavy nearby body dominates a far-radius one.
+            double minScore = kTwoPi;
+            for (const auto& b : blockers) {
+                double d = std::fabs(phi - b.phi);
+                if (d > M_PI) d = kTwoPi - d;
+                double s = d * b.weight;
+                if (s < minScore) minScore = s;
+            }
+            if (minScore > bestScore) {
+                bestScore = minScore;
+                bestPhi = phi;
+            }
+        }
+        return bestPhi;
+    }
+
     void startMerger(double massSolar, unsigned int /*windowHeight*/,
                      MergerSecondaryKind kind) {
         merger.active          = true;
@@ -449,7 +496,7 @@ public:
         merger.secondaryKind   = kind;
         merger.massSolar       = massSolar;
         merger.r_M             = 40.0;
-        merger.phi             = M_PI / 4.0;  // start offset so it’s immediately visible
+        merger.phi             = pickMergerSpawnPhi(merger.r_M);
         merger.flashTimer      = 0.0;
         merger.preMergeMassSolar = 0.0;
         merger.secondaryMassGeom  = units::solarMassToGeomMeters(massSolar);
@@ -486,7 +533,21 @@ public:
         const double bx   = r_BH * std::cos(merger.phi);
         const double by   = r_BH * std::sin(merger.phi);
 
-        for (auto& body : bodies) {
+        // Capture and tidal radii of the SECONDARY (geometric meters). Previously
+        // capture was hard-coded to 0.5 × primary M, which meant bodies grazed
+        // through an equal-mass secondary's horizon (2·M2 = 2·M1) untouched.
+        // Now capture scales with the secondary's actual horizon and the tidal
+        // radius scales with M2 too, so star-like bodies entering a heavy
+        // secondary's sphere of influence get shredded the way they should.
+        const double r_cap_secondary = std::max(2.0 * M2, bh.metric.M * 0.5);
+        const double r_tidal_secondary = tidalRadiusM * M2;
+
+        // Collect indices to tidally disrupt after the loop — triggerTidalDisruption
+        // erases bodies, so we can't do it mid-iteration.
+        std::vector<int> tdeIdx;
+
+        for (size_t bi = 0; bi < bodies.size(); ++bi) {
+            auto& body = bodies[bi];
             if (body.captured) continue;
 
             const double px = body.r * std::cos(body.phi);
@@ -497,9 +558,20 @@ public:
             const double d2 = dx*dx + dy*dy;
             const double d  = std::sqrt(d2);
 
-            // Skip bodies too close to the secondary (they'd be "captured" by it)
-            if (d < bh.metric.M * 0.5) {
+            // Inside the secondary's horizon → swallowed.
+            if (d < r_cap_secondary) {
                 body.captured = true;
+                continue;
+            }
+
+            // Star-like galaxy bodies entering the secondary's tidal radius
+            // get torn apart, mirroring the primary-BH TDE behaviour.
+            if (body.isGalaxyBody && d < r_tidal_secondary &&
+                (body.bodyType == GalaxyBodyType::Star       ||
+                 body.bodyType == GalaxyBodyType::WhiteDwarf ||
+                 body.bodyType == GalaxyBodyType::NeutronStar||
+                 body.bodyType == GalaxyBodyType::CompanionStar)) {
+                tdeIdx.push_back(static_cast<int>(bi));
                 continue;
             }
 
@@ -533,6 +605,13 @@ public:
             // that's the point. Don't silently delete them, let them streak away.
             if (body.E > 1.2)
                 body.markEjected();
+        }
+
+        // Process tidal disruptions in reverse so earlier indices stay valid.
+        std::sort(tdeIdx.begin(), tdeIdx.end(), std::greater<int>());
+        for (int idx : tdeIdx) {
+            if (idx >= 0 && idx < (int)bodies.size())
+                triggerTidalDisruption(idx);
         }
     }
 
@@ -874,6 +953,12 @@ public:
             ob.label = gsb.label;
             ob.bodyType = gsb.type;
             ob.isGalaxyBody = true;
+            // Tag the SMBH companion in binary presets (e.g. OJ 287) so the
+            // render path swaps the star sprite for a mini-horizon+disk.
+            if (preset.isBinaryWithBarycenter && i == 0 &&
+                std::string(gsb.label).find("Secondary SMBH") != std::string::npos) {
+                ob.isSecondaryBH = true;
+            }
             ob.phi = (2.0 * M_PI * i) / preset.numGalaxyBodies; // stagger starting angles evenly so bodies don't all pile up at phi=0 which looks terrible
             ob.trail.clear();
             ob.trail.emplace_back(ob.worldX(), ob.worldY());
@@ -942,8 +1027,16 @@ public:
         customPresets.clear();
         std::ifstream f(customPresetsPath());
         if (!f) return;
+        // Hand-edited or truncated files must never crash the app. Defensive parse:
+        // skip malformed rows, clamp values to the same ranges as appendCustomPreset,
+        // and cap preset count so a runaway file can't exhaust memory.
+        constexpr size_t kMaxPresets    = 1024;
+        constexpr size_t kMaxLineLength = 4096;
         std::string line;
-        while (std::getline(f, line)) {
+        while (std::getline(f, line) && customPresets.size() < kMaxPresets) {
+            if (line.size() > kMaxLineLength) continue;
+            // Strip trailing CR for files written on Windows.
+            if (!line.empty() && line.back() == '\r') line.pop_back();
             if (line.empty() || line[0] == '#') continue;
             // Format: name<TAB>typeKey<TAB>semiMajorM<TAB>ecc
             size_t t1 = line.find('\t');
@@ -954,12 +1047,22 @@ public:
             if (t3 == std::string::npos) continue;
             CustomBodyPreset p;
             p.name = line.substr(0, t1);
+            // Trim whitespace from name; reject empty.
+            size_t ns = p.name.find_first_not_of(" \t");
+            size_t ne = p.name.find_last_not_of(" \t");
+            if (ns == std::string::npos) continue;
+            p.name = p.name.substr(ns, ne - ns + 1);
             std::string typeKey = line.substr(t1 + 1, t2 - t1 - 1);
             if (!bodyTypeFromKey(typeKey, p.type)) continue;
             try {
                 p.semiMajorM = std::stod(line.substr(t2 + 1, t3 - t2 - 1));
                 p.ecc        = std::stod(line.substr(t3 + 1));
             } catch (...) { continue; }
+            if (!std::isfinite(p.semiMajorM) || !std::isfinite(p.ecc)) continue;
+            if (p.semiMajorM < 2.5)  p.semiMajorM = 2.5;
+            if (p.semiMajorM > 1e6)  continue;       // absurd; treat as corrupt
+            if (p.ecc < 0.0)         p.ecc = 0.0;
+            if (p.ecc > 0.99)        p.ecc = 0.99;
             customPresets.push_back(std::move(p));
         }
     }
@@ -1075,26 +1178,34 @@ public:
             lensingData.deflectionTable.push_back(d);
         }
 
-        // Caustic detection: find where adjacent non-captured rays cross
-        // by checking if deflection angles cause path inversion
+        // Caustic detection: a caustic is where the source-plane Jacobian
+        // dβ/db of the thin-lens equation β = b − α(b)·D_LS/D_S vanishes.
+        // For the observer-at-infinity, source-at-infinity geometry the sim
+        // uses, D_LS/D_S → 1, so the principled condition is dα/db = 1.
+        // We detect bracketing pairs where (dα/db − 1) changes sign — those
+        // are the actual b values of infinite magnification (relativistic
+        // ring radii), not just "wherever the deflection curve is steep".
+        double prevG = 0.0;
+        bool   havePrev = false;
         for (size_t i = 1; i < lensingData.deflectionTable.size(); ++i) {
             const auto& prev = lensingData.deflectionTable[i-1];
             const auto& curr = lensingData.deflectionTable[i];
-            if (prev.captured || curr.captured) continue;
+            if (prev.captured || curr.captured) { havePrev = false; continue; }
 
-            // Large deflection gradient → ray convergence (caustic region)
             double db = curr.impactParameter - prev.impactParameter;
             if (std::abs(db) < 1e-15) continue;
             double dDeflect = curr.deflectionAngle - prev.deflectionAngle;
-            double gradient = std::abs(dDeflect / db);
+            double g = dDeflect / db;   // signed dα/db at midpoint
+            double j = g - 1.0;         // vanishing-Jacobian residual
 
-            // threshold of 0.5 rad/M is completely empirical, I tuned it until the caustic markers
-            // appeared in roughly the right places visually. I cannot rigorously justify this number.
-            // if caustics are appearing in weird places, this is probably why.
-            if (gradient > 0.5) {
-                float avgB = (float)(0.5 * (prev.impactParameter + curr.impactParameter));
-                lensingData.causticPoints.emplace_back(avgB, (float)gradient);
+            if (havePrev && (j * (prevG - 1.0) < 0.0)) {
+                // sign change in (dα/db − 1) between this pair and the last
+                // ⇒ a caustic sits between them. Linearly interpolate b.
+                double bMid = 0.5 * (prev.impactParameter + curr.impactParameter);
+                lensingData.causticPoints.emplace_back((float)bMid, (float)std::abs(g));
             }
+            prevG = g;
+            havePrev = true;
         }
 
         // Einstein-ring / image-multiplicity finder.
@@ -1377,6 +1488,10 @@ public:
         ob.label       = "Pulsar (1.4 Msun NS)";
         ob.isPulsar    = true;
         ob.scenarioTag = ResearchScenario::PulsarOrbital;
+        // Avoid spawning the pulsar marker on top of preset bodies (which all
+        // start at phi=0). Place it in the largest angular gap among bodies
+        // currently sitting near its apoapsis radius.
+        ob.phi = pickMergerSpawnPhi(ob.r / M);
         bodies.push_back(std::move(ob));
         selectedBodyIdx = (int)bodies.size() - 1;
 

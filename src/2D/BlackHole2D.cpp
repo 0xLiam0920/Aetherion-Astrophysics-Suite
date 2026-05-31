@@ -445,7 +445,16 @@ int main(int argc, char* argv[]) {
             // (= M_BH / (M_BH + M_comp)) so both objects orbit screen centre.
             float scale = (barycentricMode && body.isGalaxyBody) ? baryScale : 1.0f;
             auto bodyVis = OrbitVisualizer::computeBodyVisual(body, sim.bh.metric, camera, scale);
-            renderer.drawBody(bodyVis);
+            if (body.isSecondaryBH) {
+                // Mini SMBH visual (horizon + tinted disk). Sized cosmetically
+                // so the binary nature is unmistakable even at preset zoom.
+                const float secHorizonPx = 6.0f;
+                const float secDiskPx    = 16.0f;
+                renderer.drawMergerBH(bodyVis.screenPos, secHorizonPx,
+                                      secDiskPx, 0.0f, body.label.c_str());
+            } else {
+                renderer.drawBody(bodyVis);
+            }
 
             // Pulsar-specific visual decoration (jets, magnetic field lines, LC ring, flux tubes)
             if (sim.activeScenario == ResearchScenario::PulsarOrbital && body.isPulsar
@@ -468,7 +477,7 @@ int main(int argc, char* argv[]) {
             renderer.drawOrbitPath(orbitPath);
 
             // Label galaxy system bodies
-            if (body.isGalaxyBody && ui.showGalaxySystem && !body.label.empty()) {
+            if (body.isGalaxyBody && ui.showGalaxySystem && !body.label.empty() && !body.isSecondaryBH) {
                 sf::Color labelColor;
                 switch (body.bodyType) {
                     case GalaxyBodyType::Star:           labelColor = sf::Color(255, 240, 200); break;

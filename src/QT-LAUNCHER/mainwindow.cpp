@@ -3226,7 +3226,6 @@ QWidget* MainWindow::createSettingsPage()
             { "toggle_data",    "Data Panel",            "D"     },
             { "toggle_dilation","Time Dilation Map",     "F"     },
             { "toggle_caustics","Caustic Field",         "C"     },
-            { "toggle_error",   "Numerical Error",       "N"     },
             { "cycle_body",     "Cycle Selected Body",   "H"     },
             { "toggle_controls","Toggle Controls Panel", "/"     },
             { "export_data",    "Export Data",           "X"     },

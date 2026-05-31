@@ -315,8 +315,8 @@ public:
     }
 
     /*--------- HUD ---------*/
-    void drawHUD(const std::string& text) {
-        infoText_.setString(text);
+    void drawHUD(const std::string& s) {
+        infoText_.setString(s);
         window_.draw(infoText_);
     }
 
@@ -440,7 +440,6 @@ public:
             "C         Caustic highlights",
             "D         Data panel",
             "H         Cycle selected body",
-            "N         Numerical error display",
             "X         Export CSV data",
             ", / .     Gas temp down/up",
             "",
@@ -599,7 +598,8 @@ public:
     // tinted purple so the secondary stays visually distinct from the primary
     // even in an equal-mass merger.
     void drawMergerBH(sf::Vector2f pos, float radiusPx,
-                      float diskPx = 0.0f, float jetLenPx = 0.0f) {
+                      float diskPx = 0.0f, float jetLenPx = 0.0f,
+                      const char* labelText = "Incoming BH") {
         // Accretion disk first (drawn beneath the horizon)
         if (diskPx > radiusPx + 0.5f) {
             drawAccretionDisk(pos, diskPx, sf::Color(210, 140, 255, 220));
@@ -630,7 +630,7 @@ public:
         window_.draw(core);
 
         // Label
-        sf::Text lbl(font_, "Incoming BH", 10);
+        sf::Text lbl(font_, labelText, 10);
         lbl.setFillColor(sf::Color(200, 160, 255));
         lbl.setPosition({pos.x + radiusPx + 4.0f, pos.y - 7.0f});
         window_.draw(lbl);

@@ -16,8 +16,6 @@ struct UIState {
     bool   showInfluenceZones = true;
     bool   paused            = false;
     bool   presetActive      = false;
-    bool   accuratePhysics   = true;
-    bool   showTimeDilation  = false;
     int    presetIdx         = 0;
     double timeScale         = 1.0;
     double defaultPixelsPerM = 60.0;
@@ -26,7 +24,6 @@ struct UIState {
     bool   showDataPanel     = false;
     bool   showTimeDilationMap = false;
     bool   showCaustics      = false;
-    bool   showNumericalError = false;
     bool   showControlsPanel  = true;   // toggleable controls list
     bool   highResLensing    = false;   // log-spaced extra rays near b_crit
     bool   lightMode         = false;   // light theme for the 2D HUD overlays
@@ -480,9 +477,6 @@ inline void handleInput(
 
     } else if (code == cfg.toggleCaustics) {
         ui.showCaustics = !ui.showCaustics;
-
-    } else if (code == cfg.toggleError) {
-        ui.showNumericalError = !ui.showNumericalError;
 
     } else if (code == cfg.cycleBody) {
         sim.cycleSelectedBody();

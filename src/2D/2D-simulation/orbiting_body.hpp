@@ -46,6 +46,11 @@ struct OrbitingBody {
     // Set by Simulation::togglePulsarOrbital().
     bool           isPulsar = false;
 
+    // SMBH-binary marker: when true this body represents a secondary
+    // supermassive black hole (e.g. OJ 287). Rendered as a mini horizon +
+    // tinted disk instead of the default galaxy-body sprite.
+    bool           isSecondaryBH = false;
+
     // Which research scenario (if any) spawned this body.  Used by the
     // simulation to toggle whole scenarios on/off additively without
     // disturbing unrelated orbiters.  None == created outside any scenario
@@ -220,6 +225,12 @@ struct OrbitingBody {
         // Convert coordinate time dt → proper time dτ:  dτ = dt·f(r)/E
         double dtau_total = dt * fr / E;
 
+        if (!std::isfinite(dtau_total)) {
+    // State has gone numerically unrecoverable (E corrupted by a merger
+    // perturbation, etc). This falls back to capturing rather than feeding NaN into the integrator.
+    captured = true;
+    return;
+}
         // Accumulate coordinate time
         measurement.coordinateTime += dt;
 
@@ -227,6 +238,7 @@ struct OrbitingBody {
         // Scale step size with M so that nSteps stays reasonable at any mass
         // the 0.05*M step limit was found by trial and error, any larger and energy starts drifting
         // noticeably near the horizon. any smaller and we're burning CPU for no benefit at large r.
+        // Equation here is derived from dtau_total / nsteps, whereas the 0.05*M limit applies to the actual.
         double maxStep = 0.05 * bh.M;
         int nSteps = std::max(1, static_cast<int>(std::abs(dtau_total) / maxStep) + 1);
         nSteps = std::min(nSteps, 4000);  // safety cap, if we ever hit 4000 something is very wrong and we'd rather be slightly inaccurate than freeze the frame
@@ -285,18 +297,24 @@ struct OrbitingBody {
         double fr = bh.f(r);
         if (fr <= 1e-10) return; // inside or at the horizon, all measurements are garbage here anyway
 
-        // Lorentz factor as seen by static observer at r:  γ = E/f(r)
-        // this is the time dilation relative to coordinate time, NOT relative to infinity.
-        // the display shows it as dt/dτ which is the same thing but phrased more intuitively.
-        double gamma = E / fr;
-        double v2 = std::max(0.0, 1.0 - 1.0 / (gamma * gamma));
+        // Coordinate-time dilation: dt/dτ = E/f(r). This is what the HUD shows
+        // as "time dilation" — it's the ratio against coordinate time, NOT what
+        // a local static observer measures.
+        double gamma_coord = E / fr;
+        measurement.timeDilation = gamma_coord;
+
+        // Locally-measured Lorentz factor (against a static FIDO at r) is
+        // γ_local = E/√f, NOT E/f. The orbital speed reported here must come
+        // from γ_local, otherwise it gets overestimated in the strong field and
+        // disagrees with the FIDO components (v_phi_local = L√f/(rE)) below.
+        double sqf = std::sqrt(fr);
+        double gamma_local = E / sqf;
+        double v2 = std::max(0.0, 1.0 - 1.0 / (gamma_local * gamma_local));
         measurement.orbitalVelocity = std::sqrt(std::min(v2, 0.9999));
-        measurement.timeDilation = gamma; 
 
         // Local velocity components (in FIDO frame):
         //   v_r_local   = v_r / E         (radial)
         //   v_phi_local = L·√f / (r·E)    (tangential)
-        double sqf = std::sqrt(fr);
         double vr_local   = vr / E;
         double vphi_local = L * sqf / (r * E); // warcrime? probably!
 
@@ -307,6 +325,6 @@ struct OrbitingBody {
         // Total redshift (GR exact for this geometry):
         //   1+z = γ·(1 + β_away) / √f = E·(1 + β_away) / f
         measurement.redshift = E * (1.0 + beta_away) / fr;
-        measurement.dopplerFactor = gamma * (1.0 + beta_away);
+        measurement.dopplerFactor = gamma_local * (1.0 + beta_away);
     }
 };
