@@ -65,7 +65,10 @@ public:
             tryFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")              ||
             tryFont("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf") ||
             tryFont("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf")               ||
-            tryFont("/System/Library/Fonts/Helvetica.ttc");
+            tryFont("/System/Library/Fonts/Helvetica.ttc")                          ||
+            tryFont("C:/Windows/Fonts/segoeui.ttf")                                 ||
+            tryFont("C:/Windows/Fonts/arial.ttf")                                   ||
+            tryFont("C:/Windows/Fonts/tahoma.ttf");
         if (!fontLoaded)
             std::cerr << "Warning: could not load system font; text may not display.\n";
         infoText_ = sf::Text(font_, "", 14);

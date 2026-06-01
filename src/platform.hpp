@@ -114,6 +114,49 @@
     }
 #endif
 
+// ── User-data directory helper ───────────────────────────────
+// Returns the per-user, per-app writable data root for Aetherion as a
+// std::string, with NO trailing slash. The directory is NOT created.
+//
+//   macOS:   $HOME/Library/Application Support/Aetherion
+//   Linux:   $HOME/.local/share/Aetherion          (or $XDG_DATA_HOME/Aetherion)
+//   Windows: %APPDATA%/Aetherion                   (Roaming)
+//
+// Falls back to "." if no suitable environment variable is set.
+#include <string>
+#include <cstdlib>
+#if defined(_WIN32)
+    #include <windows.h>
+    #include <shlobj.h>
+#endif
+inline std::string platformUserDataDir() {
+#if defined(_WIN32)
+    // Prefer SHGetFolderPathA(CSIDL_APPDATA) so we follow whatever Windows
+    // considers Roaming AppData, then fall back to %APPDATA% / %USERPROFILE%.
+    char buf[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, buf))) {
+        std::string p(buf);
+        return p + "\\Aetherion";
+    }
+    if (const char* appdata = std::getenv("APPDATA"))
+        return std::string(appdata) + "\\Aetherion";
+    if (const char* userp = std::getenv("USERPROFILE"))
+        return std::string(userp) + "\\AppData\\Roaming\\Aetherion";
+    return ".\\Aetherion";
+#elif defined(__APPLE__)
+    const char* home = std::getenv("HOME");
+    if (!home || !*home) home = ".";
+    return std::string(home) + "/Library/Application Support/Aetherion";
+#else
+    // Honour XDG_DATA_HOME if set (spec default is $HOME/.local/share).
+    if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && *xdg)
+        return std::string(xdg) + "/Aetherion";
+    const char* home = std::getenv("HOME");
+    if (!home || !*home) home = ".";
+    return std::string(home) + "/.local/share/Aetherion";
+#endif
+}
+
 // ── Open a URL in the user's default browser ─────────────────
 // Returns true on apparent success. URL is passed through the platform's
 // default launcher (`open`, `xdg-open`, or `ShellExecute`). The URL is

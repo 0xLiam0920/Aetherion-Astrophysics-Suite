@@ -12,6 +12,7 @@
 #include "2D-utils/key_config_2d.hpp"
 
 #include <QDir>
+#include <QStandardPaths>
 #include <QJsonObject>
 #include <QSettings>
 
@@ -264,6 +265,11 @@ void Simulation2DWidget::onInit()
 #ifdef Q_OS_MACOS
     const std::string cfgPath =
         (QDir::homePath() + "/Library/Application Support/Aetherion/blackhole2d_keybinds.cfg")
+        .toStdString();
+#elif defined(Q_OS_WIN)
+    const std::string cfgPath =
+        (QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+         + "/blackhole2d_keybinds.cfg")
         .toStdString();
 #else
     const std::string cfgPath =

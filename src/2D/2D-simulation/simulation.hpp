@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cmath>
 #include <filesystem>
+#include "platform.hpp"
 
 // TODO: pack all viable headers into single header hpp files for 2d, 3d, and launcher
 // hours wasted trying to fix linux package diff issues: 7
@@ -565,8 +566,10 @@ public:
             }
 
             // Star-like galaxy bodies entering the secondary's tidal radius
-            // get torn apart, mirroring the primary-BH TDE behaviour.
-            if (body.isGalaxyBody && d < r_tidal_secondary &&
+            // get torn apart, mirroring the primary-BH TDE behaviour. Secondary
+            // SMBHs (e.g. OJ 287's companion) are not stars — they should never
+            // be tidally disrupted by an incoming third merger object.
+            if (body.isGalaxyBody && !body.isSecondaryBH && d < r_tidal_secondary &&
                 (body.bodyType == GalaxyBodyType::Star       ||
                  body.bodyType == GalaxyBodyType::WhiteDwarf ||
                  body.bodyType == GalaxyBodyType::NeutronStar||
@@ -1008,16 +1011,7 @@ public:
     }
 
     static std::string customPresetsPath() {
-        const char* home = getenv("HOME");
-        if (!home) home = "/tmp";
-        std::string dir;
-#ifdef __APPLE__
-        dir = std::string(home) + "/Library/Application Support/Aetherion/saves/";
-#elif defined(__linux__)
-        dir = std::string(home) + "/.local/share/Aetherion/saves/";
-#else
-        dir = std::string(home) + "/Aetherion/saves/";
-#endif
+        std::string dir = platformUserDataDir() + "/saves/";
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
         return dir + "custom_presets.tsv";
@@ -1814,6 +1808,10 @@ public:
         }
 
         bodies.erase(bodies.begin() + bodyIdx);
+        // Keep selectedBodyIdx valid so HUD/data-panel don't index past end
+        // after a merger-driven TDE removes the currently-selected body.
+        if (selectedBodyIdx >= (int)bodies.size())
+            selectedBodyIdx = bodies.empty() ? 0 : (int)bodies.size() - 1;
     }
 
     // Advance the tidal particle system using wall-clock dt.
@@ -2189,17 +2187,8 @@ public:
 
     // Returns the workspace-level export directory, or "" on failure.
     std::string makeExportDir() const {
-        const char *home = getenv("HOME");
-        if (!home) home = "/tmp";
         std::string safeName = sanitizeName(exportName.empty() ? "untitled_data" : exportName);
-        std::string dir;
-#ifdef __APPLE__
-        dir = std::string(home) + "/Library/Application Support/Aetherion/exports/" + safeName + "/";
-#elif defined(__linux__)
-        dir = std::string(home) + "/.local/share/Aetherion/exports/" + safeName + "/";
-#else
-        dir = std::string(home) + "/Aetherion/exports/" + safeName + "/";
-#endif
+        std::string dir = platformUserDataDir() + "/exports/" + safeName + "/";
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
         if (ec) return "";   // Signal failure to callers
@@ -2225,7 +2214,11 @@ public:
 
     // Abbreviates the home directory as "~" so messages fit in the HUD.
     static std::string abbreviateHome(const std::string& path) {
-        const char *home = getenv("HOME");
+#if defined(_WIN32)
+        const char *home = std::getenv("USERPROFILE");
+#else
+        const char *home = std::getenv("HOME");
+#endif
         if (home && path.substr(0, std::strlen(home)) == home)
             return "~" + path.substr(std::strlen(home));
         return path;

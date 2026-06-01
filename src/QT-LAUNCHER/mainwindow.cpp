@@ -27,6 +27,7 @@
 #include <QSettings>
 #include <QShortcut>
 #include <QDir>
+#include <QStandardPaths>
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
@@ -57,10 +58,13 @@
 #include <QtEndian>
 
 // Returns the Aetherion app-data root, matching simulation.hpp's makeExportDir().
-// Must agree with the C++ getenv("HOME") path used in simulation code.
+// Must agree with the C++ platformUserDataDir() used in simulation code.
 static QString aetherionDataDir() {
 #ifdef Q_OS_MACOS
     return QDir::homePath() + "/Library/Application Support/Aetherion";
+#elif defined(Q_OS_WIN)
+    // Mirrors %APPDATA%\\Aetherion (Roaming).
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
 #else
     return QDir::homePath() + "/.local/share/Aetherion";
 #endif

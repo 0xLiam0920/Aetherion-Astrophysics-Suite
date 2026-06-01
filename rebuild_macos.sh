@@ -2,6 +2,7 @@
 
 # cd's in ~/aetherionsuite and runs the build script, then the build directory and ./blackhole-sim
 cd ~/aetherionsuite
+git submodule update --init --recursive  # make sure external/imgui-sfml is populated
 cmake -S . -B build && make -C build -j4 ## if you have a different number of CPU cores you want to use for testing, change the num to something else for faster builds. 4 is fine for now
 cd build
 ./blackhole-sim

@@ -162,13 +162,7 @@ struct ActionKeybinds {
 };
 
 inline std::filesystem::path keybindConfigPath() {
-    const char* home = std::getenv("HOME");
-    std::filesystem::path base = home ? home : ".";
-#ifdef __APPLE__
-    return base / "Library" / "Application Support" / "Aetherion" / "blackhole3d_keybinds.cfg";
-#else
-    return base / ".local" / "share" / "Aetherion" / "blackhole3d_keybinds.cfg";
-#endif
+    return std::filesystem::path(platformUserDataDir()) / "blackhole3d_keybinds.cfg";
 }
 
 inline void enforceKeybindConflicts(ActionKeybinds& keys) {
@@ -617,7 +611,10 @@ inline void initFont(State& s, sf::Font& tmpFont) {
         tryFont("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")              ||
         tryFont("/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf")  ||
         tryFont("/System/Library/Fonts/Menlo.ttc")                                  ||
-        tryFont("/System/Library/Fonts/SFNSMono.ttf");
+        tryFont("/System/Library/Fonts/SFNSMono.ttf")                               ||
+        tryFont("C:/Windows/Fonts/consola.ttf")                                     ||
+        tryFont("C:/Windows/Fonts/cour.ttf")                                        ||
+        tryFont("C:/Windows/Fonts/lucon.ttf");
     if (loaded) s.fontLoaded = s.glFont.initFromFont(tmpFont, 14);
 }
 
