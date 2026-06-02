@@ -1,6 +1,8 @@
 # FAQ & Troubleshooting
 
-Common questions and solutions for the Aetherion project.
+Common questions, common mistakes, and the occasional rant. If your problem
+isn't in here, congratulations, you've found a new and exciting one. Please
+file an issue with actual error output, not a screenshot of a screenshot.
 
 ---
 
@@ -80,6 +82,8 @@ error: no matching constructor for 'sf::VideoMode'
 No CMAKE_CXX_COMPILER could be found.
 ```
 
+**Cause:** You are trying to compile C++ without a C++ compiler, don't be a doofus.
+
 **Solution:**
 ```bash
 sudo apt install build-essential
@@ -154,7 +158,7 @@ Shader compilation failed: ...
 
 ### `.app` bundle won't open ("damaged" or "unidentified developer")
 
-**Cause:** The bundle isn't code-signed.
+**Cause:** The bundle isn't code-signed, because Apple charges $100/year for the privilege of telling macOS that I am, in fact, a real person and not a Russian botnet.
 
 **Solution:**
 ```bash
@@ -243,6 +247,108 @@ Then rebuild the project with:
 cmake -DCMAKE_PREFIX_PATH=/usr/local ..
 ```
 
+---
+
+## Windows-Specific Issues
+
+So you want to build Aetherion on Windows. First, deep breath. Second, follow this in order, because skipping a step here is the source of roughly 90% of the "doesn't work" issues people DM me about.
+
+### What you actually need before running anything
+
+The `rebuild_windows.ps1` / `rebuild_windows.sh` scripts assume you have already done all of the following. They will not install these for you. They are scripts, not your IT department.
+
+1. **Visual Studio 2022** with the **"Desktop development with C++"** workload. Not VS Code. Not "I have Build Tools installed". The full IDE with that exact workload checked. The Community edition is free.
+2. **vcpkg** cloned and bootstrapped somewhere sane (e.g. `C:\vcpkg`):
+   ```powershell
+   git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+   C:\vcpkg\bootstrap-vcpkg.bat
+   ```
+3. **The actual libraries**, installed via vcpkg with the **x64-windows** triplet (the default `x86` triplet will silently install 32-bit binaries and then nothing will link, and you will be sad):
+   ```powershell
+   C:\vcpkg\vcpkg.exe install qt6-base qt6-charts sfml glm glew --triplet x64-windows
+   ```
+   Go make a coffee. Go make lunch. This step takes a while because Qt is, structurally, a small operating system.
+4. **`VCPKG_ROOT` set in your environment** (or pass `--vcpkg-root` every time, which gets old fast):
+   ```powershell
+   [Environment]::SetEnvironmentVariable('VCPKG_ROOT', 'C:\vcpkg', 'User')
+   ```
+   Open a new shell after setting this. PowerShell will not magically pick it up in the current session.
+5. A **"Developer PowerShell for VS 2022"** prompt (Start menu → search "Developer PowerShell"). This is the one that has `cmake.exe`, `cl.exe`, and friends on PATH. A regular PowerShell window does not, and you will get baffling "CMAKE_CXX_COMPILER not found" errors.
+
+### Now actually build it
+
+From the repo root in that Developer PowerShell window:
+```powershell
+.\rebuild_windows.ps1
+```
+Or from Git Bash / MSYS2 spawned from that same Developer prompt:
+```bash
+./rebuild_windows.sh
+```
+The output executables land in `build\Release\` as `blackhole-sim.exe`, `blackhole-2D.exe`, and `blackhole-3D.exe`.
+
+### "CMake Error: Could not find package configuration file for Qt6" (or SFML, or GLM…)
+
+**Cause:** Either `VCPKG_ROOT` isn't set, or you ran the script without passing `--vcpkg-root`, or you installed the wrong triplet. Almost always the triplet, in my experience.
+
+**Solution:** Check that all three of these are true:
+- `vcpkg list` shows the package with `:x64-windows` after its name (not `:x86-windows`).
+- `echo $env:VCPKG_ROOT` in PowerShell prints a real path with a `scripts\buildsystems\vcpkg.cmake` file inside it.
+- You are in a Developer PowerShell for VS 2022 window.
+
+If all three check out and it still fails, blow away the `build\` folder and configure from scratch. CMake caches are like cats; once they decide they don't like you, you replace them.
+
+### "The application failed to start because Qt6Core.dll was not found"
+
+**Cause:** Qt's runtime DLLs aren't next to the `.exe`. The build links against vcpkg's Qt, but Windows won't go hunting through vcpkg's install tree at runtime.
+
+**Solution:** Deploy them with `windeployqt`:
+```powershell
+windeployqt build\Release\blackhole-sim.exe
+windeployqt build\Release\blackhole-2D.exe
+windeployqt build\Release\blackhole-3D.exe
+```
+`windeployqt` lives inside the vcpkg Qt install, usually under `vcpkg\installed\x64-windows\tools\Qt6\bin\windeployqt.exe`. Add that folder to PATH, or call it by full path. If you ran `bundle_app.sh --platform windows` or `make_exe.sh`, this is already done for you inside the bundled folder.
+
+### `make_exe.sh` says "makensis was not found"
+
+**Cause:** NSIS (the installer compiler) isn't installed. The script is honest about this and falls back to the portable `.zip` so you still get *something* useful.
+
+**Solution:** Install NSIS, then re-run with `--no-bundle` so you don't have to wait for the bundle step again:
+```powershell
+choco install nsis            # if you have Chocolatey
+winget install NSIS.NSIS      # or with winget
+```
+Then:
+```bash
+./make_exe.sh --no-bundle
+```
+
+### SmartScreen says "Windows protected your PC" when running the installer
+
+**Cause:** The installer isn't code-signed. See the README rant. TL;DR: code-signing certificates cost real money for a hobby/research project, so the installer ships unsigned.
+
+**Solution:** Click **"More info"** → **"Run anyway"**. If you don't trust the binary, that's fair, build it from source — that's literally why this is open source.
+
+### `bash: ./rebuild_windows.sh: /usr/bin/env: bad interpreter`
+
+**Cause:** Git for Windows checked out the script with CRLF line endings, and the `#!/usr/bin/env bash` shebang now ends in `\r`, which is not a real path.
+
+**Solution:**
+```bash
+git config --global core.autocrlf input
+git rm --cached rebuild_windows.sh make_exe.sh bundle_app.sh
+git checkout -- rebuild_windows.sh make_exe.sh bundle_app.sh
+```
+Or just run the `.ps1` instead and avoid the whole class of problem.
+
+### "Antivirus quarantined Aetherion.exe"
+
+**Cause:** You compiled a brand-new unsigned executable that does GPU things and reads files from disk. To a heuristic AV, that is indistinguishable from approximately every piece of malware ever written.
+
+**Solution:** Add an exclusion for the build folder, or submit a false-positive report to your AV vendor. I cannot whitelist binaries with Windows Defender from a README, sadly.
+
+---
 
 ---------- RANT STARTS HERE ----------
 
@@ -269,7 +375,7 @@ grade features. Quality over quantity.
 
 ### Can I edit shaders without recompiling?
 
-The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag` or `BlackHole3D_PhotorealDisk.frag` in the build directory and relaunch the simulator. Do so at your own risk
+The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag` or `BlackHole3D_PhotorealDisk.frag` in the build directory and relaunch the simulator. Do so at your own risk; GLSL is a fickle beast and "why is the screen entirely magenta" is almost always your fault, not mine.
 
 ### What units does the simulation use?
 
@@ -282,12 +388,13 @@ The 3D simulator includes presets for TON 618, Sgr A*, M87*, and others. Check t
 
 ### Does this work on Windows?
 
-The codebase is cross-platform C++17. While I (Liam N, main and only lead developer) made this on MACOS and Asahi Linux, my testing for windows is very limited for now.
-If you are open to beta testing here, you can try building with MSVC or MinGW. You will need:
-- MSVC or MinGW with C++17 support
-- SFML 3.x (via [vcpkg](https://vcpkg.io/): `vcpkg install sfml glm`)
+Yes. Windows is now a supported platform alongside macOS and Linux. The cross-platform C++17 codebase builds with MSVC (recommended) or MinGW. You will need:
+- Visual Studio 2022 with the "Desktop development with C++" workload (or MinGW with C++17 support)
+- [vcpkg](https://vcpkg.io/) with: `vcpkg install qt6-base qt6-charts sfml glm glew --triplet x64-windows`
 - CMake ≥ 3.10
 - A GPU with OpenGL 3.3 support
+
+From a "Developer PowerShell for VS 2022" prompt run `rebuild_windows.ps1`, or from Git Bash / MSYS2 run `./rebuild_windows.sh`. To produce a redistributable installer, run `./make_exe.sh` (uses NSIS if available, otherwise falls back to a portable `.zip`).
 
 ### How do I regenerate the accretion disk texture?
 

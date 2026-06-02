@@ -73,10 +73,13 @@ void QSFMLCanvas::showEvent(QShowEvent *event)
 void QSFMLCanvas::initializeSFML()
 {
     // Get the native window ID for this Qt widget.
-    // sf::WindowHandle is void* on macOS but unsigned long on Linux, so the
-    // cast strategy differs: reinterpret_cast is required for integer→pointer on
-    // macOS, while static_cast suffices for integer→integer on Linux/Windows.
-#if defined(__APPLE__)
+    // sf::WindowHandle's underlying type varies by platform:
+    //   macOS:   void*  (NSWindow*)
+    //   Linux:   unsigned long (X11 Window)
+    //   Windows: HWND (a pointer type)
+    // Integer→pointer conversions require reinterpret_cast on macOS/Windows;
+    // integer→integer uses static_cast on Linux.
+#if defined(__APPLE__) || defined(_WIN32)
     sf::RenderWindow::create(reinterpret_cast<sf::WindowHandle>(static_cast<std::uintptr_t>(winId())), contextSettings_);
 #else
     sf::RenderWindow::create(static_cast<sf::WindowHandle>(static_cast<unsigned long>(winId())), contextSettings_);

@@ -1,6 +1,8 @@
 # Dependencies
 
-The dependency reference page for the Aetherion project.
+The dependency reference page for the Aetherion project. If something fails to
+build and the error mentions a library, this page is the first place to look
+before opening an issue titled "build broken pls fix".
 
 ---
 
@@ -28,7 +30,7 @@ The dependency reference page for the Aetherion project.
 | **Install (Linux)** | `sudo apt install libsfml-dev` |
 | **Website** | https://www.sfml-dev.org/ |
 
-> **Note:** The project targets SFML 3.x. SFML 2.x is not supported due to API changes (e.g. `sf::Mouse::Button::Left`, `sf::ContextSettings` fields, `sf::VideoMode` constructor).
+> **Note:** The project targets SFML 3.x. SFML 2.x is not supported due to API changes (e.g. `sf::Mouse::Button::Left`, `sf::ContextSettings` fields, `sf::VideoMode` constructor). And no, I will not be writing a compatibility shim. SFML 3 has been out long enough that your distro should catch up.
 
 ### GLM (OpenGL Mathematics)
 
@@ -54,7 +56,7 @@ The dependency reference page for the Aetherion project.
 | **macOS** | Provided by the system (linked via `find_library(OpenGL)`) |
 | **Linux** | Typically provided by GPU drivers; may need `libgl-dev` or Mesa |
 
-> On macOS, `GL_SILENCE_DEPRECATION` is defined to suppress Apple's OpenGL deprecation warnings.
+> On macOS, `GL_SILENCE_DEPRECATION` is defined to suppress Apple's OpenGL deprecation warnings. Yes, Apple has been threatening to remove OpenGL since roughly the Bronze Age. No, they still haven't. We continue to live in this state of mild dread.
 
 ---
 
@@ -86,7 +88,7 @@ Both are compiled into a static library (`imgui`) as part of the CMake build.
 
 ## Linux Runtime Requirements
 
-The Qt6 XCB platform plugin is required on Linux. Without it the app crashes immediately on launch with `qt.qpa.plugin: Could not find the Qt platform plugin "xcb"`.
+The Qt6 XCB platform plugin is required on Linux. Without it the app crashes immediately on launch with `qt.qpa.plugin: Could not find the Qt platform plugin "xcb"`, which is Qt's charming way of saying "install one more package, you're not done".
 
 | Distro | Package to install |
 |---|---|
@@ -140,7 +142,7 @@ brew install sfml glm cmake
 |---|---|---|---|
 | **macOS (ARM/Intel)** | Apple Clang | Supported | Primary development platform; `.app` bundling via `bundle_app.sh` |
 | **Linux (x86_64)** | GCC / Clang | Supported | Tested with apt-based distros (Ubuntu/Debian) |
-| **Windows** | MSVC | Untested | Should work with vcpkg-provided SFML 3.x and GLM |
+| **Windows** | MSVC | Supported | Build via vcpkg + Visual Studio 2022; use `rebuild_windows.ps1` / `rebuild_windows.sh`, package with `make_exe.sh` |
 
 ---
 

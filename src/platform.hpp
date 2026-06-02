@@ -165,6 +165,12 @@ inline std::string platformUserDataDir() {
 // `learnMoreUrl` field on built-in presets is intended here.
 #include <cstdlib>
 #include <string>
+#if defined(_WIN32)
+    // ShellExecuteA lives in <shellapi.h>; some SDK configurations do not
+    // transitively include it via <shlobj.h>.
+    #include <shellapi.h>
+    #pragma comment(lib, "shell32.lib")
+#endif
 inline bool platformOpenUrl(const char* url) {
     if (!url || !*url) return false;
 #if defined(__APPLE__)

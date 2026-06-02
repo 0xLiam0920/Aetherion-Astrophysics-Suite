@@ -7,6 +7,24 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+# ── Windows / MSVC global compile flags ───────────────────────
+# _USE_MATH_DEFINES: expose M_PI and friends from <cmath> (MSVC omits them).
+# NOMINMAX:          prevent <windows.h> from defining min/max macros that
+#                    break std::min / std::max and ADL-resolved calls.
+# _CRT_SECURE_NO_WARNINGS: silence MSVC's deprecation warnings about
+#                          standard C functions (getenv, etc.) used cross-platform.
+# WIN32_LEAN_AND_MEAN:     trim down <windows.h> include cost.
+if(WIN32)
+    add_compile_definitions(
+        _USE_MATH_DEFINES
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+    )
+    if(MSVC)
+        add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+    endif()
+endif()
+
 # ── Platform-specific package search hints ────────────────────
 if(APPLE)
     # Help CMake find Homebrew-provided packages when configured via IDE tools.
@@ -89,8 +107,9 @@ endif()
 # ── Unified Qt6-based Application with Embedded Simulations ──
 # All windows and simulations are tied to one executable instance
 # WIN32 tells MSVC/MinGW to use the Windows GUI subsystem (no console window).
-add_executable(blackhole-sim
-    $<$<PLATFORM_ID:Windows>:WIN32>
+# NOTE: WIN32 must be a literal CMake keyword (parsed before generator
+# expressions are evaluated). It is silently ignored on non-Windows platforms.
+add_executable(blackhole-sim WIN32
     # Qt Launcher & Main Window
     src/QT-LAUNCHER/main.cpp
     src/QT-LAUNCHER/mainwindow.h
@@ -171,6 +190,47 @@ endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
     target_link_libraries(blackhole-sim PRIVATE stdc++fs)
+endif()
+
+# ── Windows: deploy Qt platform plugin ────────────────────────────────────
+# Qt apps fail at startup with "could not find or load the Qt platform plugin
+# 'windows'" unless qwindows.dll sits in a `platforms/` subfolder next to the
+# exe. vcpkg copies the core Qt6*.dll files automatically but does NOT copy
+# plugins. Locate qwindows.dll from the imported Qt6::QWindowsIntegrationPlugin
+# target (preferred) or fall back to probing the Qt6_DIR install tree.
+if(WIN32)
+    set(_qwindows_dll "")
+    if(TARGET Qt6::QWindowsIntegrationPlugin)
+        set(_qwindows_dll "$<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>")
+    elseif(DEFINED Qt6_DIR)
+        # Qt6_DIR is typically <prefix>/share/Qt6 or <prefix>/lib/cmake/Qt6.
+        # Walk up to the install prefix and look in the standard plugin path.
+        get_filename_component(_qt_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
+        foreach(_candidate
+                "${_qt_prefix}/Qt6/plugins/platforms/qwindows.dll"
+                "${_qt_prefix}/plugins/platforms/qwindows.dll"
+                "${_qt_prefix}/share/qt6/plugins/platforms/qwindows.dll")
+            if(EXISTS "${_candidate}")
+                set(_qwindows_dll "${_candidate}")
+                break()
+            endif()
+        endforeach()
+    endif()
+    if(_qwindows_dll)
+        add_custom_command(TARGET blackhole-sim POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    $<TARGET_FILE_DIR:blackhole-sim>/platforms
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_qwindows_dll}"
+                    $<TARGET_FILE_DIR:blackhole-sim>/platforms/
+            COMMENT "Deploying Qt platform plugin qwindows.dll")
+    else()
+        message(WARNING
+            "Could not locate qwindows.dll. The app will fail at startup with "
+            "'could not find or load the Qt platform plugin \"windows\"'. "
+            "Manually copy <qt-prefix>/plugins/platforms/qwindows.dll into "
+            "$<TARGET_FILE_DIR:blackhole-sim>/platforms/.")
+    endif()
 endif()
 
 # Copy shader files for 3D simulation to build output

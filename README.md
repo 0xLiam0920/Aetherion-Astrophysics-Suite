@@ -9,9 +9,11 @@ Aetherion is an open source astrophysics simulation and analysis suite for exper
 DISCLAIMER!
                                                        
 As of 17-04-2026, Aetherion is in active BETA, with core features implemented and undergoing testing. 
-DO NOT EXPECT PERFECT STABILITY OR COMPLETE FEATURE SET YET!
+DO NOT EXPECT PERFECT STABILITY OR COMPLETE FEATURE SET YET! (and if you do find a way to crash it spectacularly, please file an issue, I'm collecting them.)
 
-SIDE NOTE: Since Apple forces you to pay 100 dollars a year to get your app certified/verified, I had to resort to ad-hoc signing. If you get a pop-up on MACOS saying "Apple cannot verify that this app is free from malware", safely ignore it.
+SIDE NOTE: Since Apple forces you to pay 100 dollars a year to get your app certified/verified, I had to resort to ad-hoc signing. If you get a pop-up on MACOS saying "Apple cannot verify that this app is free from malware", safely ignore it. (Or don't. I'm a README, not a cop.)
+
+SIDE NOTE 2: Windows will probably throw a SmartScreen warning at you for the same reason -- code-signing certificates are not cheap, and a research tool's budget for "please trust me, Microsoft" is approximately zero. Click "More info" -> "Run anyway".
 
 **Physics Model Limitations:**
 - **Temperature/Sound Speed Model:** The gas temperature calculations assume ideal gas behavior, which is optimistic for hot accreting plasma near black holes where radiation pressure and magnetic effects dominate. This is fine for Bondi radius order-of-magnitude estimates but should not be relied upon for precision plasma dynamics.
@@ -146,8 +148,8 @@ ctest --output-on-failure -R physics-regression
 
 - SFML 2.x is not supported, 3.x API is required.
 - On Wayland, the app forces X11/XWayland via `QT_QPA_PLATFORM=xcb` (required by SFML). Set `QT_QPA_PLATFORM=xcb` manually if needed.
-- Pulsar and merger objects are still a VERY early WIP, and are not recommended for any serious data compilation (see TODO.md).
-- Windows support is untested and officially unsupported, but structurally supported if you wish to make a Pull request to compile to exe for windows.
+- Pulsar and merger objects are still a VERY early WIP, and are not recommended for any serious data compilation (see TODO.md). If you publish a paper using them and it gets retracted, that's on you.
+- Windows support is now first-class: build with MSVC + vcpkg using `rebuild_windows.ps1` / `rebuild_windows.sh`, and package an `.exe` installer with `make_exe.sh`. "First-class" here means "it compiles and runs", not "I will personally debug your Anti-Virus quarantining the binary".
 
 ---
 
