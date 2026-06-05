@@ -320,8 +320,14 @@ inline void handleInput(
 
     } else if (code == cfg.reset) {
         sim.reset();
-        ui.presetActive       = false;
-        sim.params.pixelsPerM = ui.defaultPixelsPerM;
+        ui.presetActive            = false;
+        ui.highResLensing          = false;
+        sim.params.highResLensing  = false;
+        sim.kerrOverlayEnabled     = false;
+        sim.diskEmitterEnabled     = false;
+        sim.kerrRays.clear();
+        sim.emittedPhotons.clear();
+        sim.params.pixelsPerM      = ui.defaultPixelsPerM;
         sim.rebuildPhotons(windowHeight);
 
     } else if (code == cfg.resetView) {
@@ -438,6 +444,7 @@ inline void handleInput(
 
     } else if (code == cfg.toggleHighResLensing) {
         ui.highResLensing = !ui.highResLensing;
+        sim.params.highResLensing = ui.highResLensing;   // sticky so preset switches preserve it
         sim.rebuildPhotons(windowHeight, ui.highResLensing);
         ui.notification = ui.highResLensing ? "High-res lensing ON" : "High-res lensing OFF";
         ui.notificationTimer = 90;
@@ -552,5 +559,17 @@ inline void handleInput(
         ui.notification = std::string("Merger pacing: ") +
                           Simulation::MergerState::timeScaleName(sim.merger.timeScale);
         ui.notificationTimer = 120;
+
+    } else if (code == cfg.toggleKerrOverlay) {
+        sim.kerrOverlayEnabled = !sim.kerrOverlayEnabled;
+        if (!sim.kerrOverlayEnabled) sim.kerrRays.clear();
+        ui.notification      = sim.kerrOverlayEnabled ? "Kerr spin overlay ON (spin a=0.7M)" : "Kerr spin overlay OFF";
+        ui.notificationTimer = 90;
+
+    } else if (code == cfg.toggleDiskEmitter) {
+        sim.diskEmitterEnabled = !sim.diskEmitterEnabled;
+        if (!sim.diskEmitterEnabled) sim.emittedPhotons.clear();
+        ui.notification      = sim.diskEmitterEnabled ? "Disk emitter ON" : "Disk emitter OFF";
+        ui.notificationTimer = 90;
     }
 }

@@ -100,9 +100,11 @@ struct KeyConfig2D {
     sf::Keyboard::Key toggleRays         = sf::Keyboard::Key::S;
     sf::Keyboard::Key togglePhoton       = sf::Keyboard::Key::P;
     sf::Keyboard::Key toggleGalaxy       = sf::Keyboard::Key::G;
-    sf::Keyboard::Key toggleInfluence    = sf::Keyboard::Key::I;
-    sf::Keyboard::Key toggleHighResLensing = sf::Keyboard::Key::L;
-    sf::Keyboard::Key speedUp            = sf::Keyboard::Key::Equal;
+    sf::Keyboard::Key toggleInfluence      = sf::Keyboard::Key::I;
+    sf::Keyboard::Key toggleHighResLensing = sf::Keyboard::Key::K;  // was L; L is learnMore
+    sf::Keyboard::Key toggleKerrOverlay    = sf::Keyboard::Key::J;
+    sf::Keyboard::Key toggleDiskEmitter    = sf::Keyboard::Key::O;
+    sf::Keyboard::Key speedUp              = sf::Keyboard::Key::Equal;
     sf::Keyboard::Key speedDown          = sf::Keyboard::Key::Hyphen;
     sf::Keyboard::Key tempDown           = sf::Keyboard::Key::Comma;
     sf::Keyboard::Key tempUp             = sf::Keyboard::Key::Period;
@@ -176,8 +178,11 @@ inline KeyConfig2D loadKeyConfig2D(const std::string &path)
         else if (action == "toggle_rays")     cfg.toggleRays     = k;
         else if (action == "toggle_photon")   cfg.togglePhoton   = k;
         else if (action == "toggle_galaxy")   cfg.toggleGalaxy   = k;
-        else if (action == "toggle_influence")cfg.toggleInfluence= k;
-        else if (action == "speed_up")        cfg.speedUp        = k;
+        else if (action == "toggle_influence")        cfg.toggleInfluence     = k;
+        else if (action == "toggle_high_res_lensing") cfg.toggleHighResLensing = k;
+        else if (action == "toggle_kerr_overlay")    cfg.toggleKerrOverlay   = k;
+        else if (action == "toggle_disk_emitter")    cfg.toggleDiskEmitter   = k;
+        else if (action == "speed_up")               cfg.speedUp             = k;
         else if (action == "speed_down")      cfg.speedDown      = k;
         else if (action == "temp_down")       cfg.tempDown       = k;
         else if (action == "temp_up")         cfg.tempUp         = k;

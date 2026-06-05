@@ -419,6 +419,34 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // Kerr equatorial overlay (key J) — thin amber lines for Kerr geodesics
+        if (sim.kerrOverlayEnabled && !sim.kerrRays.empty()) {
+            static constexpr sf::Color kKerrCol(255, 180, 50, 130);
+            for (const auto& kr : sim.kerrRays) {
+                const size_t nPts = kr.verts.size() / 2;
+                if (nPts < 2) continue;
+                sf::VertexArray va(sf::PrimitiveType::LineStrip, nPts);
+                for (size_t i = 0; i < nPts; ++i) {
+                    va[i].position = camera.worldToScreen(kr.verts[i*2], kr.verts[i*2+1]);
+                    va[i].color    = kKerrCol;
+                }
+                renderer.drawOrbitPath(va);
+            }
+        }
+
+        // Disk-emitter photons (key O) — thermal null geodesics from inner disk
+        if (sim.diskEmitterEnabled && !sim.emittedPhotons.empty()) {
+            for (const auto& photon : sim.emittedPhotons) {
+                if (photon.captured) {
+                    auto [v0, v1] = RayVisualizer::capturedRayLine(photon.impactParameter, camera);
+                    renderer.drawCapturedRay(v0, v1);
+                } else {
+                    RayVisualizer::colorByRedshift(photon, sim.bh.metric, camera, rayVertScratch);
+                    renderer.drawRayPath(rayVertScratch);
+                }
+            }
+        }
+
         // Caustic highlights (where rays converge strongly)
         if (ui.showCaustics && !sim.lensingData.causticPoints.empty()) {
             for (const auto& [avgB, gradient] : sim.lensingData.causticPoints) {

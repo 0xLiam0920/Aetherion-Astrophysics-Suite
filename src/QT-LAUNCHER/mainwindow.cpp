@@ -56,6 +56,8 @@
 #include <QValueAxis>
 #include <QLogValueAxis>
 #include <QtEndian>
+// Preset table (header-only, only needs <cmath>) — used to resolve preset names to indices.
+#include "2D-utils/presets_2d.hpp"
 
 // Returns the Aetherion app-data root, matching simulation.hpp's makeExportDir().
 // Must agree with the C++ platformUserDataDir() used in simulation code.
@@ -1228,7 +1230,7 @@ QWidget* MainWindow::createSimulationPage()
 
     QHBoxLayout *presetRow = new QHBoxLayout();
     QComboBox *presetCombo = new QComboBox();
-    presetCombo->addItems({"TON 618 (3D)", "Sgr A* (2D)", "Micro BH (2D)", "Rapid Spin (3D)"});
+    presetCombo->addItems({"TON 618 (3D)", "Sgr A* (2D)", "Primordial (2D)", "Rapid Spin (3D)"});
     QPushButton *openPresetButton = new QPushButton("Open Preset Tab");
     presetRow->addWidget(presetCombo, 1);
     presetRow->addWidget(openPresetButton);
@@ -1268,12 +1270,23 @@ QWidget* MainWindow::createSimulationPage()
         statusLabel->setText("Opened 3D simulation tab");
     });
     connect(openPresetButton, &QPushButton::clicked, this, [this, presetCombo] {
-        const QString preset = presetCombo->currentText();
+        const QString preset     = presetCombo->currentText();
         const QString presetName = preset.section(" (", 0, 0);
         if (preset.contains("(3D)")) {
             openSimulationTab3D("Preset: " + presetName);
         } else {
-            openSimulationTab2D("Preset: " + presetName);
+            // Find the matching BH2D preset index by name so the tab starts
+            // with that preset already active (not a blank simulation).
+            QJsonObject state;
+            const std::string nameStd = presetName.toStdString();
+            for (int i = 0; i < NUM_BH2D_PRESETS; ++i) {
+                if (std::string(BH2D_PRESETS[i].name) == nameStd) {
+                    state["presetActive"] = true;
+                    state["presetIdx"]    = i;
+                    break;
+                }
+            }
+            openSimulationTab2D("Preset: " + presetName, state);
         }
         statusLabel->setText("Opened preset tab: " + presetName);
     });

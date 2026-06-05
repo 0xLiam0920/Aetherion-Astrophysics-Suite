@@ -20,7 +20,7 @@ set -euo pipefail
 
 APP_NAME="Aetherion"
 BUILD_DIR="build"
-VERSION="1.0.0"
+VERSION="0.1.6"
 
 # ── Code-signing configuration ────────────────────────────────
 # Set APPLE_SIGNING_IDENTITY in your environment, or pass --sign-identity.

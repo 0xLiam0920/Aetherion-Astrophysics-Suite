@@ -29,6 +29,7 @@ struct SimParams {
     int    numRays        = 120;
     double rMaxIntegrate  = 1e5;
     double pixelsPerM     = 60.0;
+    bool   highResLensing = false;   // sticky K-toggle; honored by rebuildPhotons even when callers omit the arg
     float  timeScale      = 1.0f;   // user-controllable speed multiplier
 };
 
@@ -417,7 +418,7 @@ public:
         // High-res lensing mode: add extra rays log-spaced near b_crit on both sides.
         // These show the strong-lensing regime in much finer detail without disturbing
         // the uniform background grid.
-        if (highRes) {
+        if (highRes || params.highResLensing) {
             double b_crit = bh.metric.criticalImpact();
             constexpr int N_HIGHRES = 20; // rays per side
             for (int sign : {-1, 1}) {

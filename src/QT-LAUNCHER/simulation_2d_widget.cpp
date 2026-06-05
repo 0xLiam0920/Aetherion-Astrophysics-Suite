@@ -168,6 +168,7 @@ QJsonObject Simulation2DWidget::getState() const
     o["showInfluenceZones"] = ui_->showInfluenceZones;
     o["showGalaxySystem"]   = ui_->showGalaxySystem;
     o["paused"]             = ui_->paused;
+    o["lightMode"]           = ui_->lightMode;
     // Primary body
     if (!sim_->bodies.empty()) {
         const auto &b = sim_->bodies[0];
@@ -220,6 +221,7 @@ static void applySimState(const QJsonObject &o,
     ui.showInfluenceZones = bv("showInfluenceZones", ui.showInfluenceZones);
     ui.showGalaxySystem   = bv("showGalaxySystem",   ui.showGalaxySystem);
     ui.paused          = bv("paused",          ui.paused);
+    ui.lightMode       = bv("lightMode",       ui.lightMode);
 
     if (!sim.bodies.empty() && o.contains("body0_r")) {
         auto &b    = sim.bodies[0];
@@ -277,6 +279,12 @@ void Simulation2DWidget::onInit()
         .toStdString();
 #endif
     keyConfig_ = loadKeyConfig2D(cfgPath);
+    // Override export format if the user changed it via the Export settings page.
+    {
+        const QString fmt = QSettings("Aetherion", "AetherionSuite")
+                                .value("exportFormat", "").toString();
+        if (!fmt.isEmpty()) keyConfig_.exportFormat = fmt.toStdString();
+    }
 
     // Restore a previously-saved workspace state if one was supplied.
     if (hasPendingState_) {
@@ -403,6 +411,34 @@ void Simulation2DWidget::onUpdate()
     // Rays
     if (ui_->showRays) {
         for (const auto& photon : sim_->photons) {
+            if (photon.captured) {
+                auto [v0, v1] = RayVisualizer::capturedRayLine(photon.impactParameter, *camera_);
+                renderer_->drawCapturedRay(v0, v1);
+            } else {
+                RayVisualizer::colorByRedshift(photon, sim_->bh.metric, *camera_, rayVertScratch_);
+                renderer_->drawRayPath(rayVertScratch_);
+            }
+        }
+    }
+
+    // Kerr equatorial overlay (key J)
+    if (sim_->kerrOverlayEnabled && !sim_->kerrRays.empty()) {
+        static constexpr sf::Color kKerrCol(255, 180, 50, 130);
+        for (const auto& kr : sim_->kerrRays) {
+            const size_t nPts = kr.verts.size() / 2;
+            if (nPts < 2) continue;
+            sf::VertexArray va(sf::PrimitiveType::LineStrip, nPts);
+            for (size_t i = 0; i < nPts; ++i) {
+                va[i].position = camera_->worldToScreen(kr.verts[i*2], kr.verts[i*2+1]);
+                va[i].color    = kKerrCol;
+            }
+            renderer_->drawOrbitPath(va);
+        }
+    }
+
+    // Disk-emitter photons (key O)
+    if (sim_->diskEmitterEnabled && !sim_->emittedPhotons.empty()) {
+        for (const auto& photon : sim_->emittedPhotons) {
             if (photon.captured) {
                 auto [v0, v1] = RayVisualizer::capturedRayLine(photon.impactParameter, *camera_);
                 renderer_->drawCapturedRay(v0, v1);

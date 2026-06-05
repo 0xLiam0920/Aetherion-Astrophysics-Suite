@@ -1,9 +1,21 @@
-## I hated typing three commands (yes im lazy) so I made this script. Run it wherever you want.
+#!/bin/bash
 
-# cd's in ~/aetherionsuite and runs the build script, then the build directory and ./blackhole-sim
-cd ~/aetherionsuite
-git submodule update --init --recursive  # make sure external/imgui-sfml is populated
-cmake -S . -B build && make -C build -j4 ## if you have a different number of CPU cores you want to use for testing, change the num to something else for faster builds. 4 is fine for now
-cd build
-./blackhole-sim
-# note: if for some weird reason this script isn't executable, try running `chmod +x rebuld_macos.sh` in the terminal. You only need to do that once.
+# Navigate to the project root directory
+cd "$HOME/aetherionsuite" || exit 1
+
+# Ensure submodules are populated
+git submodule update --init --recursive
+
+# Generate build files and compile using 4 CPU cores
+cmake -S . -B build && cmake --build build -j4
+
+# Navigate to the build output directory
+cd build || exit 1
+
+# Run the application (checks for Mac bundle first, falls back to binary)
+if [ -d "blackhole-sim.app" ]; then
+    open blackhole-sim.app
+else
+    ./blackhole-sim
+fi
+

@@ -79,6 +79,9 @@ struct Photon {
         captured = false; // We track the path points for rendering, and we also keep track of the deflection angle and the angle at which the photon escapes to infinity for analysis. 
         // The integration uses the null geodesic equations in Schwarzschild spacetime, and we have to be careful to handle the asymptotic behavior correctly to get accurate deflection angles.
 
+        // Scale the integration cutoff with M so the loop doesn't bail on step 0 at preset scales (M ~ 1e9 m makes the default 1e5 dwarfed by typical periapsis).
+        rMax = std::max(rMax, 200.0 * bh.M);
+
         double b = std::abs(impactParameter);
         if (b <= bh.criticalImpact()) { captured = true; rMin_M = bh.horizon() / bh.M; return; }
 
@@ -291,6 +294,9 @@ struct Photon {
         captured     = false;
         fromEmitter  = true;
         emitRadius_M = r0 / std::max(1e-30, bh.M);
+
+        // Same M-scaling as computePath: required so disk-emitter rays (O) render at preset scales.
+        rMax = std::max(rMax, 200.0 * bh.M);
 
         // If we're emitting from inside the horizon, the photon is captured by definition.
         const double rH = bh.horizon();

@@ -92,6 +92,10 @@ inline KerrPathResult integrateKerrEquatorial(
     out.verts.reserve(static_cast<size_t>(maxStep) * 2);
     KerrNullState s {r0, phi0, 0.0, double(initial_pr_sign < 0 ? -1 : 1)};
 
+    // Scale loop cutoff and step size with M so the integrator behaves identically at preset scales (M ~ 1e9 m) as at M=1; otherwise the default rMax=1e3 is below the starting r0 and the loop bails immediately.
+    rMax = std::max(rMax, 200.0 * kerr.M);
+    dlam = std::max(dlam, 0.25 * kerr.M);
+
     const double rH = kerr.horizonOuter() * 1.001;
 
     auto pushVert = [&](double r, double phi) {
