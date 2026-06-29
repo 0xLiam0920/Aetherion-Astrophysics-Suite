@@ -19,22 +19,6 @@ SIDE NOTE 2: Windows will probably throw a SmartScreen warning at you for the sa
 - **Temperature/Sound Speed Model:** The gas temperature calculations assume ideal gas behavior, which is optimistic for hot accreting plasma near black holes where radiation pressure and magnetic effects dominate. This is fine for Bondi radius order-of-magnitude estimates but should not be relied upon for precision plasma dynamics.
 ---
 
-## Table of Contents
-
-- [About](#about)
-- [Dependencies](#DEPENDENCIES.md)
-- [FAQ & Troubleshooting guidelines](#FAQ_TROUBLESHOOTING.md)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Data Analysis](#data-analysis)
-- [Configuration](#configuration)
-- [Known Issues](#known-issues)
-- [Roadmap](#Roadmap.md)
-- [Contributing](#contributing.md)
-- [License](#LICENSE.md)
-
----
-
 ## About
 
 Aetherion sits between a raw physics simulator and a data-analysis tool. You can run a scenario, watch what happens, and then export the data to look at it properly.
