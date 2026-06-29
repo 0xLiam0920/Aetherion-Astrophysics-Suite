@@ -7,6 +7,10 @@
 #include <cmath>
 #include <chrono>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /*---------------- main struct for photons ------------------*/
 struct Photon {
     double impactParameter = 0.0;

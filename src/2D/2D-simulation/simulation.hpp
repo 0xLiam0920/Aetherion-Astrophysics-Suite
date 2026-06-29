@@ -22,6 +22,10 @@
 #include <filesystem>
 #include "platform.hpp"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // TODO: pack all viable headers into single header hpp files for 2d, 3d, and launcher
 // hours wasted trying to fix linux package diff issues: 7
 

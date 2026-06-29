@@ -8,6 +8,10 @@
 #include <cstdint>
 #include "research_data.hpp"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 namespace FITSExport {
 
 /*------------------------------------ FITS Export Utilities ------------------------------------*/

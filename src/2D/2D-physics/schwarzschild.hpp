@@ -2,6 +2,10 @@
 #include <cmath>
 #include <algorithm>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Encapsulates all Schwarzschild black hole math (geometric units: G = c = 1).
 // This is the scientific API, all metric-level computations live here.
 struct Schwarzschild {

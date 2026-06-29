@@ -8,6 +8,10 @@
 #include <algorithm>
 #include <cstdint>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 class OrbitVisualizer {
 public:
     // Compute the body's visual appearance (tidal stretch + redshift color).

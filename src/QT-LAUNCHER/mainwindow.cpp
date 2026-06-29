@@ -59,6 +59,10 @@
 // Preset table (header-only, only needs <cmath>) — used to resolve preset names to indices.
 #include "2D-utils/presets_2d.hpp"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Returns the Aetherion app-data root, matching simulation.hpp's makeExportDir().
 // Must agree with the C++ platformUserDataDir() used in simulation code.
 static QString aetherionDataDir() {
