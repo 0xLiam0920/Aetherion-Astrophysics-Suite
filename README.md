@@ -148,7 +148,7 @@ ctest --output-on-failure -R physics-regression
 
 - SFML 2.x is not supported, 3.x API is required.
 - On Wayland, the app forces X11/XWayland via `QT_QPA_PLATFORM=xcb` (required by SFML). Set `QT_QPA_PLATFORM=xcb` manually if needed.
-- Pulsar and merger objects are still a VERY early WIP, and are not recommended for any serious data compilation (see TODO.md). If you publish a paper using them and it gets retracted, that's on you.
+- Pulsar and merger objects are still in progress; 2d logic is mostly complete, but the 3d ones are about 40% through as of `v0.2.1`
 - Windows support is now first-class: build with MSVC + vcpkg using `rebuild_windows.ps1` / `rebuild_windows.sh`, and package an `.exe` installer with `make_exe.sh`. "First-class" here means "it compiles and runs", not "I will personally debug your Anti-Virus quarantining the binary".
 
 ---
