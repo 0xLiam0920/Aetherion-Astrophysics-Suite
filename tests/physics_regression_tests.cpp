@@ -108,6 +108,127 @@ bool testTimelikeConservationLongRun() {
     return true;
 }
 
+bool testPhotonCaptureThreshold() {
+    // Photons with impact parameter b < b_crit = 3*sqrt(3)*M are always
+    // captured; those with b > b_crit always escape. Check both sides of the
+    // critical value to make sure the capture logic matches the analytic
+    // photon-sphere result.
+    Schwarzschild bh;
+    bh.M = 1.0;
+    const double bCrit = bh.criticalImpact();
+
+    Photon below;
+    below.impactParameter = 0.98 * bCrit; // just inside -> must be captured
+    below.computePath(bh, /*rMax=*/1.0e6, /*dphi=*/0.0015);
+    if (!below.captured) {
+        std::cerr << "[FAIL] capture: b=" << below.impactParameter
+                  << " (< b_crit=" << bCrit << ") escaped but should be captured\n";
+        return false;
+    }
+
+    Photon above;
+    above.impactParameter = 1.02 * bCrit; // just outside -> must escape
+    above.computePath(bh, /*rMax=*/1.0e6, /*dphi=*/0.0015);
+    if (above.captured) {
+        std::cerr << "[FAIL] capture: b=" << above.impactParameter
+                  << " (> b_crit=" << bCrit << ") captured but should escape\n";
+        return false;
+    }
+
+    std::cout << "[PASS] capture threshold: b_crit=" << bCrit
+              << " (captured below, escaped above)\n";
+    return true;
+}
+
+bool testPeriapsisTurningPoint() {
+    // findPeriapsis(b) must return the radius r where the null turning-point
+    // condition r^2 / f(r) = b^2 holds. Verify the residual is ~0 across a
+    // range of impact parameters, and that sub-critical rays report no
+    // turning point (-1).
+    Schwarzschild bh;
+    bh.M = 1.0;
+
+    bool ok = true;
+    double worstResidual = 0.0;
+    for (double b : {6.0, 8.0, 12.0, 25.0, 100.0}) {
+        const double r = bh.findPeriapsis(b);
+        if (r <= 0.0) {
+            std::cerr << "[FAIL] periapsis: b=" << b
+                      << " (> b_crit) returned no turning point\n";
+            ok = false;
+            continue;
+        }
+        // Turning-point residual normalised by b^2.
+        const double residual = std::abs((r * r) / bh.f(r) - b * b) / (b * b);
+        worstResidual = std::max(worstResidual, residual);
+        if (residual > 1e-6) {
+            std::cerr << "[FAIL] periapsis: b=" << b << " r=" << r
+                      << " turning-point residual " << residual << " too large\n";
+            ok = false;
+        }
+    }
+
+    // Sub-critical impact parameter has no real turning point.
+    if (bh.findPeriapsis(0.9 * bh.criticalImpact()) > 0.0) {
+        std::cerr << "[FAIL] periapsis: sub-critical b reported a turning point\n";
+        ok = false;
+    }
+
+    if (ok) {
+        std::cout << "[PASS] periapsis turning point: worst residual "
+                  << worstResidual << "\n";
+    }
+    return ok;
+}
+
+bool testStrongDeflectionGrowth() {
+    // The deflection angle grows without bound (logarithmically) as b -> b_crit
+    // from above, far exceeding the weak-field value at large b. Check that a
+    // near-critical ray deflects substantially more than one full turn, and
+    // much more than a wide ray.
+    Schwarzschild bh;
+    bh.M = 1.0;
+    const double bCrit = bh.criticalImpact();
+
+    Photon wide;
+    wide.impactParameter = 50.0 * bh.M; // weak field: alpha ~ 4M/b ~ 0.08 rad
+    wide.computePath(bh, /*rMax=*/1.0e7, /*dphi=*/0.0015);
+
+    Photon strong;
+    strong.impactParameter = 1.01 * bCrit; // strong field: many radians
+    strong.computePath(bh, /*rMax=*/1.0e7, /*dphi=*/0.0005);
+
+    if (wide.captured || strong.captured) {
+        std::cerr << "[FAIL] strong deflection: a test ray was captured\n";
+        return false;
+    }
+
+    const double wideDefl = std::abs(wide.deflectionAngle);
+    const double strongDefl = std::abs(strong.deflectionAngle);
+
+    // Weak-field ray should be a small fraction of a radian.
+    if (wideDefl > 0.2) {
+        std::cerr << "[FAIL] strong deflection: wide ray deflection " << wideDefl
+                  << " rad unexpectedly large\n";
+        return false;
+    }
+    // Near-critical ray should exceed a full half-turn (pi) and dwarf the wide ray.
+    if (strongDefl < M_PI) {
+        std::cerr << "[FAIL] strong deflection: near-critical ray deflection "
+                  << strongDefl << " rad did not reach pi\n";
+        return false;
+    }
+    if (strongDefl < 10.0 * wideDefl) {
+        std::cerr << "[FAIL] strong deflection: near-critical/wide ratio "
+                  << (strongDefl / wideDefl) << " too small\n";
+        return false;
+    }
+
+    std::cout << "[PASS] strong deflection: wide=" << wideDefl
+              << " rad, near-critical=" << strongDefl << " rad\n";
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -115,6 +236,9 @@ int main() {
 
     ok = testSolarGrazingDeflection() && ok;
     ok = testTimelikeConservationLongRun() && ok;
+    ok = testPhotonCaptureThreshold() && ok;
+    ok = testPeriapsisTurningPoint() && ok;
+    ok = testStrongDeflectionGrowth() && ok;
 
     if (!ok) {
         std::cerr << "Physics regression tests FAILED\n";

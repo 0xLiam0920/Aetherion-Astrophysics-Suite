@@ -23,7 +23,7 @@
 
 #include "platform.hpp"
 #include "gl_types.hpp"
-#include "simulation_state.hpp"
+#include "bh3d_simulationstates.hpp"
 #include "orbital_body.hpp"
 #include "config.hpp"
 

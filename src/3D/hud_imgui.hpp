@@ -250,6 +250,136 @@ inline bool drawPresetMenu(bh3d::State& s) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Draw the merger selector. Lists the curated secondary objects
+// from presets.hpp and calls bh3d::startMerger3D on confirmation.
+// Slides in from the left so it never overlaps the preset menu.
+// ────────────────────────────────────────────────────────────
+inline bool drawMergerMenu(bh3d::State& s) {
+    auto& m = s.mergerMenu;
+    if (m.t <= 0.001f) return false;
+
+    const float t     = std::min(std::max(m.t, 0.0f), 1.0f);
+    const float inv   = 1.0f - t;
+    const float eased = 1.0f - inv * inv * inv;
+
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float panelW = 340.0f;
+    // Slide in from the left.
+    const float restX  = vp->WorkPos.x + 16.0f;
+    const float offX   = (1.0f - eased) * (panelW + 24.0f);
+    const ImVec2 pos   = ImVec2(restX - offX, vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+    const ImVec2 size  = ImVec2(panelW, std::min(vp->WorkSize.y - 32.0f, 560.0f));
+
+    ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(0.0f, 0.5f));
+    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.92f * eased);
+
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoResize        |
+        ImGuiWindowFlags_NoMove          |
+        ImGuiWindowFlags_NoCollapse      |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoTitleBar      |
+        ImGuiWindowFlags_NoFocusOnAppearing;
+
+    const int N = NUM_MERGER_SECONDARY_3D_PRESETS;
+    if (m.selected < 0) m.selected = 0;
+    if (m.selected >= N) m.selected = N - 1;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, eased);
+    if (ImGui::Begin("##AetherionMerger", nullptr, flags)) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.00f, 0.86f, 0.55f, 1.00f));
+        ImGui::TextUnformatted("Trigger Merger");
+        ImGui::PopStyleColor();
+        ImGui::TextDisabled("Send a secondary spiralling into the primary");
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        const float footerH = ImGui::GetFrameHeightWithSpacing() * 3.0f + 96.0f;
+        ImGui::BeginChild("##mergerList",
+                          ImVec2(0, -footerH),
+                          ImGuiChildFlags_None,
+                          ImGuiWindowFlags_None);
+
+        for (int i = 0; i < N; ++i) {
+            const auto& p = MERGER_SECONDARY_3D_PRESETS[i];
+            ImGui::PushID(i);
+            char label[256];
+            std::snprintf(label, sizeof(label), "%02d  %s", i + 1, p.label);
+
+            const bool selected = (i == m.selected);
+            if (ImGui::Selectable(label, selected,
+                                  ImGuiSelectableFlags_AllowDoubleClick,
+                                  ImVec2(0, 0))) {
+                m.selected = i;
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    bh3d::startMerger3D(s, p.kind, p.massSolar);
+                    m.open = false;
+                }
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Description for the highlighted secondary.
+        if (m.selected >= 0 && m.selected < N) {
+            const auto& p = MERGER_SECONDARY_3D_PRESETS[m.selected];
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.00f, 0.86f, 0.55f, 1.00f));
+            ImGui::TextUnformatted(p.label);
+            ImGui::PopStyleColor();
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("%s", p.blurb);
+            ImGui::PopTextWrapPos();
+        }
+
+        ImGui::Spacing();
+        // Cinematic time-scale selector.
+        ImGui::TextDisabled("Pacing");
+        auto scaleBtn = [&](const char* name, bh3d::State::MergerState3D::TimeScale ts) {
+            const bool on = (s.merger.timeScale == ts);
+            if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.32f, 0.55f, 0.85f, 0.95f));
+            if (ImGui::Button(name)) s.merger.timeScale = ts;
+            if (on) ImGui::PopStyleColor();
+        };
+        scaleBtn("Cinematic", bh3d::State::MergerState3D::TimeScale::Cinematic);
+        ImGui::SameLine();
+        scaleBtn("Default",   bh3d::State::MergerState3D::TimeScale::Default);
+        ImGui::SameLine();
+        scaleBtn("Realtime",  bh3d::State::MergerState3D::TimeScale::Realtime);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextDisabled("Up/Down  Enter=launch  Esc");
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
+
+    if (m.open) {
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) {
+            m.selected = std::max(0, m.selected - 1);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) {
+            m.selected = std::min(N - 1, m.selected + 1);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
+            ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
+            const auto& p = MERGER_SECONDARY_3D_PRESETS[m.selected];
+            bh3d::startMerger3D(s, p.kind, p.massSolar);
+            m.open = false;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            m.open = false;
+        }
+    }
+
+    return true;
+}
+
+// ────────────────────────────────────────────────────────────
 // Helpers for the data panels below.
 // ────────────────────────────────────────────────────────────
 namespace detail {
@@ -583,6 +713,7 @@ inline void drawAll(bh3d::State& s) {
         drawDebugPanel(s);
     }
     drawPresetMenu(s);
+    drawMergerMenu(s);
 
     // ---- Tidal disruption event particle overlay ----
     if (s.snap.tdeActive) {
@@ -635,6 +766,92 @@ inline void drawAll(bh3d::State& s) {
                 col = IM_COL32(255, g, 30, (int)(lifeF * 215));
             }
             dl->AddCircleFilled(ImVec2(px, py), r, col, 8);
+        }
+    }
+
+    // ---- Visual black hole merger overlay ----
+    if (s.snap.mergerActive) {
+        auto* dl = ImGui::GetForegroundDrawList();
+        const auto& snap = s.snap;
+        const int sw = snap.windowW, sh = snap.windowH;
+
+        // Death-spiral trail: project world points, draw fading segments.
+        if (snap.mergerTrail.size() >= 2) {
+            float px0 = 0.0f, py0 = 0.0f;
+            bool  have0 = hud::projectToScreen(
+                snap.mergerTrail[0], snap.cameraPos, snap.cameraDir, snap.cameraUp,
+                snap.fov, sw, sh, px0, py0);
+            const size_t n = snap.mergerTrail.size();
+            for (size_t i = 1; i < n; ++i) {
+                float px1 = 0.0f, py1 = 0.0f;
+                bool have1 = hud::projectToScreen(
+                    snap.mergerTrail[i], snap.cameraPos, snap.cameraDir, snap.cameraUp,
+                    snap.fov, sw, sh, px1, py1);
+                if (have0 && have1) {
+                    float f = (float)i / (float)n;          // 0 old → 1 newest
+                    int   a = (int)(f * 170.0f);
+                    float w = 1.0f + f * 2.0f;
+                    dl->AddLine(ImVec2(px0, py0), ImVec2(px1, py1),
+                                IM_COL32(150, 200, 255, a), w);
+                }
+                px0 = px1; py0 = py1; have0 = have1;
+            }
+        }
+
+        // Inspiralling secondary: marker + label + separation readout.
+        if (snap.mergerInspiral) {
+            float sx = 0.0f, sy = 0.0f;
+            if (hud::projectToScreen(snap.mergerSecondaryPos,
+                                     snap.cameraPos, snap.cameraDir, snap.cameraUp,
+                                     snap.fov, sw, sh, sx, sy)) {
+                dl->AddCircle(ImVec2(sx, sy), 14.0f, IM_COL32(255, 215, 140, 200), 24, 1.5f);
+                char buf[96];
+                std::snprintf(buf, sizeof(buf), "%s", snap.mergerSecondaryLabel.c_str());
+                dl->AddText(ImVec2(sx + 18.0f, sy - 8.0f), IM_COL32(255, 225, 170, 230), buf);
+                char sep[64];
+                std::snprintf(sep, sizeof(sep), "sep %.1f Rs", snap.mergerSepRs);
+                dl->AddText(ImVec2(sx + 18.0f, sy + 8.0f), IM_COL32(170, 200, 255, 200), sep);
+            }
+        }
+
+        // Coalescence point: gravitational-wave shockwave ring + flash core.
+        float ex = 0.0f, ey = 0.0f;
+        const bool evtVisible = hud::projectToScreen(
+            snap.mergerEventPos, snap.cameraPos, snap.cameraDir, snap.cameraUp,
+            snap.fov, sw, sh, ex, ey);
+
+        if (evtVisible && snap.mergerRingActive) {
+            // Two concentric expanding rings read as a GW wavefront.
+            float rt = std::min(std::max(snap.mergerRingT, 0.0f), 1.0f);
+            float ease = 1.0f - (1.0f - rt) * (1.0f - rt);
+            int   alpha = (int)((1.0f - rt) * 200.0f);
+            float baseR = 24.0f + ease * (float)sw * 0.45f;
+            dl->AddCircle(ImVec2(ex, ey), baseR,        IM_COL32(150, 200, 255, alpha), 64, 3.0f);
+            dl->AddCircle(ImVec2(ex, ey), baseR * 0.7f, IM_COL32(200, 225, 255, alpha / 2), 64, 2.0f);
+        }
+
+        // Full-screen coalescence flash (fades from white).
+        if (snap.mergerFlashAlpha > 0.0f) {
+            int a = (int)(std::min(snap.mergerFlashAlpha, 1.0f) * 220.0f);
+            dl->AddRectFilled(ImVec2(0, 0), ImVec2((float)sw, (float)sh),
+                              IM_COL32(255, 250, 240, a));
+            if (evtVisible) {
+                float coreR = snap.mergerFlashAlpha * 40.0f;
+                dl->AddCircleFilled(ImVec2(ex, ey), coreR,
+                                    IM_COL32(255, 255, 255, (int)(snap.mergerFlashAlpha * 240)), 32);
+            }
+        }
+
+        // Status label near the coalescence point.
+        if (evtVisible) {
+            if (snap.mergerFlashAlpha > 0.05f) {
+                dl->AddText(ImVec2(ex - 34.0f, ey - 60.0f),
+                            IM_COL32(255, 240, 180, 240), "COALESCENCE");
+            } else if (snap.mergerRemnantAlpha > 0.0f) {
+                int a = (int)(std::min(snap.mergerRemnantAlpha, 1.0f) * 230.0f);
+                dl->AddText(ImVec2(ex - 28.0f, ey - 60.0f),
+                            IM_COL32(180, 215, 255, a), "REMNANT");
+            }
         }
     }
 }

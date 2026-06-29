@@ -1,4 +1,4 @@
-#include "texture_utils.hpp"
+#include "bh3d_textureutils.hpp"
 
 // All textures start as a sad 1x1 white square and evolve from there.
 

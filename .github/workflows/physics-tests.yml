@@ -1,0 +1,36 @@
+name: physics-tests
+
+# Runs the physics regression suite on every push and pull request.
+# The test target depends only on the header-only scientific core
+# (src/2D/2D-physics + the photon integrator), so it builds without
+# Qt, SFML, OpenGL, or any GUI dependency — keeping CI fast and reliable.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  physics-regression:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile physics regression tests
+        shell: bash
+        run: |
+          c++ -std=c++17 -O2 -I. \
+            tests/physics_regression_tests.cpp \
+            -o physics-regression-tests
+
+      - name: Run physics regression tests
+        shell: bash
+        run: ./physics-regression-tests

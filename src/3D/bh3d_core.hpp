@@ -27,14 +27,14 @@
 #include <cmath>
 #include "config.hpp"
 #include "resource_manager.hpp"
-#include "shader_sources.hpp"
-#include "shader_utils.hpp"
-#include "texture_utils.hpp"
-#include "bloom_pipeline.hpp"
-#include "camera_controller.hpp"
-#include "input.hpp"
-#include "simulation_state.hpp"
-#include "presets.hpp"
+#include "bh3d_shadersrcs.hpp"
+#include "bh3d_shaderutilities.hpp"
+#include "bh3d_textureutils.hpp"
+#include "bh3d_bloompipeline.hpp"
+#include "bh3d_camera.hpp"
+#include "bh3d_input.hpp"
+#include "bh3d_simulationstates.hpp"
+#include "bh3d_presets.hpp"
 #include "orbital_body.hpp"
 #include "gl_font.hpp"
 #include "hud_panel.hpp"
@@ -44,6 +44,8 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -51,7 +53,17 @@
 #include <unordered_map>
 #include <vector>
 
-namespace bh3d {
+namespace bh3d { // FIXME: This workspace is a hot mess. In future I should probably clean this up and consider splitting it into separate files. This is a linker file for the core
+                // functionality, not a heap for whatever. 
+/*
+Planned continuation of split:
+- bh3d_core.hpp: Core simulation state, physics, and rendering logic (this file)
+-bh3d_mergers.hpp: Merger logic, states, and sub rendering.
+
+Also need to add more of the logic to other files
+
+
+*/
 
 // ────────────────────────────────────────────────────────────
 //  Small string helpers
@@ -159,6 +171,7 @@ struct ActionKeybinds {
     sf::Keyboard::Key toggleRK4Orbits  = sf::Keyboard::Key::K;
     sf::Keyboard::Key toggleRK4Photons = sf::Keyboard::Key::L;
     sf::Keyboard::Key toggleSpacetime  = sf::Keyboard::Key::T;
+    sf::Keyboard::Key openMergerMenu   = sf::Keyboard::Key::C;
 };
 
 inline std::filesystem::path keybindConfigPath() {
@@ -176,7 +189,7 @@ inline void enforceKeybindConflicts(ActionKeybinds& keys) {
                k == sf::Keyboard::Key::LShift;
     };
     struct Entry { const char* name; sf::Keyboard::Key* key; sf::Keyboard::Key def; };
-    std::array<Entry, 22> entries = {{
+    std::array<Entry, 23> entries = {{
         {"toggle_freelook",   &keys.toggleFreelook,   defaults.toggleFreelook},
         {"toggle_jets",       &keys.toggleJets,       defaults.toggleJets},
         {"toggle_blr",        &keys.toggleBLR,        defaults.toggleBLR},
@@ -198,7 +211,8 @@ inline void enforceKeybindConflicts(ActionKeybinds& keys) {
         {"speed_down",        &keys.speedDown,        defaults.speedDown},
         {"toggle_rk4_orbits", &keys.toggleRK4Orbits,  defaults.toggleRK4Orbits},
         {"toggle_rk4_photons",&keys.toggleRK4Photons, defaults.toggleRK4Photons},
-        {"toggle_spacetime",  &keys.toggleSpacetime,  defaults.toggleSpacetime}
+        {"toggle_spacetime",  &keys.toggleSpacetime,  defaults.toggleSpacetime},
+        {"open_merger_menu",  &keys.openMergerMenu,   defaults.openMergerMenu}
     }};
     for (auto& e : entries) {
         if (isMovementKey(*e.key)) *e.key = e.def;
@@ -239,6 +253,7 @@ inline void writeDefaultKeybindFile(const std::filesystem::path& path, const Act
     out << "toggle_rk4_orbits=" << keyToString(k.toggleRK4Orbits)  << "\n";
     out << "toggle_rk4_photons="<< keyToString(k.toggleRK4Photons) << "\n";
     out << "toggle_spacetime="  << keyToString(k.toggleSpacetime)  << "\n";
+    out << "open_merger_menu="  << keyToString(k.openMergerMenu)   << "\n";
 }
 
 inline ActionKeybinds loadActionKeybinds() {
@@ -272,7 +287,8 @@ inline ActionKeybinds loadActionKeybinds() {
         {"speed_down",        &keys.speedDown},
         {"toggle_rk4_orbits", &keys.toggleRK4Orbits},
         {"toggle_rk4_photons",&keys.toggleRK4Photons},
-        {"toggle_spacetime",  &keys.toggleSpacetime}
+        {"toggle_spacetime",  &keys.toggleSpacetime},
+        {"open_merger_menu",  &keys.openMergerMenu}
     };
     std::string line;
     while (std::getline(in, line)) {
@@ -560,6 +576,94 @@ struct State {
     } tde3D;
     std::vector<bool> orbBodyDisrupted; // sized to match orbBodies
 
+    // ── Visual black hole merger (mirrors the 2D simulator) ──────────────
+    // A secondary object spirals into the primary on a tilted orbit, both
+    // wobble about the barycenter, then coalesce in a flash that leaves a
+    // grown remnant and a gravitational-wave shockwave ring. During the
+    // inspiral the secondary also gravitationally perturbs the orbiting bodies
+    // and tidally disrupts those that stray too close (see applyMergerInfluence).
+    // The coalescence itself is still a *visual* effect (no Peters realism).
+    struct MergerState3D {
+        bool  active = false;   // inspiral or aftermath running
+        bool  merged = false;   // reached coalescence (flash/aftermath phase)
+        MergerSecondaryKind3D kind = MergerSecondaryKind3D::BlackHole;
+
+        // Cinematic timing dial, mirrors the 2D MergerState::TimeScale.
+        enum class TimeScale { Cinematic = 0, Default = 1, Realtime = 2 } timeScale = TimeScale::Default;
+        float timeScaleFactor() const {
+            switch (timeScale) {
+                case TimeScale::Cinematic: return 0.35f;
+                case TimeScale::Realtime:  return 3.0f;
+                default:                   return 1.0f;
+            }
+        }
+        const char* timeScaleName() const {
+            switch (timeScale) {
+                case TimeScale::Cinematic: return "Cinematic";
+                case TimeScale::Realtime:  return "Realtime";
+                default:                   return "Default";
+            }
+        }
+
+        // Inspiral geometry (all separations in Rs world units).
+        float  r    = 16.0f;   // current separation
+        float  phi  = 0.0f;    // orbital angle
+        float  incl = 0.35f;   // orbital-plane tilt [rad]
+        float  bhR0 = 1.0f;    // primary Schwarzschild radius captured at start
+        double massSolar = 10.0; // secondary mass [Msun]
+        double q    = 0.5;     // m2 / (m1 + m2)
+        float  secRadius = 1.0f; // secondary visual radius [Rs]
+
+        // Coalescence + remnant growth.
+        float flashTimer    = 0.0f;
+        float growthT       = 0.0f;  // 0..1 growth animation
+        float preRadius     = 1.0f,  targetRadius  = 1.0f;
+        float preDiskInner  = 2.0f,  targetDiskInner  = 2.0f;
+        float preDiskOuter  = 20.0f, targetDiskOuter  = 20.0f;
+
+        // Gravitational-wave shockwave ring.
+        bool      ringActive = false;
+        float     ringT      = 0.0f;  // 0..1
+        glm::vec3 eventPos   = glm::vec3(0.0f);
+        float     remnantTimer = 0.0f;
+
+        // Death-spiral trail (secondary world positions, oldest → newest).
+        std::deque<glm::vec3> trail;
+
+        static constexpr float START_SEP_RS    = 16.0f;
+        static constexpr float MERGE_SEP_RS    = 2.6f;
+        static constexpr float INSPIRAL_K      = 1600.0f;
+        static constexpr float OMEGA_K         = 14.0f;
+        static constexpr float FLASH_DURATION  = 0.6f;
+        static constexpr float GROWTH_DURATION = 0.6f;
+        static constexpr float RING_DURATION   = 1.6f;
+        static constexpr float REMNANT_LABEL   = 3.2f;
+        static constexpr size_t MAX_TRAIL      = 160;
+
+        // Unit direction from barycenter toward the secondary in the tilted
+        // orbital plane (orbit in XZ, tilted about X by `incl`).
+        glm::vec3 unitDir() const {
+            float cp = std::cos(phi), sp = std::sin(phi);
+            float ci = std::cos(incl), si = std::sin(incl);
+            return glm::vec3(cp, sp * si, sp * ci);
+        }
+        // Secondary sits at +(1−q)·sep, primary recoils to −q·sep.
+        glm::vec3 secondaryWorld(const glm::vec3& bary) const {
+            return bary + unitDir() * (r * float(1.0 - q));
+        }
+        glm::vec3 primaryOffset() const {
+            return -unitDir() * (r * float(q));
+        }
+    } merger;
+
+    // Merger selector menu (ImGui), mirrors presetMenu.
+    struct MergerMenuState {
+        bool  open     = false;
+        int   selected = 0;
+        float t        = 0.0f;   // fade/slide 0..1
+        static constexpr float transitionSec = 0.18f;
+    } mergerMenu;
+
     // Mouse-look state (for standalone window cursor grab; widget tracks its own)
     bool  looking = false;
     float lastMouseX = 0.0f;
@@ -673,7 +777,331 @@ inline void initTextures(State& s, ResourceManager& res) {
 }
 
 // ────────────────────────────────────────────────────────────
-//  Per-frame physics + snapshot construction
+//  Visual black hole merger, Basically ported from 2D but with the 3d tilt and other parameters
+// ────────────────────────────────────────────────────────────
+
+// Map a secondary kind to a shader body archetype. Black holes use the
+// dedicated BODY_BLACKHOLE (=7); the rest reuse existing GalaxyBody3DType
+// ints so the shader renders them through the normal orbiting-body path.
+inline int mergerBodyShaderType(MergerSecondaryKind3D k) {
+    switch (k) {
+        case MergerSecondaryKind3D::BlackHole:   return 7; // BODY_BLACKHOLE
+        case MergerSecondaryKind3D::NeutronStar: return static_cast<int>(GalaxyBody3DType::NeutronStar);
+        case MergerSecondaryKind3D::Pulsar:      return static_cast<int>(GalaxyBody3DType::NeutronStar);
+        case MergerSecondaryKind3D::Star:        return static_cast<int>(GalaxyBody3DType::Star);
+        case MergerSecondaryKind3D::WhiteDwarf:  return static_cast<int>(GalaxyBody3DType::WhiteDwarf);
+    }
+    return 7;
+}
+
+inline const char* mergerKindLabel(MergerSecondaryKind3D k) {
+    switch (k) {
+        case MergerSecondaryKind3D::BlackHole:   return "Black Hole";
+        case MergerSecondaryKind3D::NeutronStar: return "Neutron Star";
+        case MergerSecondaryKind3D::Pulsar:      return "Pulsar";
+        case MergerSecondaryKind3D::Star:        return "Star";
+        case MergerSecondaryKind3D::WhiteDwarf:  return "White Dwarf";
+    }
+    return "Secondary";
+}
+
+inline glm::vec3 mergerKindColor(MergerSecondaryKind3D k) {
+    switch (k) {
+        case MergerSecondaryKind3D::BlackHole:   return glm::vec3(0.02f, 0.02f, 0.03f);
+        case MergerSecondaryKind3D::NeutronStar: return glm::vec3(1.00f, 0.35f, 0.90f);
+        case MergerSecondaryKind3D::Pulsar:      return glm::vec3(0.70f, 0.85f, 1.00f);
+        case MergerSecondaryKind3D::Star:        return glm::vec3(1.00f, 0.93f, 0.78f);
+        case MergerSecondaryKind3D::WhiteDwarf:  return glm::vec3(1.00f, 1.00f, 0.95f);
+    }
+    return glm::vec3(1.0f);
+}
+
+// Begin a merger: place the secondary at the outer separation and seed the
+// inspiral. The cinematic time-scale choice persists across re-triggers. Do note that the secondary mass is NOT clamped, 
+//meaning that something like a 100 Msun secondary can be merged into a 10 Msun primary, which is not physically realistic but is visually interesting.
+inline void startMerger3D(State& s, MergerSecondaryKind3D kind, double massSolar) { 
+    const auto prevScale = s.merger.timeScale;
+    s.merger = State::MergerState3D{};
+    s.merger.timeScale = prevScale;
+
+    auto& m = s.merger;
+    m.active    = true;
+    m.merged    = false;
+    m.kind      = kind;
+    m.massSolar = massSolar;
+    m.bhR0      = std::max(0.05f, s.config.blackHole.radius);
+    m.r         = State::MergerState3D::START_SEP_RS * m.bhR0;
+    m.phi       = 0.0f;
+    m.incl      = 0.32f;   // gentle tilt so the inspiral reads as 3D
+
+    const double m1 = std::max(1e-6, s.profilesArr[s.profileIdx].massSolar);
+    const double m2 = std::max(1e-9, massSolar);
+    m.q = m2 / (m1 + m2);
+
+    switch (kind) {
+        case MergerSecondaryKind3D::BlackHole: {
+            // Visual radius grows with mass but is compressed so an SMBH
+            // secondary stays on-screen rather than swallowing the frame.
+            double rel = std::cbrt(m2 / m1);            // equal-mass → 1
+            m.secRadius = (float)std::clamp(rel, 0.25, 2.6) * m.bhR0;
+            break;
+        }
+        case MergerSecondaryKind3D::NeutronStar:
+        case MergerSecondaryKind3D::Pulsar:     m.secRadius = 0.42f * m.bhR0; break;
+        case MergerSecondaryKind3D::WhiteDwarf: m.secRadius = 0.52f * m.bhR0; break;
+        case MergerSecondaryKind3D::Star:       m.secRadius = 0.85f * m.bhR0; break;
+    }
+
+    s.mergerMenu.open = false;
+    // Reset any prior orbit perturbation / disruption so each merger starts clean.
+    for (auto& b : s.orbBodies) b.resetPerturbation();
+    s.orbBodyDisrupted.assign(s.orbBodies.size(), false);
+    std::cerr << "[bh3d] merger start: " << mergerKindLabel(kind)
+              << " (" << massSolar << " Msun, q=" << m.q << ")\n";
+}
+
+// On coalescence, spawn matter ejecta for non-BH secondaries into the shared
+// tidal-event particle system (already advanced + drawn elsewhere). Black-hole
+// mergers stay clean: only the gravitational-wave ring, no matter debris.
+inline void spawnMergerAftermath(State& s) {
+    auto& m = s.merger;
+    if (m.kind == MergerSecondaryKind3D::BlackHole) return;
+
+    s.tde3D = State::TidalEvent3D{};
+    s.tde3D.active     = true;
+    s.tde3D.eventPos   = m.eventPos;
+    s.tde3D.flashTimer = State::TidalEvent3D::FLASH_DURATION;
+
+    auto rnd = [](float a, float b) {
+        return a + (b - a) * (float)std::rand() / (float)RAND_MAX;
+    };
+
+    const bool  compact = (m.kind == MergerSecondaryKind3D::NeutronStar
+                        || m.kind == MergerSecondaryKind3D::Pulsar);
+    const int   nDebris = compact ? 40 : 64;
+    const float speed   = compact ? 6.0f : 3.5f;   // NS ejecta is faster/hotter
+    const float life    = compact ? State::TidalEvent3D::DEBRIS_LIFETIME * 0.7f
+                                  : State::TidalEvent3D::STREAM_LIFETIME;
+
+    for (int i = 0; i < nDebris; ++i) {
+        float a  = rnd(0.0f, 6.2831853f);
+        float el = rnd(-0.5f, 0.5f);
+        glm::vec3 dir = glm::vec3(std::cos(a) * std::cos(el),
+                                  std::sin(el),
+                                  std::sin(a) * std::cos(el));
+        float v = speed * rnd(0.5f, 1.0f);
+        s.tde3D.debrisPos.push_back(m.eventPos + dir * (m.bhR0 * rnd(1.0f, 2.5f)));
+        s.tde3D.debrisVel.push_back(dir * v);
+        float ml = life * rnd(0.6f, 1.0f);
+        s.tde3D.debrisLife.push_back(ml);
+        s.tde3D.debrisMaxLife.push_back(ml);
+        // NS/pulsar → hot blue burst (all fallback); star/WD → mixed stream.
+        s.tde3D.isFallback.push_back(compact ? true : (i % 3 == 0));
+    }
+}
+
+// Spawn a detailed tidal-disruption stream when the in-spiralling merger
+// secondary shreds an orbiting body. Unlike spawnMergerAftermath this APPENDS
+// to the shared tidal particle system (several bodies can be torn apart during
+// one merger) and lays the debris out as a stretched, two-tailed stream along
+// the body's orbit with an infalling component toward the secondary, the
+// classic spaghettification look, rendered in detail by the HUD overlay.
+inline void spawnBodyDisruption(State& s, const glm::vec3& pos,
+                                const glm::vec3& tangent,
+                                const glm::vec3& towardSec,
+                                int count, bool hot) {
+    s.tde3D.active     = true;
+    s.tde3D.eventPos   = pos;
+    s.tde3D.flashTimer = std::max(s.tde3D.flashTimer,
+                                  State::TidalEvent3D::FLASH_DURATION);
+
+    auto rnd = [](float a, float b) {
+        return a + (b - a) * (float)std::rand() / (float)RAND_MAX;
+    };
+    glm::vec3 t  = (glm::length(tangent)   > 1e-4f) ? glm::normalize(tangent)   : glm::vec3(1, 0, 0);
+    glm::vec3 ts = (glm::length(towardSec) > 1e-4f) ? glm::normalize(towardSec) : glm::vec3(0, 1, 0);
+    glm::vec3 up = glm::cross(t, ts);
+    up = (glm::length(up) > 1e-4f) ? glm::normalize(up) : glm::vec3(0, 1, 0);
+
+    for (int i = 0; i < count; ++i) {
+        // Two-tailed: roughly half the matter leads, half trails along the orbit.
+        float along  = rnd(-1.0f, 1.0f);
+        float infall = rnd(0.0f, 1.0f);
+        glm::vec3 jitter = up * rnd(-0.35f, 0.35f)
+                         + ts * rnd(-0.15f, 0.15f)
+                         + t  * rnd(-0.15f, 0.15f);
+        // Position: elongated along the orbit, drawn slightly toward the secondary.
+        glm::vec3 p = pos + t * (along * rnd(0.6f, 2.2f)) + ts * (infall * 0.6f) + jitter * 0.6f;
+        // Velocity: streams away along ±tangent, with an infall pull and spread.
+        glm::vec3 v = t * (along * rnd(0.6f, 1.6f))
+                    + ts * (infall * rnd(0.4f, 1.2f))
+                    + jitter * rnd(0.3f, 0.9f);
+        s.tde3D.debrisPos.push_back(p);
+        s.tde3D.debrisVel.push_back(v);
+        float ml = State::TidalEvent3D::STREAM_LIFETIME * rnd(0.55f, 1.0f);
+        s.tde3D.debrisLife.push_back(ml);
+        s.tde3D.debrisMaxLife.push_back(ml);
+        // Hot (NS/WD) → mostly blue-white fallback; star/gas → mixed warm stream.
+        s.tde3D.isFallback.push_back(hot ? (i % 4 != 0) : (i % 3 == 0));
+    }
+}
+
+// Advance the merger one frame. Drives the inspiral, triggers coalescence,
+// then animates the flash, remnant growth, and gravitational-wave ring.
+inline void updateMerger3D(State& s, float dt) {
+    auto& m = s.merger;
+    if (!m.active) return;
+
+    // Merger runs on its own cinematic clock, independent of animSpeed, so the
+    // choreography is actually predictable regardless of the global time dial. 
+    const float mdt = dt * m.timeScaleFactor();
+    const glm::vec3 bary = s.config.blackHole.position;
+
+    if (!m.merged) {
+        // ── Inspiral ────────────────────────────────────────────────
+        const float mergeSep = State::MergerState3D::MERGE_SEP_RS * m.bhR0;
+        // Symmetric-mass-ratio factor (η/0.25), floored so even extreme
+        // ratios still coalesce in a watchable time (visual, not EMRI).
+        float eta4     = 4.0f * (float)(m.q * (1.0 - m.q));
+        float etaScale = std::clamp(eta4, 0.2f, 1.0f);
+
+        float r3 = m.r * m.r * m.r;
+        m.r  -= (State::MergerState3D::INSPIRAL_K * etaScale * mdt) / std::max(r3, 1e-3f);
+        m.phi += (State::MergerState3D::OMEGA_K * mdt) / std::pow(std::max(m.r, 0.2f), 1.5f);
+
+        m.trail.push_back(m.secondaryWorld(bary));
+        while (m.trail.size() > State::MergerState3D::MAX_TRAIL) m.trail.pop_front();
+
+        if (m.r <= mergeSep) {
+            // ── Coalescence trigger ─────────────────────────────────
+            m.r            = mergeSep;
+            m.merged       = true;
+            m.flashTimer   = State::MergerState3D::FLASH_DURATION;
+            m.ringActive   = true;
+            m.ringT        = 0.0f;
+            m.eventPos     = bary;
+            m.remnantTimer = State::MergerState3D::REMNANT_LABEL;
+
+            // Bounded remnant growth so the framing doesn't blow up.
+            float gFactor      = std::clamp(1.0f + (float)m.q * 1.6f, 1.0f, 1.8f);
+            m.preRadius        = s.config.blackHole.radius;
+            m.targetRadius     = m.preRadius * gFactor;
+            m.preDiskInner     = s.config.disk.innerRadius;
+            m.targetDiskInner  = m.preDiskInner * gFactor;
+            m.preDiskOuter     = s.config.disk.outerRadius;
+            m.targetDiskOuter  = m.preDiskOuter * gFactor;
+            m.growthT          = 0.0f;
+
+            spawnMergerAftermath(s);
+        }
+    } else {
+        // ── Aftermath: flash decay, remnant growth, ring expansion ───
+        if (m.flashTimer > 0.0f) m.flashTimer -= mdt;
+
+        if (m.growthT < 1.0f) {
+            m.growthT = std::min(1.0f, m.growthT + mdt / State::MergerState3D::GROWTH_DURATION);
+            float e = m.growthT * m.growthT * (3.0f - 2.0f * m.growthT); // smoothstep
+            s.config.blackHole.radius = m.preRadius    + (m.targetRadius    - m.preRadius)    * e;
+            s.config.disk.innerRadius = m.preDiskInner + (m.targetDiskInner - m.preDiskInner) * e;
+            s.config.disk.outerRadius = m.preDiskOuter + (m.targetDiskOuter - m.preDiskOuter) * e;
+        }
+
+        if (m.ringActive) {
+            m.ringT += mdt / State::MergerState3D::RING_DURATION;
+            if (m.ringT >= 1.0f) { m.ringT = 1.0f; m.ringActive = false; }
+        }
+        if (m.remnantTimer > 0.0f) m.remnantTimer -= mdt;
+
+        // Dissolve the death-spiral trail after coalescence.
+        if (!m.trail.empty()) m.trail.pop_front();
+
+        if (m.flashTimer <= 0.0f && !m.ringActive && m.remnantTimer <= 0.0f) {
+            m.active = false;
+        }
+    }
+}
+
+// While the secondary is spiralling in, it gravitationally tugs every orbiting
+// body, bending their Keplerian paths, and tidally shreds (or swallows whole)
+// those that stray within reach. A more massive secondary (e.g. a TON 618
+// SMBH) perturbs and disrupts bodies from much farther out. Disruption reuses
+// the shared tidal particle system for the debris streams. Inspiral phase only.
+inline void applyMergerInfluence(State& s, float dt) {
+    auto& m = s.merger;
+    if (!m.active || m.merged) return;
+    if (s.orbBodies.empty()) return;
+
+    if (s.orbBodyDisrupted.size() != s.orbBodies.size())
+        s.orbBodyDisrupted.assign(s.orbBodies.size(), false);
+
+    const glm::vec3 bary   = s.config.blackHole.position;
+    const glm::vec3 secPos = m.secondaryWorld(bary);
+    const float q    = (float)std::clamp(m.q, 0.0, 0.999);
+    const float mu2  = std::clamp(q / std::max(1e-3f, 1.0f - q), 0.02f, 8.0f);
+    const float capR = std::max(m.secRadius * 0.9f, m.bhR0 * 0.4f);
+    const float maxOffset = 8.0f * m.bhR0;
+    constexpr float PERTURB_K = 1.6f;
+    const float infl = dt * std::max(0.05f, s.animSpeed);
+    // A heavier secondary tidally reaches farther.
+    const float massReach = std::clamp(0.7f + 0.5f * mu2, 0.7f, 3.0f);
+
+    for (size_t i = 0; i < s.orbBodies.size(); ++i) {
+        auto& body = s.orbBodies[i];
+        if (body.disrupted()) continue;
+
+        const glm::vec3 p = body.position();
+        glm::vec3 d = secPos - p;
+        float dist = glm::length(d);
+        if (dist < 1e-4f) continue;
+        const glm::vec3 dir = d / dist;
+        const int type = body.bodyType();
+
+        // Swallowed whole: the body falls inside the secondary's capture radius.
+        if (dist < capR) {
+            body.setDisrupted();
+            s.orbBodyDisrupted[i] = true;
+            glm::vec3 tangent = glm::cross(glm::vec3(0, 1, 0), p - bary);
+            spawnBodyDisruption(s, p, tangent, dir, 28, true);
+            continue;
+        }
+
+        // Tidal reach depends on body type (compact remnants hold together
+        // longer) and the secondary's mass + size. Extended systems
+        // (clusters, dwarf galaxies) are only perturbed, never shredded here.
+        const bool shreddable =
+            type == static_cast<int>(GalaxyBody3DType::Star)          ||
+            type == static_cast<int>(GalaxyBody3DType::CompanionStar) ||
+            type == static_cast<int>(GalaxyBody3DType::GasCloud)      ||
+            type == static_cast<int>(GalaxyBody3DType::NeutronStar)   ||
+            type == static_cast<int>(GalaxyBody3DType::WhiteDwarf);
+        if (shreddable) {
+            float tFactor;
+            if      (type == static_cast<int>(GalaxyBody3DType::NeutronStar)) tFactor = 1.8f;
+            else if (type == static_cast<int>(GalaxyBody3DType::WhiteDwarf))  tFactor = 2.0f;
+            else if (type == static_cast<int>(GalaxyBody3DType::GasCloud))    tFactor = 3.4f;
+            else                                                             tFactor = 3.0f; // Star/Companion
+            float tidalR = std::max(m.secRadius * tFactor * massReach, m.bhR0 * 1.3f);
+            if (dist < tidalR) {
+                body.setDisrupted();
+                s.orbBodyDisrupted[i] = true;
+                glm::vec3 tangent = glm::cross(glm::vec3(0, 1, 0), p - bary);
+                const bool hot = (type == static_cast<int>(GalaxyBody3DType::NeutronStar)
+                               || type == static_cast<int>(GalaxyBody3DType::WhiteDwarf));
+                const int count = (type == static_cast<int>(GalaxyBody3DType::GasCloud)) ? 72 : 56;
+                spawnBodyDisruption(s, p, tangent, dir, count, hot);
+                continue;
+            }
+        }
+
+        // Otherwise: a gravitational tug that visibly bends the orbit inward.
+        const float invd2 = 1.0f / (dist * dist);
+        const glm::vec3 accel = dir * (mu2 * PERTURB_K * invd2);
+        body.applyExternalAccel(accel, infl, maxOffset);
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+//  Per-frame physics AND snapshot construction
 // ────────────────────────────────────────────────────────────
 inline void tickPhysics(State& s, float dt) {
     s.totalTime += dt;
@@ -683,6 +1111,12 @@ inline void tickPhysics(State& s, float dt) {
     // also speed/slow Keplerian orbits, matching the 2D simulator's behavior.
     const float orbDt = dt * s.animSpeed;
     for (auto& body : s.orbBodies) body.update(orbDt);
+
+    // Visual black hole merger (independent cinematic clock).
+    updateMerger3D(s, dt);
+    // Gravitational perturbation + tidal disruption of orbiting bodies by the
+    // in-spiralling secondary (orbits bend, nearby stars/gas get shredded).
+    applyMergerInfluence(s, dt);
 
     // ---- Tidal disruption detection ----
     // NOTE: All 3D orbBodies are on permanent Keplerian orbits (no energy loss /
@@ -727,6 +1161,11 @@ inline void tickPhysics(State& s, float dt) {
     const float speed = 1.0f / hud::PresetMenuState::transitionSec;
     if (s.presetMenu.open) s.presetMenu.t = std::min(1.0f, s.presetMenu.t + dt * speed);
     else                   s.presetMenu.t = std::max(0.0f, s.presetMenu.t - dt * speed);
+
+    // Merger-menu transition (mirrors the preset menu).
+    const float mSpeed = 1.0f / State::MergerMenuState::transitionSec;
+    if (s.mergerMenu.open) s.mergerMenu.t = std::min(1.0f, s.mergerMenu.t + dt * mSpeed);
+    else                   s.mergerMenu.t = std::max(0.0f, s.mergerMenu.t - dt * mSpeed);
 }
 
 inline void tickFPS(State& s) { // much better than executing the previous value by firing squad once every frame
@@ -815,6 +1254,9 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
 
         for (size_t i = 0; i < s.orbBodies.size(); ++i) {
             const auto& body = s.orbBodies[i];
+            // Bodies tidally disrupted / swallowed by a merger secondary have
+            // become a debris stream, don't draw them as intact bodies.
+            if (body.disrupted()) continue;
             // Scale companion position to barycenter-centred world coords
             float scale = (snap.barycentricMode && i == 0) ? baryScale : 1.0f;
             snap.orbBodyPositions.push_back(body.position() * scale);
@@ -829,8 +1271,37 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
             }
             snap.orbBodyLabels.push_back(std::move(lbl));
         }
+
+        // ── Visual merger: inject the inspiralling secondary ────────────────
+        // During the inspiral the secondary rides into the primary as an extra
+        // orbiting body, and the primary recoils opposite it about the
+        // barycenter. This reuses the existing orbBody shader path entirely.
+        if (s.merger.active && !s.merger.merged) {
+            const glm::vec3 bary   = s.config.blackHole.position;
+            const glm::vec3 secPos = s.merger.secondaryWorld(bary);
+            // If the profile has no orbiting bodies, show ONLY the secondary so
+            // an incidental legacy body doesn't appear mid-merger.
+            if (!s.orbBodyEnabled) {
+                snap.orbBodyPositions.clear();
+                snap.orbBodyRadii.clear();
+                snap.orbBodyColors.clear();
+                snap.orbBodyTypes.clear();
+                snap.orbBodyLabels.clear();
+                snap.barycentricMode = false;
+            }
+            if (snap.orbBodyPositions.size() < 10) {
+                snap.orbBodyPositions.push_back(secPos);
+                snap.orbBodyRadii.push_back(s.merger.secRadius);
+                snap.orbBodyColors.push_back(mergerKindColor(s.merger.kind));
+                snap.orbBodyTypes.push_back(mergerBodyShaderType(s.merger.kind));
+                snap.orbBodyLabels.push_back(mergerKindLabel(s.merger.kind));
+            }
+            snap.bhPosition += s.merger.primaryOffset();
+        }
     }
-    snap.orbBodyEnabled    = s.orbBodyEnabled;
+    // Force orbiting bodies on while the secondary is inspiralling, even if the
+    // active profile normally hides them.
+    snap.orbBodyEnabled    = s.orbBodyEnabled || (s.merger.active && !s.merger.merged);
     snap.hostGalaxyEnabled = s.hostGalaxyEnabled;
     snap.labEnabled        = s.labEnabled;
     snap.cgmEnabled        = s.cgmEnabled;
@@ -854,6 +1325,24 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
         float maxL = s.tde3D.debrisMaxLife[i];
         snap.tdeDebrisLifeF.push_back(maxL > 0.0f ? s.tde3D.debrisLife[i] / maxL : 0.0f);
     }
+
+    // ---- Visual merger data for HUD overlay ----
+    snap.mergerActive     = s.merger.active;
+    snap.mergerInspiral   = s.merger.active && !s.merger.merged;
+    snap.mergerFlashAlpha = (s.merger.flashTimer > 0.0f)
+        ? std::min(1.0f, s.merger.flashTimer / State::MergerState3D::FLASH_DURATION)
+        : 0.0f;
+    snap.mergerEventPos       = s.merger.eventPos;
+    snap.mergerRingActive     = s.merger.ringActive;
+    snap.mergerRingT          = s.merger.ringT;
+    snap.mergerSecondaryKind  = static_cast<int>(s.merger.kind);
+    snap.mergerSecondaryLabel = mergerKindLabel(s.merger.kind);
+    snap.mergerSecondaryPos   = s.merger.secondaryWorld(s.config.blackHole.position);
+    snap.mergerSepRs          = (s.merger.bhR0 > 0.0f) ? (s.merger.r / s.merger.bhR0) : s.merger.r;
+    snap.mergerRemnantAlpha   = (s.merger.remnantTimer > 0.0f)
+        ? std::min(1.0f, s.merger.remnantTimer / State::MergerState3D::REMNANT_LABEL)
+        : 0.0f;
+    snap.mergerTrail.assign(s.merger.trail.begin(), s.merger.trail.end());
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1016,6 +1505,9 @@ inline void switchToProfile(State& s, int newIdx) {
     rebuildOrbBodies(s.orbBodies, prof, s.config);
     s.orbBodyDisrupted.assign(s.orbBodies.size(), false);
     s.tde3D = State::TidalEvent3D{};
+    // Cancel any in-flight merger (and its grown remnant) on profile switch.
+    s.merger      = State::MergerState3D{};
+    s.mergerMenu  = State::MergerMenuState{};
     s.physOverlay.markDirty();
     std::cerr << "[bh3d] profile: " << prof.name
               << ", " << prof.description << "\n";
@@ -1104,6 +1596,12 @@ inline void onActionKey(State& s, sf::Keyboard::Key code) {
         // branch above also handles toggling-off via this same key.
         s.presetMenu.open     = true;
         s.presetMenu.selected = s.profileIdx;
+    }
+    else if (code == kb.openMergerMenu) {
+        // Toggle the merger selector. Opening it closes the preset menu so the
+        // two modal panels never overlap.
+        s.mergerMenu.open = !s.mergerMenu.open;
+        if (s.mergerMenu.open) s.presetMenu.open = false;
     }
     else if (code == kb.toggleRender) {
         if (s.havePhotoreal && s.haveSimple) {

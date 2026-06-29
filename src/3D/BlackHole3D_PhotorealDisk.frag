@@ -93,6 +93,11 @@ uniform int   maxStepsOverride; // Runtime step limit (200=fast, 300=cinematic)
 #define BODY_NEUTRON   4
 #define BODY_WDWARF    5
 #define BODY_COMPANION 6
+// Secondary black hole used by the visual merger system. Has no
+// GalaxyBody3DType counterpart, it is injected as a transient body
+// (type int 7) only while a merger is in progress. Rendered as a dark
+// event-horizon silhouette ringed by a bright photon ring.
+#define BODY_BLACKHOLE 7
 
 // Large-scale structures
 uniform int   showHostGalaxy;                  // Toggle host galaxy visibility
@@ -146,7 +151,8 @@ float hash13(vec3 p);
 // instead, they don't block anything behind them.
 bool isOpaqueBody(int t) {
     return t == BODY_STAR     || t == BODY_COMPANION
-        || t == BODY_NEUTRON  || t == BODY_WDWARF;
+        || t == BODY_NEUTRON  || t == BODY_WDWARF
+        || t == BODY_BLACKHOLE;
 }
 
 // Shared helper: classic Eddington-style photosphere shading used for any
@@ -186,6 +192,12 @@ vec3 shadeStarSurface(vec3 hitPos, vec3 normal, vec3 bodyCenter,
 vec3 shadeOrbBody(int type, vec3 hitPos, vec3 normal,
                   vec3 bodyCenter, vec3 bodyColor)
 {
+    if (type == BODY_BLACKHOLE) {
+        // Secondary event horizon: pure black silhouette. All the visual
+        // interest (photon ring, accretion glow) is additive and handled
+        // in orbBodyEmission so the shadow itself stays perfectly dark.
+        return vec3(0.0);
+    }
     if (type == BODY_NEUTRON) {
         // Neutron star surface: ultra-hot fluid crust, sharp limb, no
         // granulation. We keep a hot core glow but let the body's tint
@@ -240,6 +252,27 @@ vec3 orbBodyEmission(int idx, vec3 ro, vec3 rd) {
     vec3  closestP = ro + rd * sClosest;
     vec3  delta    = closestP - c;
     float dPerp    = length(delta);
+
+    if (type == BODY_BLACKHOLE) {
+        // Bright photon ring hugging the silhouette of the secondary BH,
+        // plus a hot accretion glow and a faint bluish gravitational halo.
+        // Everything is gated to the OUTSIDE of the horizon radius so the
+        // black silhouette from shadeOrbBody() is never washed out.
+        float outside = smoothstep(r * 0.82, r * 1.0, dPerp);
+        // Photon ring: a thin bright annulus just outside the horizon.
+        float ringR = r * 1.10;
+        float dRing = dPerp - ringR;
+        float ringW = r * 0.18;
+        float ring  = exp(-dRing * dRing / (ringW * ringW));
+        // Warm accretion glow falling off with distance from the rim.
+        float glow  = exp(-max(dPerp - r, 0.0) / (r * 0.85));
+        // Subtle wide blue lensing halo.
+        float halo  = exp(-max(dPerp - r, 0.0) / (r * 3.0)) * 0.25;
+        vec3  ringCol = vec3(1.0, 0.84, 0.52);   // gold photon ring
+        vec3  haloCol = vec3(0.45, 0.62, 1.0);   // cool lensed halo
+        return (ringCol * ring * 3.4 + ringCol * glow * 0.45
+              + haloCol * halo) * outside;
+    }
 
     if (type == BODY_GASCLOUD) {
         // Diffuse, billowy emission. Soft Gaussian envelope, no hard edge.

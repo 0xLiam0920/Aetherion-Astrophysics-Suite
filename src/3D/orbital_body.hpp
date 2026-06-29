@@ -68,6 +68,29 @@ public:
                                zOrb * std::cos(incl));
     }
 
+    /*--------- External perturbation (merger secondary) ---------*/
+    // Accumulate a gravitational tug from an external mass (the in-spiralling
+    // merger secondary). The displacement is layered on top of the Keplerian
+    // position and persists, so the orbit visibly bends. A light velocity drag
+    // keeps it bounded; the offset is clamped to maxOffset so a body that is
+    // flung outward streaks to the edge of its region instead of vanishing.
+    void applyExternalAccel(const glm::vec3& accel, float dt, float maxOffset) {
+        perturbVel_ += accel * dt;
+        perturbVel_ *= 0.992f;                 // light drag bounds runaway
+        perturb_    += perturbVel_ * dt;
+        float len = glm::length(perturb_);
+        if (len > maxOffset && len > 0.0f) perturb_ *= (maxOffset / len);
+    }
+    void resetPerturbation() {
+        perturb_    = glm::vec3(0.0f);
+        perturbVel_ = glm::vec3(0.0f);
+        disrupted_  = false;
+    }
+    void setDisrupted()    { disrupted_ = true; }
+    bool disrupted() const { return disrupted_; }
+    // Unperturbed Keplerian position (reference orbit, before external tugs).
+    glm::vec3 keplerPosition() const { return position_; }
+
     /*--------- Phase control ---------*/
     // Set the initial orbital phase (mean anomaly in radians). Used to
     // stagger multiple bodies so they don't all start at periapsis on the
@@ -91,7 +114,8 @@ public:
     bool isFast() const { return timeScale_ >= cfg_.fastTimeScale; }
 
     /*--------- Accessors ---------*/
-    glm::vec3 position()   const { return position_; }
+    // World position including any accumulated external perturbation.
+    glm::vec3 position()   const { return position_ + perturb_; }
     float     bodyRadius() const { return cfg_.bodyRadius; }
     glm::vec3 bodyColor()  const { return cfg_.bodyColor; }
     int       bodyType()   const { return cfg_.bodyType; }
@@ -109,4 +133,9 @@ private:
     float precession_   = 0.0f;
     float timeScale_    = 0.5f; // default from config
     glm::vec3 position_ = glm::vec3(0.0f);
+
+    // External-perturbation state (merger secondary tug + tidal disruption).
+    glm::vec3 perturb_    = glm::vec3(0.0f);
+    glm::vec3 perturbVel_ = glm::vec3(0.0f);
+    bool      disrupted_  = false;
 };

@@ -8,8 +8,8 @@
 // ============================================================
 
 #include "gl_font.hpp"
-#include "presets.hpp"
-#include "simulation_state.hpp"
+#include "bh3d_presets.hpp"
+#include "bh3d_simulationstates.hpp"
 
 #include <glm/glm.hpp>
 #include <string>

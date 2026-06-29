@@ -57,7 +57,7 @@ The goal is reproducible results without having to fight the tooling.
   - Relativistic effects (e.g., deflection, precession)
 
 - **Data Analysis Suite**
-  - CSV, FITS, or BINARY import/export
+  - CSV and FITS export
   - Interactive graphing (orbit paths, energy conservation, etc.)
   - Multi-dataset comparison
 

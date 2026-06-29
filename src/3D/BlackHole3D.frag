@@ -39,6 +39,28 @@ uniform float blrThickness;      // BLR vertical half-thickness      [ADDED 2026
 uniform float blrStrength;       // [0,1] cloud opacity scaler per black hole
 uniform int   maxStepsOverride;  // Runtime step limit [ADDED 2026-05-25: was previously dead]
 
+// ── Orbiting bodies [ADDED 2026: ported from the photoreal shader so the ──
+//    low-quality path shows orbiting stars/clouds, tidal-disruption victims
+//    and the inspiralling secondary black hole during a merger.
+const int MAX_ORB_BODIES = 10;
+uniform vec3  orbBodyPos[MAX_ORB_BODIES];    // world-space centres
+uniform float orbBodyRadius[MAX_ORB_BODIES]; // world-unit radii
+uniform vec3  orbBodyColor[MAX_ORB_BODIES];  // base colours
+uniform int   orbBodyType[MAX_ORB_BODIES];   // BODY_* archetype
+uniform int   numOrbBodies;                  // active count (<= MAX_ORB_BODIES)
+uniform int   showOrbBody;                   // master toggle
+
+// Body archetypes — must mirror profiles::GalaxyBody3DType, with type 7 the
+// transient secondary black hole injected during a merger.
+#define BODY_STAR      0
+#define BODY_GASCLOUD  1
+#define BODY_CLUSTER   2
+#define BODY_DGAL      3
+#define BODY_NEUTRON   4
+#define BODY_WDWARF    5
+#define BODY_COMPANION 6
+#define BODY_BLACKHOLE 7
+
 // ============================================================================
 // NOISE UTILITIES
 // ============================================================================
@@ -371,7 +393,23 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
                          jetColor * vec3(0.8, 0.92, 1.5),
                          shockIntensity * 0.8);
 
-    return knotColor * core * along * emissionProfile * beaming;
+    // ── Bright collimated spine ───────────────────────────────────────────
+    // A narrow hot channel down the jet axis keeps the beam reading as a
+    // focused, relativistic ejection rather than a diffuse cone.
+    float spine    = exp(-radial * radial / max(jetRadius * jetRadius * 0.06, EPSILON));
+    vec3  spineCol = mix(knotColor, vec3(0.85, 0.95, 1.45), 0.6);   // hot blue-white core
+
+    // ── Launch / collimation glow at the jet base ─────────────────────────
+    // Material is brightest where it is accelerated and collimated just above
+    // the disc; this anchors the jet visually to the black hole.
+    float baseFall = exp(-ay / max(jetLength * 0.16, EPSILON));
+    float baseGlow = baseFall * exp(-radial * radial / max(jetRadius * jetRadius * 0.5, EPSILON));
+
+    vec3 emission = knotColor * core     * emissionProfile
+                  + spineCol  * spine    * (0.5 + 0.9 * shockIntensity) * burstPulse * 0.6
+                  + spineCol  * baseGlow * burstPulse * 0.9;
+
+    return emission * along * beaming;
 }
 
 void traceBentRay(
@@ -504,15 +542,158 @@ void traceBentRay(
     outDir = dir;
 }
 
+// ============================================================================
+// ORBITING BODIES  [ADDED 2026: low-quality parity with the photoreal shader]
+// ============================================================================
+// Surface shading + additive glow for the bodies that orbit the black hole
+// (stars, gas clouds, clusters, remnants) and for the inspiralling secondary
+// black hole during a merger (BODY_BLACKHOLE). Simplified ports of the
+// photoreal shader's shadeOrbBody / orbBodyEmission so the fast render path
+// shows the same objects, tidal-disruption victims and merger companions.
+
+// Nearest positive ray-sphere intersection distance, or -1.0 on a miss.
+float intersectSphereT(vec3 ro, vec3 rd, vec3 center, float radius) {
+    vec3  oc = ro - center;
+    float b  = dot(oc, rd);
+    float c  = dot(oc, oc) - radius * radius;
+    float disc = b * b - c;
+    if (disc < 0.0) return -1.0;
+    float s  = sqrt(disc);
+    float t0 = -b - s;
+    if (t0 > EPSILON) return t0;
+    float t1 = -b + s;
+    if (t1 > EPSILON) return t1;
+    return -1.0;
+}
+
+// Which body types present a hard, light-blocking surface.
+bool isOpaqueBody(int t) {
+    return t == BODY_STAR || t == BODY_COMPANION
+        || t == BODY_NEUTRON || t == BODY_WDWARF
+        || t == BODY_BLACKHOLE;
+}
+
+// Hard-surface shading for opaque bodies. The secondary black hole returns
+// black (its photon ring is drawn additively in bodyEmissionSimple).
+vec3 shadeBodySimple(int type, vec3 hitPos, vec3 normal, vec3 center, vec3 col) {
+    if (type == BODY_BLACKHOLE) return vec3(0.0);
+
+    vec3  view = normalize(hitPos - cameraPos);
+    float mu   = max(dot(normal, -view), 0.0);     // 1 at disc centre, 0 at limb
+    float limb = 0.4 + 0.6 * mu;                    // Eddington limb darkening
+
+    // Gravitational dimming as the body approaches the primary's horizon.
+    float rBH  = length(hitPos - blackHolePos);
+    float grav = sqrt(max(1.0 - blackHoleRadius / max(rBH, blackHoleRadius * 1.01), 0.05));
+
+    if (type == BODY_NEUTRON) {
+        vec3 hot = mix(col, vec3(1.0), pow(mu, 2.0) * 0.6);
+        return hot * (0.55 + 0.45 * mu) * 12.0 * grav;
+    }
+    if (type == BODY_WDWARF) {
+        vec3 hot = mix(col, vec3(1.0), 0.7);
+        return hot * (0.5 + 0.5 * mu) * 9.0 * grav;
+    }
+
+    // Star / companion: warm limb-darkened photosphere with faint granulation
+    // and tidal reddening when it strays close to the black hole.
+    vec3  surfP   = (hitPos - center) * (type == BODY_COMPANION ? 3.0 : 4.0);
+    float granMod = 0.85 + 0.30 * fbm(surfP);
+    vec3  hot     = mix(col, vec3(1.0, 0.97, 0.90), 0.40);
+    vec3  limbCol = mix(col, vec3(1.0, 0.55, 0.20), 0.35);
+    vec3  photo   = mix(limbCol, hot, mu);
+    float tidal   = smoothstep(3.0, 1.5, rBH / blackHoleRadius);
+    photo = mix(photo, vec3(1.0, 0.30, 0.10), tidal * 0.6);
+    return photo * limb * granMod * (type == BODY_COMPANION ? 5.0 : 6.0) * grav;
+}
+
+// Additive emission for every body: stellar coronae, volumetric clouds, and
+// the gold photon ring of the inspiralling secondary black hole.
+vec3 bodyEmissionSimple(int idx, vec3 ro, vec3 rd) {
+    int   type = orbBodyType[idx];
+    vec3  c    = orbBodyPos[idx];
+    float r    = orbBodyRadius[idx];
+    vec3  col  = orbBodyColor[idx];
+
+    // Closest approach of the ray to the body centre.
+    float sClosest = max(dot(c - ro, rd), 0.0);
+    vec3  closestP = ro + rd * sClosest;
+    float dPerp    = length(closestP - c);
+
+    if (type == BODY_BLACKHOLE) {
+        // Photon ring + warm glow + cool halo, gated to the outside of the disc.
+        float outside = smoothstep(r * 0.82, r * 1.0, dPerp);
+        float dRing   = dPerp - r * 1.10;
+        float ring    = exp(-dRing * dRing / max(r * r * 0.0324, EPSILON));   // (0.18r)^2
+        float glow    = exp(-max(dPerp - r, 0.0) / (r * 0.85));
+        float halo    = exp(-max(dPerp - r, 0.0) / (r * 3.0)) * 0.25;
+        vec3  ringCol = vec3(1.0, 0.84, 0.52);
+        vec3  haloCol = vec3(0.45, 0.62, 1.0);
+        return (ringCol * ring * 3.4 + ringCol * glow * 0.45 + haloCol * halo) * outside;
+    }
+    if (type == BODY_GASCLOUD) {
+        float sigma = 1.5 * r;
+        float env   = exp(-dPerp * dPerp / (2.0 * sigma * sigma));
+        float turb  = 0.55 + 0.9 * fbm(closestP * 0.6);
+        vec3  tint  = mix(col, vec3(1.0, 0.85, 0.7), 0.25);
+        return tint * env * turb * 2.0;
+    }
+    if (type == BODY_CLUSTER) {
+        float sigma = 1.2 * r;
+        float halo  = exp(-dPerp * dPerp / (2.0 * sigma * sigma));
+        return mix(col, vec3(1.0), 0.4) * halo * 1.4;
+    }
+    if (type == BODY_DGAL) {
+        float sigma = 1.4 * r;
+        float env   = exp(-dPerp * dPerp / (2.0 * sigma * sigma));
+        float core  = exp(-dPerp * dPerp / (2.0 * (0.35 * r) * (0.35 * r)));
+        return mix(col, vec3(0.85, 0.9, 1.0), 0.35) * (env * 0.7 + core * 1.4);
+    }
+
+    // Opaque stellar bodies: inverse-square corona halo outside the surface.
+    float halo = r / max(dPerp, 0.5 * r);
+    halo = halo * halo;
+    halo *= smoothstep(6.0 * r, 1.0 * r, dPerp);
+    vec3  coronaCol = col;
+    float bright    = 0.6;
+    if      (type == BODY_NEUTRON) { coronaCol = mix(col, vec3(0.6, 0.8, 1.0), 0.5); bright = 1.1; }
+    else if (type == BODY_WDWARF)  { coronaCol = mix(col, vec3(0.8, 0.9, 1.0), 0.4); bright = 0.7; }
+    return coronaCol * halo * bright;
+}
+
 void main() {
     // Get ray direction from camera through this pixel
     vec3 rayDir = getRayDir(fragUV, cameraPos, cameraDir, cameraUp, fov);
     vec3 rayOrigin = cameraPos;
 
-    // Absorb rays that hit the event horizon (visible black disc)
-    if (rayHitsSphere(rayOrigin, rayDir, blackHolePos, blackHoleRadius)) {
-        FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
+    // ── Orbiting bodies (straight-ray approximation) ──────────────────────
+    // Bodies are tested against the un-bent ray: lensing of the bodies
+    // themselves is a second-order effect at their orbital distance, and the
+    // straight ray fixes their screen-space position. Track the nearest
+    // opaque surface hit (for occlusion) and additively accumulate every
+    // body's glow / corona / photon ring.
+    float orbBodyDist  = -1.0;
+    int   hitBodyIndex = -1;
+    vec3  coronaAcc    = vec3(0.0);
+    if (showOrbBody != 0) {
+        for (int i = 0; i < numOrbBodies; ++i) {
+            if (isOpaqueBody(orbBodyType[i])) {
+                float t = intersectSphereT(rayOrigin, rayDir, orbBodyPos[i], orbBodyRadius[i]);
+                if (t > 0.0 && (orbBodyDist < 0.0 || t < orbBodyDist)) {
+                    orbBodyDist  = t;
+                    hitBodyIndex = i;
+                }
+            }
+            coronaAcc += bodyEmissionSimple(i, rayOrigin, rayDir);
+        }
+    }
+    vec3 orbBodyHitColor = vec3(0.0);
+    if (hitBodyIndex >= 0) {
+        vec3 hp  = rayOrigin + rayDir * orbBodyDist;
+        vec3 nrm = normalize(hp - orbBodyPos[hitBodyIndex]);
+        orbBodyHitColor = shadeBodySimple(orbBodyType[hitBodyIndex], hp, nrm,
+                                          orbBodyPos[hitBodyIndex],
+                                          orbBodyColor[hitBodyIndex]);
     }
 
     // Bend the ray (gravitational lensing approximation)
@@ -523,41 +704,44 @@ void main() {
     vec4 diskHit;
     vec3 blrAcc;
     traceBentRay(rayOrigin, rayDir, blackHolePos, blackHoleRadius, bentPos, bentDir, absorbed, jetAcc, diskHit, blrAcc);
+
+    // ── Base scene colour + its depth along the ray ───────────────────────
+    vec3  color;
+    float sceneDist;
     if (absorbed) {
-        FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
-    }
-
-    vec3 color;
-
-    // Gravitational blueshift factor for background starlight
-    // f_obs / f_∞ = 1/√(1 - Rs/r_obs), blueshift when observer is close to BH
-    // Deep in the gravitational well, distant stars appear as a warped blue halo.
-    float rCamera = length(cameraPos - blackHolePos);
-    float gCamera = sqrt(max(1.0 - blackHoleRadius / rCamera, 0.001));
-    float bgFreqShift = (showBlueshift != 0 && gCamera < 0.98) ? (1.0 / max(gCamera, 0.02)) : 1.0;
-
-    // Scene radius for background sampling, must match what traceBentRay uses.
-    float sceneRadius = max(max(diskOuterRadius, jetLength) * 1.5, 140.0);
-
-    if (diskHit.a > 0.001) {
-        vec3 rel = (bentPos - blackHolePos);
-        vec3 diskCol = applyDoppler(diskHit.rgb, rel, bentDir);
-        // Composite disk over background, scale look-ahead with scene so stars aren't sampled
-        // inside the disk on large configs [FIXED 2026-04-24: was hardcoded 40.0]
-        vec3 bg = sampleBackground(bentPos + bentDir * max(diskOuterRadius * 0.5, 40.0), blackHolePos);
-        if (bgFreqShift > 1.01) bg = applyFrequencyShift(bg, bgFreqShift);
-        color = mix(bg, diskCol, diskHit.a);
+        // Ray fell through the event horizon: black silhouette. Depth is the
+        // straight-ray distance to the horizon so a body in front still wins.
+        color = vec3(0.0);
+        float eh = intersectSphereT(rayOrigin, rayDir, blackHolePos, blackHoleRadius);
+        sceneDist = eh > 0.0 ? eh : length(bentPos - rayOrigin);
     } else {
-        // Sample far along the bent ray for the background.
-        color = sampleBackground(bentPos + bentDir * (sceneRadius * 0.5), blackHolePos);
-        if (bgFreqShift > 1.01) color = applyFrequencyShift(color, bgFreqShift);
+        // Gravitational blueshift factor for background starlight.
+        float rCamera = length(cameraPos - blackHolePos);
+        float gCamera = sqrt(max(1.0 - blackHoleRadius / rCamera, 0.001));
+        float bgFreqShift = (showBlueshift != 0 && gCamera < 0.98) ? (1.0 / max(gCamera, 0.02)) : 1.0;
+        float sceneRadius = max(max(diskOuterRadius, jetLength) * 1.5, 140.0);
+
+        if (diskHit.a > 0.001) {
+            vec3 rel = (bentPos - blackHolePos);
+            vec3 diskCol = applyDoppler(diskHit.rgb, rel, bentDir);
+            vec3 bg = sampleBackground(bentPos + bentDir * max(diskOuterRadius * 0.5, 40.0), blackHolePos);
+            if (bgFreqShift > 1.01) bg = applyFrequencyShift(bg, bgFreqShift);
+            color = mix(bg, diskCol, diskHit.a);
+            sceneDist = length(bentPos - rayOrigin);
+        } else {
+            color = sampleBackground(bentPos + bentDir * (sceneRadius * 0.5), blackHolePos);
+            if (bgFreqShift > 1.01) color = applyFrequencyShift(color, bgFreqShift);
+            sceneDist = 1e9;
+        }
     }
 
-    // Add emissive contributions (jets + BLR volumetric)
-    color += jetAcc + blrAcc;
+    // ── Opaque orbiting body occludes the scene when it is nearer ─────────
+    if (orbBodyDist > 0.0 && orbBodyDist < sceneDist) {
+        color = orbBodyHitColor;
+    }
 
-    // Photon ring handled by ray marching; no screen-space rim needed
+    // ── Emissive layers on top (jets, BLR, body coronae / photon rings) ───
+    color += jetAcc + blrAcc + coronaAcc;
 
     FragColor = vec4(color, 1.0);
 }

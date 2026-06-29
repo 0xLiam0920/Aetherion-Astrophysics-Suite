@@ -1,4 +1,4 @@
-#include "shader_utils.hpp"
+#include "bh3d_shaderutilities.hpp"
 
 // If something in here is returning 0, the shader crapped itself.
 // Good luck.

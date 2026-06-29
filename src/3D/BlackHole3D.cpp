@@ -140,6 +140,7 @@ int main(int argc, char* argv[]) {
                 // which the user expects to always work.
                 state.keys.onKeyPressed(kp->code);
                 const bool isToggle = (kp->code == state.actionKeys.nextProfile)
+                                   || (kp->code == state.actionKeys.openMergerMenu)
                                    || (kp->code == state.actionKeys.releaseMouse);
                 if (!imGuiKbd || isToggle) {
                     bh3d::onActionKey(state, kp->code);
@@ -201,7 +202,7 @@ int main(int argc, char* argv[]) {
         }
 
         window.display();
-        while (glGetError() != GL_NO_ERROR) {} // Clears out any GL errors during rendering. TODO: Add a flag for better handling (need to log ts)
+        while (glGetError() != GL_NO_ERROR) {} // clears any GL errors that may have been generated 
     }
 
     if (state.useImGuiHud) ImGui::SFML::Shutdown(window);

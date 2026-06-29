@@ -22,7 +22,7 @@ struct GeodesicState { // du du du du Max Verstappen
     }
 };
 
-inline GeodesicState stepNullGeodesic( // I totally did not just find this from stackoverflow... (I did)
+inline GeodesicState stepNullGeodesic( // rewrote this part, inspired off of stackoverflow (original URL deleted)
     const Schwarzschild& bh,
     const GeodesicState& state,
     double dphi)
