@@ -1,0 +1,7 @@
+Source,Target,Type,Category,Required
+blackhole-sim,stdc++fs,external,Library,TRUE
+blackhole-2D,SFML::Graphics,external,Library,TRUE
+blackhole-2D,SFML::Window,external,Library,TRUE
+blackhole-2D,SFML::System,external,Library,TRUE
+blackhole-3D,glm::glm,external,Library,TRUE
+aetherion_imgui,GLEW::GLEW,external,Library,TRUE

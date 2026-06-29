@@ -1,0 +1,17 @@
+Node,Type,Category,Description,FilePath
+blackhole-sim,Executable,MainApp,Qt-based launcher and unified application container,src/QT-LAUNCHER/
+blackhole-2D,Executable,SimulationApp,Standalone 2D black hole ray-tracing simulator,src/2D/BlackHole2D.cpp
+blackhole-3D,Executable,SimulationApp,Standalone 3D GPU-accelerated black hole renderer,src/3D/BlackHole3D.cpp
+physics-regression-tests,Executable,Testing,Physics validation test suite,tests/physics_regression_tests.cpp
+aetherion_imgui,Library,ImGUI,Static library bundling Dear ImGui + ImGui-SFML + OpenGL3 backend,external/imgui/
+GLEW::GLEW,External,Library,,N/A
+OpenGL::GL,External,Library,,N/A
+Qt6::Charts,External,Library,,N/A
+Qt6::Core,External,Library,,N/A
+Qt6::Gui,External,Library,,N/A
+Qt6::Network,External,Library,,N/A
+Qt6::Widgets,External,Library,,N/A
+SFML::Graphics,External,Library,,N/A
+SFML::System,External,Library,,N/A
+SFML::Window,External,Library,,N/A
+glm::glm,External,Library,,N/A
