@@ -79,8 +79,8 @@ struct BloomPipeline {
         quad.drawQuad();
 
         /*--------- Pass 3: progressive downsample + separable blur ---------*/
-        // four mip levels of blur. yes, four. no, i will not explain why four specifically.
-        // it just looks right and that's basically the whole field of computer graphics, so deal with it
+        // Four mip levels of blur. Four is a bit arbitrary, but it looks right,
+        // and in real-time graphics "it looks right" is usually the deciding factor.
         blurProg.use();
         GLuint srcTex = thresholdFBO.colorTex;
         for (int mip = 0; mip < NUM_MIPS; ++mip) {
@@ -112,7 +112,7 @@ struct BloomPipeline {
             blurProg.set2f("direction", 0.0f, 1.0f);
             quad.drawQuad();
 
-            // Additional blur passes for larger mips (capped at 2 for performance), your GPU said please.
+            // Additional blur passes for larger mips (capped at 2 to keep it cheap).
             int extraPasses = std::min(mip + 1, 2);
             for (int extra = 0; extra < extraPasses; ++extra) {
                 blurTempFBO[mip].bind();

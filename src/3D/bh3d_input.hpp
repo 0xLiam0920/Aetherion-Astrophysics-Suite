@@ -32,7 +32,7 @@ struct KeyState {
         }
     }
 
-    void onKeyReleased(sf::Keyboard::Key code) { // nobody pressed anything. noted.
+    void onKeyReleased(sf::Keyboard::Key code) {
         switch (code) {
             case sf::Keyboard::Key::W:        w = false;    break;
             case sf::Keyboard::Key::A:        a = false;    break;

@@ -1,10 +1,11 @@
 #pragma once
 // ============================================================
-// simulation_state.hpp: Pure-data snapshot of physics state
+// bh3d_simulationstates.hpp  (header still says simulation_state,
+// never got around to renaming it): plain-data physics snapshot.
 //
-// This struct is the ONLY bridge between the physics layer
-// (camera_controller, config) and the rendering layer (shaders,
-// bloom, HUD).  Neither side includes the other's headers.
+// It's the hand-off point between the physics side (camera, config)
+// and the render side (shaders, bloom, HUD), so neither one has to
+// include the other's headers.
 // ============================================================
 
 #include <glm/glm.hpp>
@@ -68,11 +69,11 @@ struct PhysicsSnapshot {
     bool                   orbBodyEnabled;
 
     /*--------- Large-scale structures ---------*/
-    bool hostGalaxyEnabled; // the galaxy itself, wowie :))))))))
-    bool labEnabled;        // broad-line region label overlay, not a literal lab (unfortunately)
-    bool cgmEnabled;        // circumgalactic medium, basically the galaxy's personal bubble of gas nobody talks about
+    bool hostGalaxyEnabled; // the host galaxy itself
+    bool labEnabled;        // Lyman-alpha Blob overlay
+    bool cgmEnabled;        // circumgalactic medium (diffuse gas halo around the galaxy)
 
-    /*--------- Render settings (more steps = prettier, slower, warmer laptop) ---------*/
+    /*--------- Render settings (more steps = higher quality, slower) ---------*/
     int maxSteps;
 
     /*--------- Profile metadata (for HUD) ---------*/
@@ -90,7 +91,6 @@ struct PhysicsSnapshot {
 
     /*--------- Performance ---------*/
     float fps; // TODO: expose frame time (ms) alongside FPS for more useful profiling
-    // pro tip: if this drops below 10, you probably enabled every feature at once. Best of luck with that.
 
     /*--------- Tidal disruption event (3D overlay) ---------*/
     bool                   tdeActive      = false;
@@ -118,4 +118,22 @@ struct PhysicsSnapshot {
     float                  mergerSepRs    = 0.0f;   // current separation [Rs] (HUD readout)
     float                  mergerRemnantAlpha = 0.0f; // 0..1 "remnant" label fade
     std::vector<glm::vec3> mergerTrail;             // secondary death-spiral trail (world, oldest→newest)
+
+    // Disk / spin / jet identity of the inspiralling secondary black hole, so it
+    // looks the same as it would if it were the standalone primary. The sizes
+    // here are ratios of the secondary's shader radius (orbBodyRadius), not
+    // absolute units. Only read when secBHActive is set.
+    // (secBH = secondary black hole; kept short so the uniform names line up.)
+    bool                   secBHActive     = false;
+    glm::vec3              secBHDiskNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+    float                  secBHSpin       = 0.0f;
+    float                  secBHDiskInner  = 2.2f;   // × secondary radius
+    float                  secBHDiskOuter  = 12.0f;  // × secondary radius
+    float                  secBHDiskStrength = 0.0f; // 0 = no disk
+    glm::vec3              secBHColorInner = glm::vec3(1.0f, 0.85f, 0.55f);
+    glm::vec3              secBHColorOuter = glm::vec3(0.9f, 0.45f, 0.20f);
+    bool                   secBHShowJets   = false;
+    glm::vec3              secBHJetColor   = glm::vec3(0.4f, 0.7f, 1.0f);
+    float                  secBHJetRadius  = 0.15f;  // × secondary radius
+    float                  secBHJetLength  = 10.0f;  // × secondary radius
 };

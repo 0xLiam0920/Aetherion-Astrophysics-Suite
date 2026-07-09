@@ -35,8 +35,8 @@ public:
         precession_ += precessionRate_ * scaledDt;
 
         // Solve Kepler's equation: M = E − e sin(E) via Newton–Raphson
-        // with convergence early-out.
-        // Kepler himself solved this by hand in 1609. We have a computer and it's still annoying.
+        // with convergence early-out. (Kepler solved this by hand in 1609;
+        // we let the iteration do the work.)
         const float e = cfg_.eccentricity;
         float E = meanAnomaly_; // initial guess
         for (int k = 0; k < cfg_.keplerIterMax; ++k) {

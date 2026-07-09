@@ -1,7 +1,7 @@
 #include "bh3d_shaderutilities.hpp"
 
-// If something in here is returning 0, the shader crapped itself.
-// Good luck.
+// Anything here that returns 0 means a shader failed to compile or link;
+// check the logged output for the driver's error message.
 
 #include <fstream>
 #include <iostream>

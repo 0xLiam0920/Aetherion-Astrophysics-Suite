@@ -8,7 +8,7 @@
 #include <string>
 
 
-// ah yes, NEATNESS. I love organization, when it works (hours wasted trying to fix what was actually just a semicolon typo and a missing header: 2)
+// Centralized tuning constants so the simulation's magic numbers all live in one place.
 
 /*--------- Window defaults ---------*/
 namespace cfg {
@@ -118,10 +118,8 @@ inline BloomConfig cinematicBloom() {
     bc.mipWeights[2] = 0.70f;
     bc.mipWeights[3] = 0.85f;
     bc.exposure    = 1.15f;
-    return bc; // houston we have a problem: returning a struct by value causes a copy, which is bad for performance. 
-    // but if I return by reference I have to make it static or something, which is gross and also not thread safe. 
-    // so here we are, returning by value and hoping for NRVO to kick in and elide the copy. if it doesn't, well, 
-    // it's just a few floats, so maybe it's not the end of the world. but still, this is pretty unideal
+    return bc; // Returned by value, relying on NRVO to elide the copy. It's only a
+               // handful of floats, so the cost is negligible either way.
 }
 
 // Default configuration (TON 618 scenario)

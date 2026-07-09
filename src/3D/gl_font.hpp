@@ -45,7 +45,7 @@ public:
         // Measure max glyph cell size
         float maxAdvance = 0;
         float maxHeight  = 0;
-        for (int c = 32; c < 127; ++c) { // limitations of the ASCII range 
+        for (int c = 32; c < 127; ++c) { // printable ASCII range only
             const sf::Glyph& g = font.getGlyph(c, charSize, false);
             maxAdvance = std::max(maxAdvance, g.advance);
             float h = (float)(g.bounds.position.y + g.bounds.size.y);
@@ -107,7 +107,7 @@ public:
 
             auto imgSize = fontImg.getSize();
 
-            for (int py = 0; py < srcH; ++py) { // ok so this is a bit messy but it works: 
+            for (int py = 0; py < srcH; ++py) { // Copy the glyph pixels, clamping to both source and destination bounds:
                 for (int px = 0; px < srcW; ++px) { // we have to be careful about bounds both in the source font 
                     int sx = srcX + px;
                     int sy = srcY + py; // texture and in our destination atlas, since some glyphs (like space) have zero-size textures and some (like 'g')
@@ -181,10 +181,10 @@ public:
         }
 
         locScreenSize_ = glGetUniformLocation(progId_, "uScreenSize");
-        locAtlas_       = glGetUniformLocation(progId_, "uAtlas"); // all this just for some text rendering, what have I become
+        locAtlas_       = glGetUniformLocation(progId_, "uAtlas");
 
         // Create GL texture (after shader succeeds, so no leak on failure)
-        glGenTextures(1, &texId_); // yandere dev ahh optimisation
+        glGenTextures(1, &texId_); // upload the baked glyph atlas to the GPU
         glBindTexture(GL_TEXTURE_2D, texId_);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, atlasW, atlasH, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, atlas.data());

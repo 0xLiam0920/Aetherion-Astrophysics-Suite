@@ -13,7 +13,7 @@
 
 // ────────────────────────────────────────────────────────────
 // GLShader, owns a single GL shader object
-// (it's just a number but we guard it with our lives)
+// (just a GL handle, but RAII keeps its lifetime tidy)
 // ────────────────────────────────────────────────────────────
 class GLShader {
 public:
@@ -42,7 +42,7 @@ public:
             glGetShaderiv(id_, GL_INFO_LOG_LENGTH, &len);
             std::vector<char> log(len);
             glGetShaderInfoLog(id_, len, nullptr, log.data());
-            std::cerr << "Shader compile error:\n" << log.data() << std::endl; // congrats, you broke GLSL
+            std::cerr << "Shader compile error:\n" << log.data() << std::endl;
             destroy();
             return false;
         }

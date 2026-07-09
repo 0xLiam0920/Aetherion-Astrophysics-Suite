@@ -61,7 +61,7 @@ public:
 
     // Find the first existing file matching `filename` across search paths.
     // Returns the full relative path, or empty string if not found.
-    // ("not found" means you've moved an asset again and forgot to update CMake. you know who you are.)
+    // (An empty result usually means the asset isn't on any search path yet.)
     std::string find(const std::string& filename) const {
         for (const auto& dir : searchPaths_) {
             std::string candidate = dir + "/" + filename;

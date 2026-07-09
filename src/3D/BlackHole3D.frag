@@ -50,6 +50,22 @@ uniform int   orbBodyType[MAX_ORB_BODIES];   // BODY_* archetype
 uniform int   numOrbBodies;                  // active count (<= MAX_ORB_BODIES)
 uniform int   showOrbBody;                   // master toggle
 
+// Inspiralling secondary black hole's own look (accretion disk / spin / jets)
+// so a merger companion matches its standalone profile. The disk and jet sizes
+// below are ratios of the secondary's radius, scaled here.
+uniform int   secBHActive;                   // 1 -> draw the rich secondary disk
+uniform vec3  secBHDiskNormal;               // Secondary disk-plane normal (unit)
+uniform float secBHSpin;                     // a* -> photon-ring tightness
+uniform float secBHDiskInner;                // Inner disk radius x secondary radius
+uniform float secBHDiskOuter;                // Outer disk radius x secondary radius
+uniform float secBHDiskStrength;             // Overall disk brightness (0 = none)
+uniform vec3  secBHColorInner;               // Precomputed inner disk colour
+uniform vec3  secBHColorOuter;               // Precomputed outer disk colour
+uniform int   secBHShowJets;                 // 1 -> draw relativistic jets
+uniform vec3  secBHJetColor;                 // Jet colour
+uniform float secBHJetRadius;                // Jet radius x secondary radius
+uniform float secBHJetLength;                // Jet length x secondary radius
+
 // Body archetypes — must mirror profiles::GalaxyBody3DType, with type 7 the
 // transient secondary black hole injected during a merger.
 #define BODY_STAR      0
@@ -607,6 +623,93 @@ vec3 shadeBodySimple(int type, vec3 hitPos, vec3 normal, vec3 center, vec3 col) 
     return photo * limb * granMod * (type == BODY_COMPANION ? 5.0 : 6.0) * grav;
 }
 
+// Analytic accretion disk + photon ring + optional jets for the inspiralling
+// secondary black hole, giving it the colour / size / spin / jet identity of
+// its standalone profile counterpart (fast-shader port of the photoreal
+// version). The disk is a tilted billboard annulus, Doppler-shaded.
+vec3 secondaryBHEmissionSimple(vec3 ro, vec3 rd, vec3 c, float r) {
+    vec3 result = vec3(0.0);
+    vec3 n = normalize(secBHDiskNormal);
+
+    float sClosest = max(dot(c - ro, rd), 0.0);
+    float dPerp    = length((ro + rd * sClosest) - c);
+
+    // Accretion disk (tilted annulus).
+    if (secBHDiskStrength > 0.0) {
+        float rIn  = r * secBHDiskInner;
+        float rOut = r * secBHDiskOuter;
+        float denom = dot(rd, n);
+        if (abs(denom) > 1e-4) {
+            float tHit = dot(c - ro, n) / denom;
+            if (tHit > 0.0) {
+                vec3  rel = (ro + rd * tHit) - c;
+                float rad = length(rel);
+                if (rad > rIn * 0.55 && rad < rOut) {
+                    float tRad   = clamp((rad - rIn) / max(rOut - rIn, 1e-3), 0.0, 1.0);
+                    vec3  u      = normalize(rel - n * dot(rel, n));
+                    vec3  velDir = normalize(cross(n, u));
+                    vec3  col    = mix(secBHColorOuter, secBHColorInner, pow(1.0 - tRad, 0.5));
+                    float v      = clamp(sqrt(0.5 * r / max(rad, rIn)), 0.0, 0.7);
+                    float cth    = dot(velDir, -rd);
+                    float gam    = 1.0 / sqrt(max(1.0 - v * v, 0.01));
+                    float D      = 1.0 / (gam * (1.0 - v * cth));
+                    if (showDoppler == 0) D = 1.0;
+                    D = clamp(D, 0.35, 3.0);
+                    col = mix(col, vec3(0.60, 0.75, 1.0), clamp((D - 1.0) * 0.5, 0.0, 0.5));
+                    col = mix(col, vec3(0.90, 0.35, 0.15), clamp((1.0 - D) * 0.6, 0.0, 0.5));
+                    float ang    = atan(dot(rel, velDir), dot(rel, u));
+                    float omega  = 1.4 * pow(max(rad, rIn), -1.5);
+                    float spiral = 0.6 + 0.4 * pow(0.5 + 0.5 * sin((ang + uTime * omega) * 2.0), 2.0);
+                    float bright = 0.35 + 0.65 * pow(1.0 - tRad, 1.3);
+                    float edge   = smoothstep(rIn * 0.55, rIn * 0.85, rad)
+                                 * smoothstep(rOut, rOut * 0.80, rad);
+                    float shadowGate = smoothstep(r * 0.5, r * 0.82, dPerp);
+                    result += col * (bright * pow(D, 2.5) * spiral * edge
+                                   * shadowGate * secBHDiskStrength * 3.0);
+                }
+            }
+        }
+    }
+
+    // Photon ring + rim glow.
+    {
+        float outside = smoothstep(r * 0.82, r * 1.0, dPerp);
+        float ringR   = r * mix(1.14, 1.02, clamp(secBHSpin, 0.0, 1.0));
+        float dR      = dPerp - ringR;
+        float ring    = exp(-dR * dR / max(r * r * 0.0196, EPSILON));  // (0.14r)^2
+        float glow    = exp(-max(dPerp - r, 0.0) / (r * 0.9));
+        vec3  ringCol = mix(vec3(1.0, 0.84, 0.52), secBHColorInner, 0.5);
+        result += (ringCol * ring * 3.2 + ringCol * glow * 0.35) * outside;
+    }
+
+    // Relativistic jets (two opposed cones along the disk normal).
+    if (secBHShowJets == 1) {
+        float jLen = r * secBHJetLength;
+        float jRad = r * secBHJetRadius;
+        for (int sgn = 0; sgn < 2; ++sgn) {
+            vec3  axis = (sgn == 0) ? n : -n;
+            vec3  w    = ro - c;
+            float a = dot(rd, rd);
+            float b = dot(rd, axis);
+            float e = dot(axis, axis);
+            float d = dot(rd, w);
+            float f = dot(axis, w);
+            float denomJ = a * e - b * b;
+            if (abs(denomJ) > 1e-4) {
+                float tc = (b * f - e * d) / denomJ;
+                float sc = (a * f - b * d) / denomJ;
+                if (tc > 0.0 && sc > 0.0 && sc < jLen) {
+                    float dAx   = length((ro + rd * tc) - (c + axis * sc));
+                    float widen = jRad * (0.5 + 0.8 * (sc / jLen));
+                    float prof  = exp(-dAx * dAx / (2.0 * widen * widen));
+                    result += secBHJetColor * (prof * (1.0 - sc / jLen) * 2.0);
+                }
+            }
+        }
+    }
+    return result;
+}
+
 // Additive emission for every body: stellar coronae, volumetric clouds, and
 // the gold photon ring of the inspiralling secondary black hole.
 vec3 bodyEmissionSimple(int idx, vec3 ro, vec3 rd) {
@@ -621,6 +724,10 @@ vec3 bodyEmissionSimple(int idx, vec3 ro, vec3 rd) {
     float dPerp    = length(closestP - c);
 
     if (type == BODY_BLACKHOLE) {
+        // Linked merger secondary: render with its profile's disk / spin / jets.
+        if (secBHActive == 1) {
+            return secondaryBHEmissionSimple(ro, rd, c, r);
+        }
         // Photon ring + warm glow + cool halo, gated to the outside of the disc.
         float outside = smoothstep(r * 0.82, r * 1.0, dPerp);
         float dRing   = dPerp - r * 1.10;

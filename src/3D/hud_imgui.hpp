@@ -313,12 +313,17 @@ inline bool drawMergerMenu(bh3d::State& s) {
                                   ImVec2(0, 0))) {
                 m.selected = i;
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                    bh3d::startMerger3D(s, p.kind, p.massSolar);
+                    bh3d::startMerger3D(s, p.kind, p.massSolar, p.profile);
                     m.open = false;
                 }
             }
+            // Keep the keyboard-selected row visible in the scrollable list.
+            if (selected && m.scrollToSelected) {
+                ImGui::SetScrollHereY(0.5f);
+            }
             ImGui::PopID();
         }
+        m.scrollToSelected = false;
         ImGui::EndChild();
 
         ImGui::Spacing();
@@ -361,14 +366,16 @@ inline bool drawMergerMenu(bh3d::State& s) {
     if (m.open) {
         if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) {
             m.selected = std::max(0, m.selected - 1);
+            m.scrollToSelected = true;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) {
             m.selected = std::min(N - 1, m.selected + 1);
+            m.scrollToSelected = true;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
             ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
             const auto& p = MERGER_SECONDARY_3D_PRESETS[m.selected];
-            bh3d::startMerger3D(s, p.kind, p.massSolar);
+            bh3d::startMerger3D(s, p.kind, p.massSolar, p.profile);
             m.open = false;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {

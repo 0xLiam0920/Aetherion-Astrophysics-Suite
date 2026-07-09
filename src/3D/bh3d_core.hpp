@@ -1,7 +1,7 @@
 // ============================================================
 // bh3d_core.hpp
 // ============================================================
-// Single source of truth for the 3D black-hole simulation.
+// The shared core of the 3D black-hole simulation.
 //
 // This header consolidates everything that used to be duplicated between
 //   src/3D/BlackHole3D.cpp                    (standalone window)
@@ -12,6 +12,7 @@
 // rendering, HUD, and input handling here.
 //
 // The module is header-only with `inline` storage to avoid touching CMake.
+// I might wanna split this into multiple files later, it's a bit monolithic.
 // ============================================================
 #pragma once
 
@@ -53,8 +54,8 @@
 #include <unordered_map>
 #include <vector>
 
-namespace bh3d { // FIXME: This workspace is a hot mess. In future I should probably clean this up and consider splitting it into separate files. This is a linker file for the core
-                // functionality, not a heap for whatever. 
+namespace bh3d { // TODO: this header has grown large; consider splitting it into
+                // separate files as the core functionality keeps expanding.
 /*
 Planned continuation of split:
 - bh3d_core.hpp: Core simulation state, physics, and rendering logic (this file)
@@ -332,6 +333,12 @@ struct SceneUniforms {
     GLint diskPeakTemp, diskDisplayTempInner, diskDisplayTempOuter;
     GLint diskSatBoostInner, diskSatBoostOuter;
 
+    // Inspiralling merger BH identities
+    GLint secBHActive, secBHDiskNormal, secBHSpin;
+    GLint secBHDiskInner, secBHDiskOuter, secBHDiskStrength;
+    GLint secBHColorInner, secBHColorOuter;
+    GLint secBHShowJets, secBHJetColor, secBHJetRadius, secBHJetLength;
+
     static SceneUniforms lookup(GLProgram& prog) {
         SceneUniforms u;
         u.resolution           = prog.uniform("resolution");
@@ -384,6 +391,18 @@ struct SceneUniforms {
         u.diskDisplayTempOuter = prog.uniform("diskDisplayTempOuter");
         u.diskSatBoostInner    = prog.uniform("diskSatBoostInner");
         u.diskSatBoostOuter    = prog.uniform("diskSatBoostOuter");
+        u.secBHActive          = prog.uniform("secBHActive");
+        u.secBHDiskNormal      = prog.uniform("secBHDiskNormal");
+        u.secBHSpin            = prog.uniform("secBHSpin");
+        u.secBHDiskInner       = prog.uniform("secBHDiskInner");
+        u.secBHDiskOuter       = prog.uniform("secBHDiskOuter");
+        u.secBHDiskStrength    = prog.uniform("secBHDiskStrength");
+        u.secBHColorInner      = prog.uniform("secBHColorInner");
+        u.secBHColorOuter      = prog.uniform("secBHColorOuter");
+        u.secBHShowJets        = prog.uniform("secBHShowJets");
+        u.secBHJetColor        = prog.uniform("secBHJetColor");
+        u.secBHJetRadius       = prog.uniform("secBHJetRadius");
+        u.secBHJetLength       = prog.uniform("secBHJetLength");
         return u;
     }
 };
@@ -412,6 +431,18 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glUniform1f(u.diskDisplayTempOuter,  snap.diskDisplayTempOuter);
     glUniform1f(u.diskSatBoostInner,     snap.diskSatBoostInner);
     glUniform1f(u.diskSatBoostOuter,     snap.diskSatBoostOuter);
+    glUniform1i(u.secBHActive,           snap.secBHActive ? 1 : 0);
+    glUniform3f(u.secBHDiskNormal,       snap.secBHDiskNormal.x, snap.secBHDiskNormal.y, snap.secBHDiskNormal.z);
+    glUniform1f(u.secBHSpin,             snap.secBHSpin);
+    glUniform1f(u.secBHDiskInner,        snap.secBHDiskInner);
+    glUniform1f(u.secBHDiskOuter,        snap.secBHDiskOuter);
+    glUniform1f(u.secBHDiskStrength,     snap.secBHDiskStrength);
+    glUniform3f(u.secBHColorInner,       snap.secBHColorInner.x, snap.secBHColorInner.y, snap.secBHColorInner.z);
+    glUniform3f(u.secBHColorOuter,       snap.secBHColorOuter.x, snap.secBHColorOuter.y, snap.secBHColorOuter.z);
+    glUniform1i(u.secBHShowJets,         snap.secBHShowJets ? 1 : 0);
+    glUniform3f(u.secBHJetColor,         snap.secBHJetColor.x, snap.secBHJetColor.y, snap.secBHJetColor.z);
+    glUniform1f(u.secBHJetRadius,        snap.secBHJetRadius);
+    glUniform1f(u.secBHJetLength,        snap.secBHJetLength);
     glUniform1f(u.spinParameter,         snap.bhSpin);
     glUniform1f(u.jetRadius,             snap.jetRadius);
     glUniform1f(u.jetLength,             snap.jetLength);
@@ -614,6 +645,27 @@ struct State {
         double q    = 0.5;     // m2 / (m1 + m2)
         float  secRadius = 1.0f; // secondary visual radius [Rs]
 
+        // ── Secondary visual identity ────────────────────────────────────
+        // Grabbed when the merger starts so the incoming secondary looks the
+        // same as it would as a standalone primary (disk / spin / jets), as long
+        // as the preset points at one. The disk/jet sizes are ratios of secRadius
+        // applied in the shader, so they scale with the secondary no matter how
+        // big it ends up on screen.
+        struct SecVisual {
+            bool  hasDisk = false;   // draw an accretion disk around the secondary
+            bool  hasJets = false;   // draw relativistic jets
+            float spin    = 0.0f;    // a* → photon-ring tightness
+            float diskInnerRatio = 2.2f;   // × secRadius
+            float diskOuterRatio = 12.0f;  // × secRadius
+            float diskStrength   = 0.0f;    // overall disk brightness (0 = none)
+            glm::vec3 colorInner = glm::vec3(1.0f, 0.85f, 0.55f); // inner disk RGB
+            glm::vec3 colorOuter = glm::vec3(0.9f, 0.45f, 0.20f); // outer disk RGB
+            glm::vec3 jetColor   = glm::vec3(0.4f, 0.7f, 1.0f);
+            float jetRadiusRatio = 0.15f;  // × secRadius
+            float jetLengthRatio = 10.0f;  // × secRadius
+            glm::vec3 diskNormal = glm::vec3(0.0f, 1.0f, 0.0f);   // disk-plane normal
+        } secVis;
+
         // Coalescence + remnant growth.
         float flashTimer    = 0.0f;
         float growthT       = 0.0f;  // 0..1 growth animation
@@ -660,6 +712,7 @@ struct State {
     struct MergerMenuState {
         bool  open     = false;
         int   selected = 0;
+        bool  scrollToSelected = false; // request keyboard-driven auto-scroll
         float t        = 0.0f;   // fade/slide 0..1
         static constexpr float transitionSec = 0.18f;
     } mergerMenu;
@@ -816,11 +869,40 @@ inline glm::vec3 mergerKindColor(MergerSecondaryKind3D k) {
     return glm::vec3(1.0f);
 }
 
+// Approximate blackbody colour (Tanner Helland algorithm), mirroring the
+// shader's kelvinToRGB so a merger secondary's disk colours can be precomputed
+// on the CPU and shipped as uniforms (the fast shader has no kelvinToRGB).
+inline glm::vec3 bh3dKelvinToRGB(float kelvin) {
+    float t = std::clamp(kelvin, 1000.0f, 40000.0f) / 100.0f;
+    float r, g, b;
+    if (t <= 66.0f) {
+        r = 255.0f;
+        g = std::clamp(99.4708025861f * std::log(std::max(t, 1.0f)) - 161.1195681661f, 0.0f, 255.0f);
+    } else {
+        r = std::clamp(329.698727446f * std::pow(t - 60.0f, -0.1332047592f), 0.0f, 255.0f);
+        g = std::clamp(288.1221695283f * std::pow(t - 60.0f, -0.0755148492f), 0.0f, 255.0f);
+    }
+    if (t >= 66.0f)      b = 255.0f;
+    else if (t <= 19.0f) b = 0.0f;
+    else                 b = std::clamp(138.5177312231f * std::log(t - 10.0f) - 305.0447927307f, 0.0f, 255.0f);
+    return glm::vec3(r, g, b) / 255.0f;
+}
+
 // Begin a merger: place the secondary at the outer separation and seed the
 // inspiral. The cinematic time-scale choice persists across re-triggers. Do note that the secondary mass is NOT clamped, 
 //meaning that something like a 100 Msun secondary can be merged into a 10 Msun primary, which is not physically realistic but is visually interesting.
-inline void startMerger3D(State& s, MergerSecondaryKind3D kind, double massSolar) { 
+inline void startMerger3D(State& s, MergerSecondaryKind3D kind, double massSolar,
+                          const char* secProfileName = nullptr) { 
     const auto prevScale = s.merger.timeScale;
+    // Undo any remnant growth left by a previous, already-coalesced merger so
+    // repeated mergers grow from the profile baseline instead of compounding
+    // (1.8× per merger). A profile switch already resets merger + config, so
+    // this only matters for back-to-back mergers on the same profile.
+    if (s.merger.merged && s.merger.growthT > 0.0f) {
+        s.config.blackHole.radius = s.merger.preRadius;
+        s.config.disk.innerRadius = s.merger.preDiskInner;
+        s.config.disk.outerRadius = s.merger.preDiskOuter;
+    }
     s.merger = State::MergerState3D{};
     s.merger.timeScale = prevScale;
 
@@ -850,6 +932,62 @@ inline void startMerger3D(State& s, MergerSecondaryKind3D kind, double massSolar
         case MergerSecondaryKind3D::Pulsar:     m.secRadius = 0.42f * m.bhR0; break;
         case MergerSecondaryKind3D::WhiteDwarf: m.secRadius = 0.52f * m.bhR0; break;
         case MergerSecondaryKind3D::Star:       m.secRadius = 0.85f * m.bhR0; break;
+    }
+
+    // ── Secondary visual identity ────────────────────────────────────────
+    // Hand a black-hole secondary the same disk / spin / jet look it would have
+    // as a standalone primary (when the preset points at one). The other kinds
+    // (NS/pulsar/star/WD) just keep their own surface shading and don't get a
+    // disk.
+    m.secVis = State::MergerState3D::SecVisual{};
+    if (kind == MergerSecondaryKind3D::BlackHole) {
+        auto& v = m.secVis;
+        // Tilt the secondary's disk so it reads as a 3D object rather than a
+        // face-on ring: normal derived from the inspiral inclination.
+        {
+            float ci = std::cos(m.incl), si = std::sin(m.incl);
+            v.diskNormal = glm::normalize(glm::vec3(0.18f, ci, si * 0.85f));
+        }
+        const ::BlackHoleProfile* prof =
+            secProfileName ? profiles::findProfileByName(secProfileName) : nullptr;
+        if (prof) {
+            const auto& c = prof->config;
+            float pR0 = std::max(0.05f, c.blackHole.radius);
+            v.hasDisk        = true;
+            v.spin           = c.blackHole.spinParameter;
+            v.diskInnerRatio = std::clamp(c.disk.innerRadius / pR0, 1.4f, 4.0f);
+            v.diskOuterRatio = std::clamp(c.disk.outerRadius / pR0, 6.0f, 26.0f);
+            v.colorInner     = bh3dKelvinToRGB(c.disk.displayTempInner);
+            v.colorOuter     = bh3dKelvinToRGB(c.disk.displayTempOuter);
+            // Saturation boost baked into the precomputed colours so the shader
+            // stays simple.
+            auto boost = [](glm::vec3 col, float sat) {
+                float lum = glm::dot(col, glm::vec3(0.2126f, 0.7152f, 0.0722f));
+                return glm::max(glm::mix(glm::vec3(lum), col, sat), glm::vec3(0.0f));
+            };
+            v.colorInner = boost(v.colorInner, c.disk.saturationBoostInner);
+            v.colorOuter = boost(v.colorOuter, c.disk.saturationBoostOuter);
+            v.diskStrength   = 1.0f;
+            v.hasJets        = prof->defaultJets;
+            v.jetColor       = c.jet.color;
+            v.jetRadiusRatio = std::clamp(c.jet.radius / pR0, 0.05f, 0.6f);
+            v.jetLengthRatio = std::clamp(c.jet.length / pR0, 4.0f, 22.0f);
+        } else {
+            // Generic archetype with no dedicated profile: a tasteful warm
+            // disk derived from mass (heavier → cooler/redder, quasar-like
+            // secondaries stay hot). No jets.
+            float logM = (float)std::log10(std::max(1e-6, massSolar));
+            float tInner = (float)std::clamp(9000.0 - logM * 600.0, 3200.0, 9000.0);
+            float tOuter = tInner * 0.42f;
+            v.hasDisk        = true;
+            v.spin           = 0.5f;
+            v.diskInnerRatio = 2.2f;
+            v.diskOuterRatio = 12.0f;
+            v.colorInner     = bh3dKelvinToRGB(tInner);
+            v.colorOuter     = bh3dKelvinToRGB(tOuter);
+            v.diskStrength   = 0.85f;
+            v.hasJets        = false;
+        }
     }
 
     s.mergerMenu.open = false;
@@ -954,27 +1092,44 @@ inline void updateMerger3D(State& s, float dt) {
 
     // Merger runs on its own cinematic clock, independent of animSpeed, so the
     // choreography is actually predictable regardless of the global time dial. 
-    const float mdt = dt * m.timeScaleFactor();
+    // Clamp the frame delta so a stutter can't make the explicit integrator
+    // overshoot the merge, and so the choreography stays bounded on slow frames.
+    const float mdt = std::min(dt * m.timeScaleFactor(), 0.10f);
     const glm::vec3 bary = s.config.blackHole.position;
 
     if (!m.merged) {
         // ── Inspiral ────────────────────────────────────────────────
-        const float mergeSep = State::MergerState3D::MERGE_SEP_RS * m.bhR0;
+        // Coalesce when the horizons meet, not at a fixed separation, so a
+        // large / heavy secondary doesn't visibly interpenetrate the primary.
+        const float mergeSep = std::max(State::MergerState3D::MERGE_SEP_RS * m.bhR0,
+                                        (m.bhR0 + m.secRadius) * 1.05f);
         // Symmetric-mass-ratio factor (η/0.25), floored so even extreme
         // ratios still coalesce in a watchable time (visual, not EMRI).
-        float eta4     = 4.0f * (float)(m.q * (1.0 - m.q));
-        float etaScale = std::clamp(eta4, 0.2f, 1.0f);
+        const float eta4     = 4.0f * (float)(m.q * (1.0 - m.q));
+        const float etaScale = std::clamp(eta4, 0.2f, 1.0f);
 
-        float r3 = m.r * m.r * m.r;
-        m.r  -= (State::MergerState3D::INSPIRAL_K * etaScale * mdt) / std::max(r3, 1e-3f);
-        m.phi += (State::MergerState3D::OMEGA_K * mdt) / std::pow(std::max(m.r, 0.2f), 1.5f);
+        // Integrate in units of the primary radius (ρ = r / bhR0) so the inspiral
+        // rate is independent of the primary's size, and advance in bounded
+        // sub-steps so the trajectory is frame-rate independent.
+        const float invR0    = 1.0f / std::max(m.bhR0, 1e-3f);
+        const float rhoMerge = mergeSep * invR0;
+        float       rho      = m.r * invR0;
+        const int   nSub     = std::clamp((int)std::ceil(mdt / 0.01f), 1, 32);
+        const float sub      = mdt / (float)nSub;
+        bool        reached  = false;
+        for (int k = 0; k < nSub; ++k) {
+            const float r3 = rho * rho * rho;
+            rho   -= (State::MergerState3D::INSPIRAL_K * etaScale * sub) / std::max(r3, 1e-3f);
+            m.phi += (State::MergerState3D::OMEGA_K * sub) / std::pow(std::max(rho, 0.2f), 1.5f);
+            if (rho <= rhoMerge) { rho = rhoMerge; reached = true; break; }
+        }
+        m.r = rho * m.bhR0;
 
         m.trail.push_back(m.secondaryWorld(bary));
         while (m.trail.size() > State::MergerState3D::MAX_TRAIL) m.trail.pop_front();
 
-        if (m.r <= mergeSep) {
+        if (reached) {
             // ── Coalescence trigger ─────────────────────────────────
-            m.r            = mergeSep;
             m.merged       = true;
             m.flashTimer   = State::MergerState3D::FLASH_DURATION;
             m.ringActive   = true;
@@ -1012,8 +1167,13 @@ inline void updateMerger3D(State& s, float dt) {
         }
         if (m.remnantTimer > 0.0f) m.remnantTimer -= mdt;
 
-        // Dissolve the death-spiral trail after coalescence.
-        if (!m.trail.empty()) m.trail.pop_front();
+        // Dissolve the death-spiral trail after coalescence, dt-scaled so the
+        // fade rate is independent of frame rate and pacing.
+        if (!m.trail.empty()) {
+            const float frac  = std::clamp(mdt / 0.5f, 0.0f, 1.0f);
+            const size_t drop = (size_t)std::ceil((float)m.trail.size() * frac);
+            for (size_t k = 0; k < drop && !m.trail.empty(); ++k) m.trail.pop_front();
+        }
 
         if (m.flashTimer <= 0.0f && !m.ringActive && m.remnantTimer <= 0.0f) {
             m.active = false;
@@ -1040,8 +1200,11 @@ inline void applyMergerInfluence(State& s, float dt) {
     const float mu2  = std::clamp(q / std::max(1e-3f, 1.0f - q), 0.02f, 8.0f);
     const float capR = std::max(m.secRadius * 0.9f, m.bhR0 * 0.4f);
     const float maxOffset = 8.0f * m.bhR0;
-    constexpr float PERTURB_K = 1.6f;
-    const float infl = dt * std::max(0.05f, s.animSpeed);
+    // Perturbation shares the merger's cinematic clock (not the global animation
+    // speed) so a body's total orbit-bending is the same regardless of pacing,
+    // and can't blow up quadratically when animSpeed is high.
+    constexpr float PERTURB_K = 4.8f;
+    const float infl = dt * std::max(0.05f, m.timeScaleFactor());
     // A heavier secondary tidally reaches farther.
     const float massReach = std::clamp(0.7f + 0.5f * mu2, 0.7f, 3.0f);
 
@@ -1126,13 +1289,15 @@ inline void tickPhysics(State& s, float dt) {
     // genuinely accreting (future feature). Detection loop intentionally disabled.
     {
 
-        // Advance existing TDE particles
+        // Advance existing TDE particles. While a merger is running they share
+        // its cinematic clock so ejecta stay in sync with the flash / ring.
         if (s.tde3D.active) {
+            const float tdt = s.merger.active ? dt * s.merger.timeScaleFactor() : dt;
             if (s.tde3D.flashTimer > 0.0f)
-                s.tde3D.flashTimer -= dt;
+                s.tde3D.flashTimer -= tdt;
 
             for (size_t i = 0; i < s.tde3D.debrisPos.size(); ) {
-                s.tde3D.debrisLife[i] -= dt;
+                s.tde3D.debrisLife[i] -= tdt;
                 if (s.tde3D.debrisLife[i] <= 0.0f) {
                     // Swap-erase
                     size_t last = s.tde3D.debrisPos.size() - 1;
@@ -1147,7 +1312,7 @@ inline void tickPhysics(State& s, float dt) {
                     s.tde3D.debrisMaxLife.pop_back();
                     s.tde3D.isFallback.pop_back();
                 } else {
-                    s.tde3D.debrisPos[i] += s.tde3D.debrisVel[i] * dt;
+                    s.tde3D.debrisPos[i] += s.tde3D.debrisVel[i] * tdt;
                     ++i;
                 }
             }
@@ -1168,7 +1333,7 @@ inline void tickPhysics(State& s, float dt) {
     else                   s.mergerMenu.t = std::max(0.0f, s.mergerMenu.t - dt * mSpeed);
 }
 
-inline void tickFPS(State& s) { // much better than executing the previous value by firing squad once every frame
+inline void tickFPS(State& s) { // exponential moving average so the readout doesn't jump around every frame
     float dt = s.fpsClock.restart().asSeconds();
     if (dt == 0.f) return; // Prevent div by zero
 
@@ -1198,6 +1363,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.bhRadius          = s.config.blackHole.radius;
     snap.bhPosition        = s.config.blackHole.position;
     snap.bhSpin            = s.config.blackHole.spinParameter;
+    snap.secBHActive       = false;  // set true only when a BH secondary inspirals
     snap.diskInnerRadius   = s.config.disk.innerRadius;
     snap.diskOuterRadius   = s.config.disk.outerRadius;
     snap.diskHalfThickness = s.config.disk.halfThickness;
@@ -1289,14 +1455,40 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
                 snap.orbBodyLabels.clear();
                 snap.barycentricMode = false;
             }
-            if (snap.orbBodyPositions.size() < 10) {
-                snap.orbBodyPositions.push_back(secPos);
-                snap.orbBodyRadii.push_back(s.merger.secRadius);
-                snap.orbBodyColors.push_back(mergerKindColor(s.merger.kind));
-                snap.orbBodyTypes.push_back(mergerBodyShaderType(s.merger.kind));
-                snap.orbBodyLabels.push_back(mergerKindLabel(s.merger.kind));
+            // Always show the inspiralling secondary: if the profile already
+            // fills every shader body slot, evict the last one so the merger's
+            // secondary is never silently dropped.
+            if (snap.orbBodyPositions.size() >= 10) {
+                snap.orbBodyPositions.pop_back();
+                snap.orbBodyRadii.pop_back();
+                snap.orbBodyColors.pop_back();
+                snap.orbBodyTypes.pop_back();
+                snap.orbBodyLabels.pop_back();
             }
+            snap.orbBodyPositions.push_back(secPos);
+            snap.orbBodyRadii.push_back(s.merger.secRadius);
+            snap.orbBodyColors.push_back(mergerKindColor(s.merger.kind));
+            snap.orbBodyTypes.push_back(mergerBodyShaderType(s.merger.kind));
+            snap.orbBodyLabels.push_back(mergerKindLabel(s.merger.kind));
             snap.bhPosition += s.merger.primaryOffset();
+
+            // Secondary black-hole visual identity (accretion disk / spin /
+            // jets) so the inspiralling BH looks like its profile counterpart.
+            const auto& v = s.merger.secVis;
+            snap.secBHActive       = (s.merger.kind == MergerSecondaryKind3D::BlackHole) && v.hasDisk;
+            snap.secBHDiskNormal   = v.diskNormal;
+            snap.secBHSpin         = v.spin;
+            snap.secBHDiskInner    = v.diskInnerRatio;
+            snap.secBHDiskOuter    = v.diskOuterRatio;
+            snap.secBHDiskStrength = v.diskStrength;
+            snap.secBHColorInner   = v.colorInner;
+            snap.secBHColorOuter   = v.colorOuter;
+            snap.secBHShowJets     = v.hasJets;
+            snap.secBHJetColor     = v.jetColor;
+            snap.secBHJetRadius    = v.jetRadiusRatio;
+            snap.secBHJetLength    = v.jetLengthRatio;
+        } else {
+            snap.secBHActive = false;
         }
     }
     // Force orbiting bodies on while the secondary is inspiralling, even if the
@@ -1649,4 +1841,4 @@ inline bool onLeftClickOverlays(State& s, float x, float y) {
     return false;
 }
 
-} // namespace stuff
+} // namespace bh3d

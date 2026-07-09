@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
         bh3d::initFont(state, tmpFont);
         if (!state.fontLoaded) std::cerr << "Warning: Could not load font for HUD.\n";
     }
-    (void)window.setActive(true); // this is needed since some platforms (cough cough macOS) require the context to be active before loading textures, and initFont may have done that.
+    (void)window.setActive(true); // Re-activate the context: some platforms (notably macOS) need it active before loading textures, and initFont may have changed the active context.
     glViewport(0, 0, cfg::DEFAULT_WIDTH, cfg::DEFAULT_HEIGHT);
 
     // ── Resources / shaders / textures / bloom ────────────

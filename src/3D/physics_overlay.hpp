@@ -2,23 +2,21 @@
 // ============================================================
 // physics_overlay.hpp
 // ============================================================
-// World-space line overlays for the 3D black-hole viewer:
+// World-space line overlays for the 3D viewer. Two of them:
 //
-//   1. RK4 timelike-geodesic orbits
-//      Numerically integrates the Schwarzschild geodesic equation for each
-//      orbital body using its semi-major axis / eccentricity / inclination to
-//      derive (E, L). Draws the resulting rosette (apsidal-precession) curve
-//      that shows the *real* GR orbit, not the analytical Keplerian path the
-//      body markers follow.
+//   1. RK4 timelike-geodesic orbits.
+//      Integrates the Schwarzschild geodesic for each orbiting body from its
+//      (a, e, incl) -> (E, L) and draws the precessing rosette, i.e. the real
+//      GR path rather than the Keplerian one the body markers actually follow.
+//      (So this and the markers drift apart near periapsis - that's expected.)
 //
-//   2. Null-geodesic photon rays
-//      Casts a fan of photons at varying impact parameters in the equatorial
-//      plane, integrates the Binet equation (d²u/dφ² + u = 3Mu²) with RK4,
-//      colors captured rays red and escaping rays cyan with brightness
-//      falloff along the path.
+//   2. Null-geodesic photon rays.
+//      A fan of photons at different impact parameters in the equatorial plane;
+//      Binet equation (d²u/dφ² + u = 3Mu²) integrated with RK4. Captured rays
+//      go red, escaping ones cyan, fading out along the path.
 //
-// Self-contained: no dependency on src/2D headers. Compiles into blackhole-3D
-// and (via bh3d_core.hpp) into blackhole-sim.
+// Kept self-contained (no src/2D includes) so it can build into both
+// blackhole-3D and, through bh3d_core.hpp, blackhole-sim.
 // ============================================================
 
 #include "platform.hpp"

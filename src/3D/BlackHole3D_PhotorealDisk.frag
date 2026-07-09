@@ -111,6 +111,22 @@ uniform int   showCGM;                         // Toggle Circumgalactic Medium v
 uniform float cgmRadius;                       // Radius of CGM [kpc, scaled]
 uniform vec3  cgmColor;                        // Color of CGM
 
+// Inspiralling secondary black hole's own look (accretion disk / spin / jets)
+// so a merger companion matches how it renders as a standalone primary. The
+// disk and jet sizes below are ratios of the secondary's radius, scaled here.
+uniform int   secBHActive;                     // 1 -> draw the rich secondary disk
+uniform vec3  secBHDiskNormal;                 // Secondary disk-plane normal (unit)
+uniform float secBHSpin;                       // a* -> photon-ring tightness
+uniform float secBHDiskInner;                  // Inner disk radius x secondary radius
+uniform float secBHDiskOuter;                  // Outer disk radius x secondary radius
+uniform float secBHDiskStrength;               // Overall disk brightness (0 = none)
+uniform vec3  secBHColorInner;                 // Precomputed inner disk colour
+uniform vec3  secBHColorOuter;                 // Precomputed outer disk colour
+uniform int   secBHShowJets;                   // 1 -> draw relativistic jets
+uniform vec3  secBHJetColor;                   // Jet colour
+uniform float secBHJetRadius;                  // Jet radius x secondary radius
+uniform float secBHJetLength;                  // Jet length x secondary radius
+
 // ============================================================================
 // PHYSICAL CONSTANTS (in simulation units where Rs = 1)
 // ============================================================================
@@ -236,6 +252,114 @@ vec3 shadeOrbBody(int type, vec3 hitPos, vec3 normal,
                             6.0);
 }
 
+// Analytic accretion disk + photon ring + optional jets for the inspiralling
+// secondary black hole, giving it the colour / size / spin / jet identity of
+// its standalone profile counterpart. This is NOT a second geodesic re-trace:
+// the disk is a tilted billboard annulus, Doppler-shaded, so the secondary
+// reads clearly as "that black hole" without doubling the ray-march cost.
+vec3 secondaryBHEmission(vec3 ro, vec3 rd, vec3 c, float r) {
+    vec3 result = vec3(0.0);
+    vec3 n = normalize(secBHDiskNormal);
+
+    // Ray's closest approach to the horizon centre (drives the shadow gate,
+    // photon ring and glow).
+    vec3  toBody   = c - ro;
+    float sClosest = max(dot(toBody, rd), 0.0);
+    float dPerp    = length((ro + rd * sClosest) - c);
+
+    // ---- Accretion disk (tilted annulus) ----
+    if (secBHDiskStrength > 0.0) {
+        float rIn  = r * secBHDiskInner;
+        float rOut = r * secBHDiskOuter;
+        float denom = dot(rd, n);
+        if (abs(denom) > 1e-4) {
+            float tHit = dot(c - ro, n) / denom;
+            if (tHit > 0.0) {
+                vec3  P   = ro + rd * tHit;
+                vec3  rel = P - c;
+                float rad = length(rel);
+                if (rad > rIn * 0.55 && rad < rOut) {
+                    float tRad = clamp((rad - rIn) / max(rOut - rIn, 1e-3), 0.0, 1.0);
+                    // In-plane basis: radial (u) and prograde tangential (velDir).
+                    vec3 u      = normalize(rel - n * dot(rel, n));
+                    vec3 velDir = normalize(cross(n, u));
+                    // Radial colour gradient (inner hot → outer cool).
+                    float gRad = pow(1.0 - tRad, 0.5);
+                    vec3  col  = mix(secBHColorOuter, secBHColorInner, gRad);
+                    // Keplerian speed + special-relativistic Doppler beaming.
+                    float v   = clamp(sqrt(0.5 * r / max(rad, rIn)), 0.0, 0.7);
+                    float cth = dot(velDir, -rd);
+                    float gam = 1.0 / sqrt(max(1.0 - v * v, 0.01));
+                    float D   = 1.0 / (gam * (1.0 - v * cth));
+                    if (showDoppler == 0) D = 1.0;
+                    D = clamp(D, 0.35, 3.0);
+                    // Approaching side shifts blue/bright, receding side red/dim.
+                    col = mix(col, vec3(0.60, 0.75, 1.0), clamp((D - 1.0) * 0.5, 0.0, 0.5));
+                    col = mix(col, vec3(0.90, 0.35, 0.15), clamp((1.0 - D) * 0.6, 0.0, 0.5));
+                    float beam = pow(D, 2.5);
+                    // Rotating spiral / brightness structure.
+                    float ang    = atan(dot(rel, velDir), dot(rel, u));
+                    float omega  = 1.4 * pow(max(rad, rIn), -1.5);
+                    float phase  = ang + uTime * omega;
+                    float spiral = 0.6 + 0.4 * pow(0.5 + 0.5 * sin(phase * 2.0
+                                 - log(max(rad / rIn, 0.01)) * 4.0), 2.0);
+                    float bright = 0.35 + 0.65 * pow(1.0 - tRad, 1.3);
+                    float edge   = smoothstep(rIn * 0.55, rIn * 0.85, rad)
+                                 * smoothstep(rOut, rOut * 0.80, rad);
+                    // Keep the shadow core dark: fade the disk out over the
+                    // horizon interior so it wraps the rim (lensed look) rather
+                    // than painting over the silhouette.
+                    float shadowGate = smoothstep(r * 0.5, r * 0.82, dPerp);
+                    result += col * (bright * beam * spiral * edge
+                                   * shadowGate * secBHDiskStrength * 3.0);
+                }
+            }
+        }
+    }
+
+    // ---- Photon ring (spin-tightened) + warm rim glow ----
+    {
+        float outside = smoothstep(r * 0.82, r * 1.0, dPerp);
+        float ringR   = r * mix(1.14, 1.02, clamp(secBHSpin, 0.0, 1.0));
+        float dR      = dPerp - ringR;
+        float ringW   = r * 0.14;
+        float ring    = exp(-dR * dR / (ringW * ringW));
+        float glow    = exp(-max(dPerp - r, 0.0) / (r * 0.9));
+        vec3  ringCol = mix(vec3(1.0, 0.84, 0.52), secBHColorInner, 0.5);
+        result += (ringCol * ring * 3.2 + ringCol * glow * 0.35) * outside;
+    }
+
+    // ---- Relativistic jets (two opposed cones along the disk normal) ----
+    if (secBHShowJets == 1) {
+        float jLen = r * secBHJetLength;
+        float jRad = r * secBHJetRadius;
+        for (int sgn = 0; sgn < 2; ++sgn) {
+            vec3  axis = (sgn == 0) ? n : -n;
+            vec3  w    = ro - c;
+            float a = dot(rd, rd);
+            float b = dot(rd, axis);
+            float e = dot(axis, axis);
+            float d = dot(rd, w);
+            float f = dot(axis, w);
+            float denomJ = a * e - b * b;
+            if (abs(denomJ) > 1e-4) {
+                float tc = (b * f - e * d) / denomJ;   // param along ray
+                float sc = (a * f - b * d) / denomJ;   // param along axis
+                if (tc > 0.0 && sc > 0.0 && sc < jLen) {
+                    vec3  pRay  = ro + rd * tc;
+                    vec3  pAxis = c + axis * sc;
+                    float dAx   = length(pRay - pAxis);
+                    float widen = jRad * (0.5 + 0.8 * (sc / jLen));  // slight flare
+                    float prof  = exp(-dAx * dAx / (2.0 * widen * widen));
+                    float fade  = 1.0 - sc / jLen;
+                    result += secBHJetColor * (prof * fade * 2.0);
+                }
+            }
+        }
+    }
+    return result;
+}
+
 // Additive volumetric / glow contribution from one orbiting body for the
 // current ray. Used for both opaque and extended bodies, opaque ones get
 // a corona halo, extended ones get a soft Gaussian volume in place of a
@@ -254,6 +378,13 @@ vec3 orbBodyEmission(int idx, vec3 ro, vec3 rd) {
     float dPerp    = length(delta);
 
     if (type == BODY_BLACKHOLE) {
+        // A linked merger secondary renders with its profile's accretion disk,
+        // spin-scaled photon ring and jets so it looks 1:1 with its standalone
+        // counterpart. Unlinked / legacy secondaries fall back to the generic
+        // gold photon ring below.
+        if (secBHActive == 1) {
+            return secondaryBHEmission(ro, rd, c, r);
+        }
         // Bright photon ring hugging the silhouette of the secondary BH,
         // plus a hot accretion glow and a faint bluish gravitational halo.
         // Everything is gated to the OUTSIDE of the horizon radius so the

@@ -78,22 +78,52 @@ struct MergerSecondary3DPreset {
     MergerSecondaryKind3D kind;        // Visual archetype
     double                massSolar;   // Secondary mass [Msun] (drives mass ratio + growth)
     const char*           blurb;       // One-line description for the menu
+    // Name of the full BlackHoleProfile this secondary should visually mirror
+    // (must match a profiles::allProfiles() name). When set, the inspiralling
+    // secondary renders with that profile's accretion disk, spin, jets and
+    // colours so it looks 1:1 with its standalone counterpart. nullptr → a
+    // generic mass-derived disk (archetypes with no dedicated profile).
+    const char*           profile = nullptr;
 };
 
 // Curated secondary objects, ordered light → heavy within each class.
+// Named black holes mirror the 2D simulator's BH2D_PRESETS list so every
+// object that can be merged in 2D is also a valid, working secondary in 3D.
 inline constexpr MergerSecondary3DPreset MERGER_SECONDARY_3D_PRESETS[] = {
+    // -- Generic black-hole archetypes --
     { "Stellar-mass BH",  MergerSecondaryKind3D::BlackHole,   10.0,    "A 10 M\u2609 stellar black hole spirals in." },
     { "Intermediate BH",  MergerSecondaryKind3D::BlackHole,   1.0e3,   "A 1000 M\u2609 IMBH, a near-equal merger for stellar primaries." },
     { "Supermassive BH",  MergerSecondaryKind3D::BlackHole,   1.0e8,   "A 10^8 M\u2609 SMBH, a galactic-scale coalescence." },
+
+    // -- Compact / stellar secondaries --
     { "Neutron Star",     MergerSecondaryKind3D::NeutronStar, 1.4,     "A 1.4 M\u2609 neutron star plunges to the horizon." },
     { "Pulsar",           MergerSecondaryKind3D::Pulsar,      1.4,     "A spinning pulsar, lighthouse beam sweeping as it falls." },
     { "Main-sequence Star", MergerSecondaryKind3D::Star,      1.0,     "A Sun-like star, shredded into a tidal stream." },
     { "White Dwarf",      MergerSecondaryKind3D::WhiteDwarf,  0.6,     "A 0.6 M\u2609 white dwarf, disrupted on final approach." },
-    // Named real supermassive black holes, for galactic-nucleus coalescences.
+
+    // -─ Named stellar-mass black holes (ported  diectly from 2D) --
+    { "GRO J1655-40",     MergerSecondaryKind3D::BlackHole,   6.3,     "Microquasar with relativistic jets, ~6.3 M\u2609, spirals in.", "GRO J1655-40" },
+    { "A0620-00",         MergerSecondaryKind3D::BlackHole,   6.61,    "First confirmed stellar BH, quiescent ~6.6 M\u2609 binary.", "A0620-00" },
+    { "V404 Cygni",       MergerSecondaryKind3D::BlackHole,   9.0,     "X-ray nova microquasar, ~9 M\u2609, plunges to the horizon.", "V404 Cygni" },
+    { "Gaia BH2",         MergerSecondaryKind3D::BlackHole,   8.94,    "Dormant BH with red-giant companion, ~8.9 M\u2609.", "Gaia BH2" },
+    { "Gaia BH1",         MergerSecondaryKind3D::BlackHole,   9.62,    "Nearest dormant BH, ~9.6 M\u2609, spirals into the primary.", "Gaia BH1" },
+    { "Cygnus X-1",       MergerSecondaryKind3D::BlackHole,   21.2,    "Famous HMXB stellar black hole, ~21 M\u2609." },
+    { "Gaia BH3",         MergerSecondaryKind3D::BlackHole,   32.7,    "Most massive nearby dormant BH, ~33 M\u2609.", "Gaia BH3" },
+    { "LIGO GW150914",    MergerSecondaryKind3D::BlackHole,   62.0,    "First detected merger remnant, ~62 M\u2609, coalesces again." },
+
+    // -- Exotic / intermediate-mass --
+    { "Primordial BH",    MergerSecondaryKind3D::BlackHole,   1.0e-5,  "A tiny ~10^-5 M\u2609 primordial black hole grazes the horizon." },
+    { "Intermediate-mass BH", MergerSecondaryKind3D::BlackHole, 1.0e4, "A hypothetical ~10^4 M\u2609 intermediate-mass black hole." },
+
+    // -- Named supermassive black holes (ported from 2D) --
     // A secondary this massive shreds nearby stars and gas from a great distance.
-    { "Sgr A* SMBH",      MergerSecondaryKind3D::BlackHole,   4.3e6,   "The Milky Way's 4.3\u00d710^6 M\u2609 nucleus spirals in." },
-    { "M87* SMBH",        MergerSecondaryKind3D::BlackHole,   6.5e9,   "Virgo A's 6.5\u00d710^9 M\u2609 giant, the first BH ever imaged." },
-    { "TON 618 SMBH",     MergerSecondaryKind3D::BlackHole,   6.6e10,  "The 6.6\u00d710^10 M\u2609 ultramassive quasar, a titanic merger." },
+    { "Sgr A* SMBH",      MergerSecondaryKind3D::BlackHole,   4.3e6,   "The Milky Way's 4.3\u00d710^6 M\u2609 nucleus spirals in.", "Sgr A*" },
+    { "3C 273",           MergerSecondaryKind3D::BlackHole,   8.86e8,  "The first quasar identified, ~8.9\u00d710^8 M\u2609.", "3C 273" },
+    { "M87* SMBH",        MergerSecondaryKind3D::BlackHole,   6.5e9,   "Virgo A's 6.5\u00d710^9 M\u2609 giant, the first BH ever imaged.", "M87*" },
+    { "J0529-4351",       MergerSecondaryKind3D::BlackHole,   1.7e10,  "The most luminous quasar known, ~1.7\u00d710^10 M\u2609.", "J0529-4351" },
+    { "NGC 1277",         MergerSecondaryKind3D::BlackHole,   1.7e10,  "Overmassive SMBH in a compact elliptical, ~1.7\u00d710^10 M\u2609.", "NGC 1277" },
+    { "OJ 287",           MergerSecondaryKind3D::BlackHole,   1.8e10,  "SMBH binary system with orbital outbursts, ~1.8\u00d710^10 M\u2609.", "OJ 287" },
+    { "TON 618 SMBH",     MergerSecondaryKind3D::BlackHole,   6.6e10,  "The 6.6\u00d710^10 M\u2609 ultramassive quasar, a titanic merger.", "TON 618" },
 };
 inline constexpr int NUM_MERGER_SECONDARY_3D_PRESETS =
     (int)(sizeof(MERGER_SECONDARY_3D_PRESETS) / sizeof(MERGER_SECONDARY_3D_PRESETS[0]));
@@ -957,6 +987,20 @@ inline std::array<BlackHoleProfile, 14> allProfiles() {
 }
 
 constexpr int NUM_PROFILES = 14;
+
+// Look up a full profile by its display name (matches BlackHoleProfile::name).
+// Returns nullptr if no profile carries that name. Used to give an inspiralling
+// merger secondary the accretion-disk / spin / jet identity of its standalone
+// counterpart. The returned pointer refers to a function-local static, valid
+// for the lifetime of the program.
+inline const BlackHoleProfile* findProfileByName(const char* name) {
+    if (!name) return nullptr;
+    static const std::array<BlackHoleProfile, 14> kProfiles = allProfiles();
+    for (const auto& p : kProfiles) {
+        if (p.name == name) return &p;
+    }
+    return nullptr;
+}
 
 } // namespace profiles
 

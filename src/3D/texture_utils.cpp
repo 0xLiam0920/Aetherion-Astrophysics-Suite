@@ -1,13 +1,13 @@
 #include "bh3d_textureutils.hpp"
 
-// All textures start as a sad 1x1 white square and evolve from there.
+// Textures fall back to a 1x1 white pixel when an asset can't be loaded.
 
 #include <SFML/Graphics/Image.hpp>
 #include <cmath>
 #include <iostream>
 #include <algorithm>
 
-// The loneliest texture in the whole pipeline.
+// 1x1 white fallback used when a real texture is missing.
 GLTexture2D createFallbackWhiteTexture() {
     GLuint tex = 0;
     glGenTextures(1, &tex);
@@ -45,7 +45,7 @@ GLTexture2D loadTexture2D(const std::string& path) {
                  GL_RGBA,
                  GL_UNSIGNED_BYTE,
                  img.getPixelsPtr());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // Mipmaps? Nope!
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // no mipmaps
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -89,8 +89,8 @@ GLTexture2D createDiskTextureProcedural(unsigned int size) {
     glBindTexture(GL_TEXTURE_2D, tex);
 
     const auto sz = img.getSize();
-    glTexImage2D(GL_TEXTURE_2D,         // Ok this is bad practice since we're doing a redundant copy, but SFML doesn't allow us to get a raw pointer or store in GPU memory directly, so that's why.
-                 0,                     // Thanks, Lukas.
+    glTexImage2D(GL_TEXTURE_2D,         // SFML won't give us a GPU-resident buffer or a reusable raw pointer,
+                 0,                     // so the pixels get copied once here. Redundant, but unavoidable with SFML.
                  GL_RGBA,
                  static_cast<GLsizei>(sz.x),
                  static_cast<GLsizei>(sz.y),
