@@ -1547,6 +1547,18 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
         ? std::min(1.0f, s.merger.remnantTimer / State::MergerState3D::REMNANT_LABEL)
         : 0.0f;
     snap.mergerTrail.assign(s.merger.trail.begin(), s.merger.trail.end());
+
+    // GW strain sparkline: h(t) ∝ (1/sep)·cos(2φ_orbit). Record while inspiralling
+    // so the plot captures the full frequency/amplitude sweep-up; clear once the
+    // whole event is over so a fresh merger starts from an empty trace.
+    if (snap.mergerInspiral) {
+        const float sep = std::max(snap.mergerSepRs, 0.01f);
+        snap.mergerGWWaveform.push_back((1.0f / sep) * std::cos(2.0f * s.merger.phi));
+        if ((int)snap.mergerGWWaveform.size() > PhysicsSnapshot::MERGER_GW_SAMPLES)
+            snap.mergerGWWaveform.erase(snap.mergerGWWaveform.begin());
+    } else if (!snap.mergerActive) {
+        snap.mergerGWWaveform.clear();
+    }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1827,7 +1839,7 @@ inline bool onLeftClickOverlays(State& s, float x, float y) {
             s.presetMenu.scroll = std::max(0, s.presetMenu.scroll - 1);
             return true;
         }
-        if (hit == -3) {
+        if (hit == -3) { // I should've just used a library for this
             s.presetMenu.scroll = s.presetMenu.scroll + 1; // clamped on next draw
             return true;
         }

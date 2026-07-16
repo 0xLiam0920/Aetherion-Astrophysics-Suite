@@ -541,6 +541,44 @@ inline void drawDebugPanel(const bh3d::State& s) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Gravitational-wave strain sparkline for mergers
+// The purpose of this is to plot the scrolling h(t) ∝ (1/sep)·cos(2φ_orbit) so that
+// frequency/amplitude sweep is visible as the bodies coalesce together. 
+// ────────────────────────────────────────────────────────────
+inline void drawMergerGWPlot(const bh3d::State& s) {
+    const auto& snap = s.snap;
+    if (!snap.mergerInspiral || snap.mergerGWWaveform.size() < 2) return;
+
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float panelW = 300.0f, plotH = 70.0f;
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - panelW) * 0.5f,
+                                   vp->WorkPos.y + 12.0f),
+                            ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.80f);
+
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+        ImGuiWindowFlags_AlwaysAutoResize;
+
+    if (ImGui::Begin("##GWStrain", nullptr, flags)) {
+        char ovl[64];
+        std::snprintf(ovl, sizeof(ovl), "h(t)  sep %.1f Rs", snap.mergerSepRs);
+        // Symmetric scale so the waveform stays centred as amplitude grows exponentially
+        float amp = 0.0f;
+        for (float v : snap.mergerGWWaveform) amp = std::max(amp, std::fabs(v));
+        amp = std::max(amp, 1e-3f);
+        ImGui::TextColored(ImVec4(0.66f, 0.78f, 1.0f, 1.0f), "Gravitational Wave Strain");
+        ImGui::PlotLines("##gw", snap.mergerGWWaveform.data(),
+                         (int)snap.mergerGWWaveform.size(), 0, ovl,
+                         -amp, amp, ImVec2(panelW - 16.0f, plotH));
+    }
+    ImGui::End();
+}
+
+// ────────────────────────────────────────────────────────────
 // Controls hint strip (bottom-center).
 // ────────────────────────────────────────────────────────────
 inline void drawControlsHint() {
@@ -721,6 +759,7 @@ inline void drawAll(bh3d::State& s) {
     }
     drawPresetMenu(s);
     drawMergerMenu(s);
+    drawMergerGWPlot(s);
 
     // ---- Tidal disruption event particle overlay ----
     if (s.snap.tdeActive) {

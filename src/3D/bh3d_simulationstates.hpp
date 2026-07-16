@@ -119,6 +119,12 @@ struct PhysicsSnapshot {
     float                  mergerRemnantAlpha = 0.0f; // 0..1 "remnant" label fade
     std::vector<glm::vec3> mergerTrail;             // secondary death-spiral trail (world, oldest→newest)
 
+    // Scrolling gravitational-wave strain record h(t) ∝ (1/sep)·cos(2φ_orbit),
+    // sampled per-frame during inspiral. Mirrors the 2D pulsar hHistory; the
+    // frequency/amplitude sweep-up is drawn as an ImGui::PlotLines sparkline.
+    static constexpr int   MERGER_GW_SAMPLES = 256;
+    std::vector<float>     mergerGWWaveform;
+
     // Disk / spin / jet identity of the inspiralling secondary black hole, so it
     // looks the same as it would if it were the standalone primary. The sizes
     // here are ratios of the secondary's shader radius (orbBodyRadius), not
