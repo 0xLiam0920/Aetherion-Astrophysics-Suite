@@ -581,6 +581,10 @@ struct State {
     int       fpsFrameCount = 0;
     float     fpsDisplay    = 0.0f;
 
+    // Adaptive quality: ray-march step budget auto-tuned from measured FPS.
+    int       adaptiveMaxSteps = 200;
+    float     adaptiveTimer    = 0.0f; // time spent (signed) in the current FPS band
+
     // Keybinds
     ActionKeybinds actionKeys;
 
@@ -1341,6 +1345,14 @@ inline void tickFPS(State& s) { // exponential moving average so the readout doe
     float smoothing = 0.05f; // Lower = smoother/slower, Higher = more responsive
 
     s.fpsDisplay = (instantFPS * smoothing) + (s.fpsDisplay * (1.0f - smoothing));
+
+    // Adaptive quality: dwell ~1s in an FPS band before stepping the ray budget.
+    const int base = s.cinematicMode ? 300 : 200;
+    if      (s.fpsDisplay < 30.0f) s.adaptiveTimer += dt; // too slow -> want fewer steps
+    else if (s.fpsDisplay > 55.0f) s.adaptiveTimer -= dt; // headroom -> want more steps
+    else                           s.adaptiveTimer  = 0.0f;
+    if (s.adaptiveTimer >= 1.0f)       { s.adaptiveMaxSteps = std::max(base / 2, s.adaptiveMaxSteps - 25); s.adaptiveTimer = 0.0f; }
+    else if (s.adaptiveTimer <= -1.0f) { s.adaptiveMaxSteps = std::min(base,     s.adaptiveMaxSteps + 25); s.adaptiveTimer = 0.0f; }
 }
 
 inline void buildSnapshot(State& s, int w, int h, float dt) {
@@ -1497,7 +1509,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.hostGalaxyEnabled = s.hostGalaxyEnabled;
     snap.labEnabled        = s.labEnabled;
     snap.cgmEnabled        = s.cgmEnabled;
-    snap.maxSteps          = s.cinematicMode ? 300 : 200;
+    snap.maxSteps          = std::clamp(s.adaptiveMaxSteps, (s.cinematicMode ? 300 : 200) / 2, s.cinematicMode ? 300 : 200);
     snap.profileName       = s.profilesArr[s.profileIdx].name;
     snap.windowW           = w;
     snap.windowH           = h;
