@@ -78,6 +78,15 @@ struct PhysicsSnapshot {
 
     /*--------- Profile metadata (for HUD) ---------*/
     std::string profileName;
+    double      massSolar = 0.0;  // this stores primary BH mass [M☉] for physical scale readout
+
+    /*--------- True-scale mode ---------*/
+    // When this is true, orbBodyRadii are physical (Rs) rather than visual.  Toggled by
+    // the user from the Overlays panel; the contrast with the visual default is
+    // the educational point.
+    bool trueScaleMode = false;
+    // Per-body physical radius in Rs (populated when trueScaleMode is on).
+    std::vector<float> orbBodyPhysRadii;
 
     /*--------- Barycentric binary mode (Gaia BH1/2/3) ---------*/
     // When true, bhPosition is offset from origin and the barycenter sits at
@@ -124,6 +133,7 @@ struct PhysicsSnapshot {
     // frequency/amplitude sweep-up is drawn as an ImGui::PlotLines sparkline.
     static constexpr int   MERGER_GW_SAMPLES = 256;
     std::vector<float>     mergerGWWaveform;
+
 
     // Disk / spin / jet identity of the inspiralling secondary black hole, so it
     // looks the same as it would if it were the standalone primary. The sizes

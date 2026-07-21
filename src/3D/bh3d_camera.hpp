@@ -104,6 +104,12 @@ public:
 
     void resetRoll() { viewRoll_ = 0.0f; } // level the camera back out
 
+    // Set the orbit/follow target.  Safe to call every frame (follow mode).
+    // In freelook the position is unchanged; in orbit the camera immediately
+    // starts orbiting the new focus so the caller should smooth the value.
+    void setFocus(const glm::vec3& pos) { focusPos_ = pos; }
+    glm::vec3 getFocus() const          { return focusPos_; }
+
 private:
     void updateFreelook(float dt, const KeyState& keys) {
         const float speed = cfg_.moveSpeed * (keys.fast ? cfg_.fastMultiplier : 1.0f); // hold shift to move faster

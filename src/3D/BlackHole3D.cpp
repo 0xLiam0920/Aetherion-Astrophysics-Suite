@@ -166,7 +166,11 @@ int main(int argc, char* argv[]) {
                     }
                 } else if (mb->button == sf::Mouse::Button::Left) {
                     if (!imGuiMouse) {
-                        bh3d::onLeftClickOverlays(state, float(mb->position.x), float(mb->position.y));
+                        const int sw = std::max(1, (int)window.getSize().x);
+                        const int sh = std::max(1, (int)window.getSize().y);
+                        // Body-pick takes priority; falls through to overlay buttons if nothing hit
+                        if (!bh3d::onBodyClick(state, float(mb->position.x), float(mb->position.y), sw, sh))
+                            bh3d::onLeftClickOverlays(state, float(mb->position.x), float(mb->position.y));
                     }
                 }
             }

@@ -566,6 +566,7 @@ struct State {
     bool blueshiftEnabled  = true;
     bool showHUD           = true;
     bool showDebugHUD      = false;
+    bool trueScaleMode     = false; // shrink orbital bodies to physical Rs radii, false = scale to screen space
 
     // Animation
     static constexpr float animSpeedPresets[3] = { 1.0f, 3.0f, 8.0f };
@@ -725,6 +726,16 @@ struct State {
     bool  looking = false;
     float lastMouseX = 0.0f;
     float lastMouseY = 0.0f;
+
+    // Body-focus / click-to-follow state.
+    // selectedBody == -1  → no selection; the merger secondary (when active)
+    // is represented by the sentinel value BODY_MERGER_SECONDARY (= INT_MAX).
+    static constexpr int BODY_MERGER_SECONDARY = 0x7fffffff;
+    int       selectedBody       = -1;   // index into snap.orbBodyPositions, or sentinel
+    glm::vec3 focusEaseFrom      = glm::vec3(0.0f); // camera target at selection instant
+    glm::vec3 focusEaseTo        = glm::vec3(0.0f); // first destination (body pos at click)
+    float     focusEaseT         = 1.0f; // 0 → 1 over FOCUS_EASE_SEC; 1 = complete
+    static constexpr float FOCUS_EASE_SEC = 0.8f;
 
     explicit State(const cfg::CameraConfig& camCfg) : camera(camCfg) {
         snap.orbBodyPositions.reserve(10);
@@ -1268,12 +1279,108 @@ inline void applyMergerInfluence(State& s, float dt) {
 }
 
 // ────────────────────────────────────────────────────────────
+//  Body-focus / click-to-follow helpers
+// ────────────────────────────────────────────────────────────
+
+// Deselect any currently focused body and ease the camera back to the BH.
+inline void deselectBody(State& s) {
+    if (s.selectedBody == -1) return;
+    s.focusEaseFrom = s.camera.getFocus();
+    s.focusEaseTo   = s.snap.bhPosition;
+    s.focusEaseT    = 0.0f;
+    s.selectedBody  = -1;
+}
+
+// Call from tickPhysics every frame: drive the camera focus toward the followed
+// body using a smoothstep ease, then lock to its live position once eased in.
+inline void tickBodyFollow(State& s, float dt) {
+    if (s.selectedBody == -1) {
+        // May still be easing back to BH after deselection
+        if (s.focusEaseT < 1.0f) {
+            s.focusEaseT = std::min(1.0f, s.focusEaseT + dt / State::FOCUS_EASE_SEC);
+            float t3 = s.focusEaseT * s.focusEaseT * (3.0f - 2.0f * s.focusEaseT); // smoothstep
+            s.camera.setFocus(s.focusEaseFrom + (s.focusEaseTo - s.focusEaseFrom) * t3);
+        }
+        return;
+    }
+
+    // Determine the current live world position of the followed body.
+    glm::vec3 livePos;
+    const auto& snap = s.snap;
+    if (s.selectedBody == State::BODY_MERGER_SECONDARY) {
+        if (!snap.mergerInspiral) { deselectBody(s); return; }
+        livePos = snap.mergerSecondaryPos;
+    } else {
+        int idx = s.selectedBody;
+        if (idx < 0 || idx >= (int)snap.orbBodyPositions.size()) {
+            deselectBody(s); return;
+        }
+        livePos = snap.orbBodyPositions[idx];
+    }
+
+    if (s.focusEaseT < 1.0f) {
+        s.focusEaseT = std::min(1.0f, s.focusEaseT + dt / State::FOCUS_EASE_SEC);
+        float t3 = s.focusEaseT * s.focusEaseT * (3.0f - 2.0f * s.focusEaseT);
+        s.camera.setFocus(s.focusEaseFrom + (livePos - s.focusEaseFrom) * t3);
+    } else {
+        s.camera.setFocus(livePos); // follow mode: lock to live position every frame
+    }
+}
+
+// Project every candidate body to screen and pick the closest within hitPx.
+// Returns the index into orbBodyPositions, BODY_MERGER_SECONDARY, or -1.
+inline int pickBody(const State& s, float clickX, float clickY, int sw, int sh) {
+    const auto& snap = s.snap;
+    const float HIT_PX = 30.0f;
+    int   best   = -1;
+    float bestD2 = 1e38f;  // large sentinel — lets projR² determine each body's hit area
+
+    auto test = [&](const glm::vec3& worldPos, float visRadius, int candidate) {
+        float sx = 0.0f, sy = 0.0f;
+        if (!hud::projectToScreen(worldPos,
+                                  snap.cameraPos, snap.cameraDir, snap.cameraUp,
+                                  snap.fov, sw, sh, sx, sy)) return;
+        float projR = std::max(HIT_PX, visRadius * 12.0f);
+        float dx = sx - clickX, dy = sy - clickY;
+        float d2 = dx * dx + dy * dy;
+        if (d2 < projR * projR && d2 < bestD2) { bestD2 = d2; best = candidate; }
+    };
+
+    for (int i = 0; i < (int)snap.orbBodyPositions.size(); ++i) {
+        float vr = (i < (int)snap.orbBodyRadii.size()) ? snap.orbBodyRadii[i] : 1.0f;
+        test(snap.orbBodyPositions[i], vr, i);
+    }
+    if (snap.mergerInspiral)
+        test(snap.mergerSecondaryPos, s.merger.secRadius, State::BODY_MERGER_SECONDARY);
+    return best;
+}
+
+// Handle a left click for body selection.  Returns true if a body was picked
+// or deselected (so the caller can skip other click handlers).
+inline bool onBodyClick(State& s, float x, float y, int sw, int sh) {
+    int hit = pickBody(s, x, y, sw, sh);
+    if (hit == -1) {
+        if (s.selectedBody != -1) { deselectBody(s); return true; }
+        return false;
+    }
+    if (hit == s.selectedBody) return false;
+    s.focusEaseFrom = s.camera.getFocus();
+    s.focusEaseTo   = (hit == State::BODY_MERGER_SECONDARY)
+                       ? s.snap.mergerSecondaryPos
+                       : s.snap.orbBodyPositions[hit];
+    s.focusEaseT    = 0.0f;
+    s.selectedBody  = hit;
+    return true;
+}
+
+// ────────────────────────────────────────────────────────────
 //  Per-frame physics AND snapshot construction
 // ────────────────────────────────────────────────────────────
 inline void tickPhysics(State& s, float dt) {
     s.totalTime += dt;
     s.animTime  += dt * s.animSpeed;
     s.camera.update(dt, s.keys);
+    tickBodyFollow(s, dt);
     // Orbiting bodies share the global animSpeed multiplier so +/- (and Y)
     // also speed/slow Keplerian orbits, matching the 2D simulator's behavior.
     const float orbDt = dt * s.animSpeed;
@@ -1505,12 +1612,60 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     }
     // Force orbiting bodies on while the secondary is inspiralling, even if the
     // active profile normally hides them.
+    // ── True-scale physical radii ──────────────────────────────────────────────
+    // In true-scale mode each orbital body's displayed radius is instead swapped for its
+    // proper physical size in Rs_primary units of the primary (Rs_primary = bhRadius).
+    // Stellar radii scale as R☉·(M/M☉)^0.8 (main-sequence approximation).
+    // Rs_primary = 2GM/c² ≈ 2.953 km × massSolar.  Sun radius ≈ 695,700 km.
+    // So R☉ in Rs_primary = 695700 / (2.953 * massSolar) = 235,586 / massSolar.
+    // why wouldn't we want this? well, if the primary is a 10⁹ M☉ SMBH, then a 1 M☉ star is only 2.35e-7 Rs_primary, 
+    // which is invisible. So we clamp to a minimum of 1e-4 Rs_primary for visibility.
+    {
+        const float M = std::max(1e-3, snap.massSolar); // [M☉]
+        // 1 Rs_primary in km
+        const float Rs_km = 2.953f * (float)M;
+        // Solar radius in Rs_primary units
+        const float RSun_Rs = 695700.0f / Rs_km;
+        snap.orbBodyPhysRadii.clear();
+        snap.orbBodyPhysRadii.reserve(snap.orbBodyRadii.size());
+        for (size_t i = 0; i < snap.orbBodyRadii.size(); ++i) {
+            // Visual radius is in Rs_primary (= bhRadius = 1 sim unit by design).
+            // Estimate stellar mass from visual radius heuristic (inverse of
+            // makeOrbitalBody): visual radius ≈ 0.8–2.5 Rs → map to ~0.1–20 M☉.
+            float vis = snap.orbBodyRadii[i];  // Rs
+            // Conservative estimate: assume a 1 M☉ star by default, scale by type.
+            int   type = (i < snap.orbBodyTypes.size()) ? snap.orbBodyTypes[i] : 0;
+            float mEst = 1.0f;  // stellar mass estimate [M☉]
+            switch (type) {
+                case 0: mEst = 1.0f;   break; // Star
+                case 1: mEst = 5.0f;   break; // GasCloud / large object
+                case 2: mEst = 50.0f;  break; // StellarCluster
+                case 3: mEst = 1.0e7f; break; // DwarfGalaxy
+                case 4: mEst = 1.4f;   break; // NeutronStar — 10 km ≈ 0.0014 Rs for 10M☉ BH
+                case 5: mEst = 0.6f;   break; // WhiteDwarf
+                case 6: mEst = 1.0f;   break; // CompanionStar
+                default: mEst = 1.0f;  break;
+            }
+            // R_phys ≈ RSun · mEst^0.8  for main-sequence; clamped to reality
+            float physRs = RSun_Rs * std::pow(mEst, 0.8f);
+            // Compact objects: enforce plausible physical upper bound
+            if (type == 4) physRs = 10.0f / Rs_km;   // ~10 km neutron star
+            if (type == 5) physRs = 7000.0f / Rs_km; // ~7000 km white dwarf
+            // Clamp so nothing becomes invisible (< 0.001 Rs) or larger than visual
+            physRs = std::clamp(physRs, 1e-4f, std::max(vis, 1e-4f));
+            snap.orbBodyPhysRadii.push_back(physRs);
+        }
+        // When true-scale mode is active, override the visual radii sent to the shader.
+        if (snap.trueScaleMode) snap.orbBodyRadii = snap.orbBodyPhysRadii;
+    }
     snap.orbBodyEnabled    = s.orbBodyEnabled || (s.merger.active && !s.merger.merged);
     snap.hostGalaxyEnabled = s.hostGalaxyEnabled;
     snap.labEnabled        = s.labEnabled;
     snap.cgmEnabled        = s.cgmEnabled;
     snap.maxSteps          = std::clamp(s.adaptiveMaxSteps, (s.cinematicMode ? 300 : 200) / 2, s.cinematicMode ? 300 : 200);
     snap.profileName       = s.profilesArr[s.profileIdx].name;
+    snap.massSolar         = s.profilesArr[s.profileIdx].massSolar;
+    snap.trueScaleMode     = s.trueScaleMode;
     snap.windowW           = w;
     snap.windowH           = h;
     snap.fps               = s.fpsDisplay;
@@ -1827,12 +1982,15 @@ inline void onActionKey(State& s, sf::Keyboard::Key code) {
         }
     }
     else if (code == kb.releaseMouse)      s.looking = false;
+    // as a side note, escape also dismisses any active body-focus
+    if (code == sf::Keyboard::Key::Escape) deselectBody(s);
 }
+
+
 
 // Hit-test a left click against the open overlays panel. Returns true if
 // the click hit a button (and the matching overlay was toggled).
 inline bool onLeftClickOverlays(State& s, float x, float y) {
-    // Preset menu (modal) takes priority while it is open.
     if (s.presetMenu.open) {
         const int hit = s.hudFrame.hitTestPresetMenu(x, y);
         if (hit == -2) {

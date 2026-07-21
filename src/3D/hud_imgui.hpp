@@ -433,7 +433,7 @@ inline void drawStatusPanel(const bh3d::State& s) {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-        ImGuiWindowFlags_AlwaysAutoResize;
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs;
 
     if (ImGui::Begin("Status", nullptr, flags)) {
         const auto& snap = s.snap;
@@ -493,7 +493,7 @@ inline void drawDebugPanel(const bh3d::State& s) {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-        ImGuiWindowFlags_AlwaysAutoResize;
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs;
 
     if (ImGui::Begin("Debug", nullptr, flags)) {
         const auto& snap = s.snap;
@@ -541,6 +541,106 @@ inline void drawDebugPanel(const bh3d::State& s) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Physical scale panel (bottom-right, above the legend).
+// Shows Rs in km, disk extent in AU or light-days, and a graphical
+// scale bar that auto-switches units depending on BH mass.
+// Also exposed via the Overlays panel as the true-scale toggle.
+// ────────────────────────────────────────────────────────────
+inline void drawPhysicalScalePanel(const bh3d::State& s) {
+    const auto& snap = s.snap;
+    if (snap.massSolar <= 0.0) return;
+
+    // Physical constants
+    const double Rs_km     = 2.953 * snap.massSolar;   // Rs_primary in km
+    const double Rs_AU     = Rs_km / 1.496e8;           // Rs in AU
+    const double Rs_ld     = Rs_km / 2.592e10;          // Rs in light-days
+
+    // Choose display unit for scale bar based on BH mass
+    // < 1e4 M☉ → km,  1e4–1e9 M☉ → AU,  > 1e9 M☉ → light-days
+    const bool useKm = snap.massSolar < 1e4;
+    const bool useAU = snap.massSolar >= 1e4 && snap.massSolar < 1e9;
+    // (light-days for the SMBH end)
+
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float panelW = 240.0f;
+    ImGui::SetNextWindowPos(
+        ImVec2(vp->WorkPos.x + vp->WorkSize.x - panelW - 12.0f,
+               vp->WorkPos.y + vp->WorkSize.y - 180.0f),
+        ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.82f);
+
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs;
+
+    if (ImGui::Begin("##PhysScale", nullptr, flags)) {
+        char buf[64];
+
+        ImGui::TextColored(ImVec4(0.66f, 0.78f, 1.0f, 1.0f), "Physical Scale");
+        ImGui::Separator();
+
+        // Rs readout
+        if (useKm) {
+            if (Rs_km >= 1000.0)
+                std::snprintf(buf, sizeof(buf), "%.0f km (%.2f Mm)", Rs_km, Rs_km / 1000.0);
+            else
+                std::snprintf(buf, sizeof(buf), "%.1f km", Rs_km);
+        } else if (useAU) {
+            std::snprintf(buf, sizeof(buf), "%.3g AU", Rs_AU);
+        } else {
+            std::snprintf(buf, sizeof(buf), "%.3g light-days", Rs_ld);
+        }
+        detail::kvRow("1 Rs  =", buf, detail::textPrim());
+
+        // Disk outer extent
+        if (snap.diskOuterRadius > 0.0f) {
+            double extKm = snap.diskOuterRadius * Rs_km;
+            if (useKm)
+                std::snprintf(buf, sizeof(buf), "%.0f km", extKm);
+            else if (useAU)
+                std::snprintf(buf, sizeof(buf), "%.2f AU", extKm / 1.496e8);
+            else
+                std::snprintf(buf, sizeof(buf), "%.3g ld", extKm / 2.592e10);
+            detail::kvRow("Disk outer  =", buf, detail::textPrim());
+        }
+
+        // Graphical scale bar: 1 Rs wide in screen-pixel analogy
+        // We draw a coloured bar representing "1 Rs" to give a visual anchor.
+        ImGui::Spacing();
+        const float barW = ImGui::GetContentRegionAvail().x;
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float barH = 8.0f;
+        // Gradient: dark teal → cyan (horizon colour)
+        dl->AddRectFilledMultiColor(
+            p, ImVec2(p.x + barW, p.y + barH),
+            IM_COL32(20, 80, 120, 200),  IM_COL32(80, 200, 255, 220),
+            IM_COL32(80, 200, 255, 220), IM_COL32(20, 80, 120, 200));
+        ImGui::Dummy(ImVec2(barW, barH));
+        ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+        if (useKm)
+            std::snprintf(buf, sizeof(buf), "\xe2\x86\x94 1 Rs = %.1f km", Rs_km);
+        else if (useAU)
+            std::snprintf(buf, sizeof(buf), "\xe2\x86\x94 1 Rs = %.3g AU", Rs_AU);
+        else
+            std::snprintf(buf, sizeof(buf), "\xe2\x86\x94 1 Rs = %.3g light-days", Rs_ld);
+        ImGui::TextUnformatted(buf);
+        ImGui::PopStyleColor();
+
+        // True-scale mode indicator
+        if (snap.trueScaleMode) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f),
+                               "TRUE SCALE: bodies at physical size");
+        }
+    }
+    ImGui::End();
+}
+
+// ────────────────────────────────────────────────────────────
 // Gravitational-wave strain sparkline for mergers
 // The purpose of this is to plot the scrolling h(t) ∝ (1/sep)·cos(2φ_orbit) so that
 // frequency/amplitude sweep is visible as the bodies coalesce together. 
@@ -561,7 +661,7 @@ inline void drawMergerGWPlot(const bh3d::State& s) {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-        ImGuiWindowFlags_AlwaysAutoResize;
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs;
 
     if (ImGui::Begin("##GWStrain", nullptr, flags)) {
         char ovl[64];
@@ -602,7 +702,7 @@ inline void drawControlsHint() {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar;
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoInputs;
 
     if (ImGui::Begin("##controls", nullptr, flags)) {
         ImGui::TextUnformatted(txt);
@@ -673,6 +773,17 @@ inline void drawOverlaysPanel(bh3d::State& s) {
             s.physOverlay.markDirty();
         }
 
+        ImGui::SeparatorText("Scale");
+        if (toggleRow("True Scale Bodies  [ON]", "True Scale Bodies  [OFF]",
+                      s.trueScaleMode, ImVec2(btnW, 24))) {
+            s.trueScaleMode = !s.trueScaleMode;
+        }
+        if (s.trueScaleMode) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("Bodies shown at physical Rs size (may be sub-pixel).");
+            ImGui::PopStyleColor();
+        }
+
         ImGui::SeparatorText("Experimental");
         // Stubbed togglables (kept disabled to match legacy parity)
         ImGui::BeginDisabled();
@@ -711,7 +822,7 @@ inline void drawPhysOverlayLegend(bh3d::State& s) {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar;
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoInputs;
 
     if (ImGui::Begin("##PhysLegend", nullptr, flags)) {
         auto swatch = [](ImVec4 c) {
@@ -744,6 +855,184 @@ inline void drawPhysOverlayLegend(bh3d::State& s) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Body inspector card.
+// Anchored near the selected body's screen position (clamped to
+// viewport edges).  Double-click the card to dismiss; Escape also
+// works via onActionKey.  All data is already in the snapshot.
+// ────────────────────────────────────────────────────────────
+inline void drawBodyInspector(bh3d::State& s) {
+    if (s.selectedBody == -1) return;
+    const auto& snap = s.snap;
+    const int   sw   = snap.windowW, sh = snap.windowH;
+
+    // ── Resolve selected body data ─────────────────────────────────────────
+    glm::vec3   worldPos;
+    std::string bodyName, bodyType;
+    float       visRadius  = 1.0f;
+    float       semiMajorRs = 0.0f; // for Kepler period; 0 → skip
+
+    const bool isMerger = (s.selectedBody == bh3d::State::BODY_MERGER_SECONDARY);
+    if (isMerger) {
+        if (!snap.mergerInspiral) { s.selectedBody = -1; return; }
+        worldPos   = snap.mergerSecondaryPos;
+        bodyName   = snap.mergerSecondaryLabel;
+        bodyType   = "Merger secondary";
+        visRadius  = s.merger.secRadius;
+        // Semi-major: use current separation as proxy (no orbital config for merger)
+        semiMajorRs = snap.mergerSepRs;
+    } else {
+        int idx = s.selectedBody;
+        if (idx < 0 || idx >= (int)snap.orbBodyPositions.size()) {
+            s.selectedBody = -1; return;
+        }
+        worldPos  = snap.orbBodyPositions[idx];
+        bodyName  = (idx < (int)snap.orbBodyLabels.size()) ? snap.orbBodyLabels[idx] : "Body";
+        visRadius = (idx < (int)snap.orbBodyRadii.size())  ? snap.orbBodyRadii[idx]  : 1.0f;
+        int  btype = (idx < (int)snap.orbBodyTypes.size()) ? snap.orbBodyTypes[idx]  : 0;
+        switch (btype) {
+            case 0: bodyType = "Star";            break;
+            case 1: bodyType = "Gas Cloud";       break;
+            case 2: bodyType = "Stellar Cluster"; break;
+            case 3: bodyType = "Dwarf Galaxy";    break;
+            case 4: bodyType = "Neutron Star";    break;
+            case 5: bodyType = "White Dwarf";     break;
+            case 6: bodyType = "Companion Star";  break;
+            default: bodyType = "Body";           break;
+        }
+        // Use semi-major axis from the OrbitalBody config if available
+        if (idx < (int)s.orbBodies.size())
+            semiMajorRs = s.orbBodies[idx].config().semiMajor;
+    }
+
+    // ── Derived physics ───────────────────────────────────────────────────
+    const float Rs_km   = (float)(2.953 * std::max(1e-6, snap.massSolar));
+    // Distance from BH in Rs (native sim unit)
+    float rRs = glm::length(worldPos - snap.bhPosition);
+    if (rRs < 1.001f) rRs = 1.001f; // clamp outside horizon
+
+    // Physical distance from horizon: (r - 1) × Rs_km  [horizon = 1 Rs]
+    float distKm  = (rRs - 1.0f) * Rs_km;
+    // Adaptive unit formatter: km < 0.1 AU → AU < 0.1 ly → ly
+    constexpr float km_per_AU  = 1.496e8f;
+    constexpr float km_per_ly  = 9.461e12f;
+    char distBuf[48];
+    if (distKm < 0.1f * km_per_AU)
+        std::snprintf(distBuf, sizeof(distBuf), "%.1f km", distKm);
+    else if (distKm < 0.1f * km_per_ly)
+        std::snprintf(distBuf, sizeof(distBuf), "%.3g AU", distKm / km_per_AU);
+    else
+        std::snprintf(distBuf, sizeof(distBuf), "%.3g ly", distKm / km_per_ly);
+
+    // Gravitational time-dilation factor √(1 - 1/r)  (Schwarzschild, r in Rs)
+    float tdil = std::sqrt(std::max(0.0f, 1.0f - 1.0f / rRs));
+
+    // Gravitational redshift z = 1/√(1 - 1/r) - 1
+    float gRedshift = (tdil > 1e-6f) ? (1.0f / tdil - 1.0f) : 1e6f;
+
+    // Orbital velocity v/c (Newtonian approximation valid at r >> Rs)
+    //   v = √(M / r)  in geometrised units (M = 0.5 Rs, r in Rs)
+    float vOverC = std::sqrt(0.5f / rRs); // rough Keplerian
+
+    // Keplerian period from snap: T = 2π √(a³ / M), M = Rs/2 (geom units)
+    char periodBuf[48] = "—";
+    if (semiMajorRs > 0.0f && snap.massSolar > 0.0) {
+        // a in metres = semiMajorRs * Rs_km * 1000
+        // M in metres = massSolar * 1476.25 (G M_sun / c²)
+        double a_m = (double)semiMajorRs * (double)Rs_km * 1000.0;
+        double M_m = snap.massSolar * 1476.25;  // geometric mass in metres
+        double T_s = 2.0 * 3.14159265 * std::sqrt(a_m * a_m * a_m / M_m) / 3.0e8;
+        if (T_s < 60.0)
+            std::snprintf(periodBuf, sizeof(periodBuf), "%.1f s", T_s);
+        else if (T_s < 3600.0)
+            std::snprintf(periodBuf, sizeof(periodBuf), "%.2f min", T_s / 60.0);
+        else if (T_s < 86400.0)
+            std::snprintf(periodBuf, sizeof(periodBuf), "%.2f h", T_s / 3600.0);
+        else if (T_s < 3.156e7)
+            std::snprintf(periodBuf, sizeof(periodBuf), "%.2f days", T_s / 86400.0);
+        else
+            std::snprintf(periodBuf, sizeof(periodBuf), "%.3g yr", T_s / 3.156e7);
+    }
+
+    // ── Screen-space anchor (clamp to viewport) ───────────────────────────
+    float bsx = 0.0f, bsy = 0.0f;
+    const bool visible = hud::projectToScreen(worldPos,
+        snap.cameraPos, snap.cameraDir, snap.cameraUp,
+        snap.fov, sw, sh, bsx, bsy);
+    // If the body went off-screen while followed, anchor to a corner
+    if (!visible) { bsx = (float)sw - 280.0f; bsy = 200.0f; }
+
+    const float cardW  = 260.0f;
+    const float margin = 14.0f;
+    float winX = bsx + 22.0f;
+    float winY = bsy - 20.0f;
+    // Clamp to screen
+    winX = std::clamp(winX, margin, (float)sw - cardW - margin);
+    winY = std::clamp(winY, margin, (float)sh - 300.0f);
+
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + winX, vp->WorkPos.y + winY),
+                            ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(cardW, 0.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.90f);
+
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+        ImGuiWindowFlags_AlwaysAutoResize;
+
+    if (ImGui::Begin("##BodyInspector", nullptr, flags)) {
+        // ── Header ──────────────────────────────────────────────────────────
+        ImGui::TextColored(ImVec4(1.0f, 0.88f, 0.55f, 1.0f), "%s", bodyName.c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("  %s", bodyType.c_str());
+        ImGui::Separator();
+
+        char buf[64];
+        auto kvRow = [&](const char* key, const char* val) {
+            ImGui::TextDisabled("%s", key);
+            ImGui::SameLine(100.0f);
+            ImGui::TextColored(detail::textPrim(), "%s", val);
+        };
+
+        // ── Position ──────────────────────────────────────────────────────────
+        std::snprintf(buf, sizeof(buf), "%.2f Rs", rRs);
+        kvRow("Dist (BH)", buf);
+        kvRow("From horizon", distBuf);
+
+        glm::vec3 delta = worldPos - snap.bhPosition;
+        std::snprintf(buf, sizeof(buf), "(%.2f, %.2f, %.2f) Rs", delta.x, delta.y, delta.z);
+        ImGui::TextDisabled("Vector ");
+        ImGui::SameLine(100.0f);
+        ImGui::TextColored(detail::textDim(), "%s", buf);
+
+        ImGui::Separator();
+
+        // ── Physics ────────────────────────────────────────────────────────────
+        std::snprintf(buf, sizeof(buf), "%.4f", tdil);
+        kvRow("Time dil √(1-1/r)", buf);
+
+        std::snprintf(buf, sizeof(buf), "z = %.4f", gRedshift);
+        kvRow("Grav. redshift", buf);
+
+        std::snprintf(buf, sizeof(buf), "%.3f c", vOverC);
+        kvRow("Orbital v ≈", buf);
+
+        kvRow("Orbital period", periodBuf);
+
+        // ── Dismiss hint ───────────────────────────────────────────────────────
+        ImGui::Spacing();
+        ImGui::TextDisabled("Double-click to close  |  Esc to deselect");
+
+        // Double-click inside the card → dismiss
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            bh3d::deselectBody(s);
+        }
+    }
+    ImGui::End();
+}
+
+// ────────────────────────────────────────────────────────────
 // Convenience: draw the full ImGui HUD for the standalone host.
 // Call between ImGui::SFML::Update and ImGui::SFML::Render.
 // ────────────────────────────────────────────────────────────
@@ -751,6 +1040,7 @@ inline void drawAll(bh3d::State& s) {
     drawPhysOverlayLegend(s);
     if (s.showHUD) {
         drawStatusPanel(s);
+        drawPhysicalScalePanel(s);
         drawControlsHint();
         drawOverlaysPanel(s);
     }
@@ -760,6 +1050,7 @@ inline void drawAll(bh3d::State& s) {
     drawPresetMenu(s);
     drawMergerMenu(s);
     drawMergerGWPlot(s);
+    drawBodyInspector(s);
 
     // ---- Tidal disruption event particle overlay ----
     if (s.snap.tdeActive) {
