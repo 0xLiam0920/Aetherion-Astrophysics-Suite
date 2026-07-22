@@ -48,11 +48,11 @@ The goal is reproducible results without having to fight the tooling.
   - Clean UI for rapid inspection
 
 - **Object Library**
-  - Reusable custom bodies (i.e, pulsar, NOT YET IMPLEMENTED)
+  - Reusable custom bodies (i.e, pulsar)
   - Configurable parameters (mass, gas temp, etc, still WIP)
 
 - **Architecture**
-  - Modularity for easy extension
+  - Modularity for easy extension (NOT YET IMPLEMENTED)
   - Plugin system for custom modularity (NOT YET IMPLEMENTED)
   - Configurable for keybinds, scenarios, etc
 
