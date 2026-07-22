@@ -48,6 +48,7 @@ struct PhysicsSnapshot {
     float diskDisplayTempOuter;
     float diskSatBoostInner;
     float diskSatBoostOuter;
+    bool  diskPhysicalColor;  // true = NT+Doppler+grav colour via CIE LUT
 
     /*--------- Jets ---------*/
     float     jetRadius;

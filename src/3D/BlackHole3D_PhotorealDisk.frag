@@ -75,6 +75,10 @@ uniform float diskDisplayTempOuter;  // Display temp at outer disk [K]
 uniform float diskSatBoostInner;     // Saturation multiplier at outer edge
 uniform float diskSatBoostOuter;     // Saturation multiplier at inner edge
 
+// Physical colour mode
+uniform int         showPhysicalDiskColor; // 1 = NT+Doppler+grav CIE LUT path
+uniform sampler2D   blackbodyLUT;         // 256×1 sRGB blackbody, 1000–40000 K
+
 // Orbiting bodies
 const int MAX_ORB_BODIES = 10;
 uniform vec3  orbBodyPos[MAX_ORB_BODIES];      // Positions of orbiting bodies [Rs units]
@@ -697,10 +701,9 @@ vec3 applyFrequencyShift(vec3 color, float freqRatio) {
 // ============================================================================
 
 vec3 kelvinToRGB(float K) {
-    // Attempt blackbody color approximation (Tanner Helland algorithm)
+    // Tanner Helland polynomial approximation (used for legacy / non-disk paths)
     K = clamp(K, 1000.0, 40000.0) / 100.0;
     float r, g, b;
-    
     if (K <= 66.0) {
         r = 1.0;
         g = clamp(0.39008157877 * log(K) - 0.63184144378, 0.0, 1.0);
@@ -712,6 +715,12 @@ vec3 kelvinToRGB(float K) {
         b = 1.0;
     }
     return vec3(r, g, b);
+}
+
+// CIE-accurate lookup: samples the 256×1 LUT built by createBlackbodyLUT()
+vec3 kelvinToRGBLUT(float K) {
+    float u = (clamp(K, 1000.0, 40000.0) - 1000.0) / 39000.0;
+    return texture(blackbodyLUT, vec2(u, 0.5)).rgb;
 }
 
 // Novikov-Thorne thin disk temperature profile
@@ -833,23 +842,50 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     //   kelvinToRGB(T_obs) then maps the shifted Planck spectrum to visible color.
     //   No per-channel RGB hack needed, the Planck function handles it.
     float freqShift = D * grav;
-    
-    // Radial color gradient: use disk position directly for visible color.
-    // Map radial position to per-preset displayable temperature range
-    // where kelvinToRGB produces rich, distinguishable colors.
-    float radialColorGradient = pow(1.0 - tRad, 0.4);
-    float T_display = mix(diskDisplayTempOuter, diskDisplayTempInner, radialColorGradient);
-    // Doppler + gravitational shift affects observed blackbody color
-    // Wide range allows dramatic visual asymmetry: approaching side blazes blue-white,
-    // receding side dims to deep red as photons lose energy fighting gravity + recession.
-    T_display *= clamp(freqShift, 0.3, 3.0);
-    T_display = clamp(T_display, 600.0, 25000.0);
-    vec3 color = kelvinToRGB(T_display);
-    
-    // Boost saturation, per-preset values
-    float satBoost = mix(diskSatBoostInner, diskSatBoostOuter, radialColorGradient);
-    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    color = max(mix(vec3(lum), color, satBoost), 0.0);
+
+    // ── Disk colour ──────────────────────────────────────────────────────────
+    vec3 color;
+    if (showPhysicalDiskColor == 1) {
+        // Original issue (2026-07-20): The disk was mostly a solid, gradient color; there was no functional color scaling (i.e, phoenix A had a fully white accretion disk)
+        //
+        //SOLUTION:
+        // The Novikov-Thorne profile (AKA T(r) ∝ r^(-3/4)) sets the SHAPE of 
+        // radial falloff. Since we anchor it to diskDisplayTempInner (the disk's
+        // characteristic VISIBLE-band colour temperature) instead of
+        // the var. diskPeakTemp, the gradient actually stays visible. diskPeakTemp is the
+        // *bolometric* effective temperature (~28000 K for NGC 1277), and its
+        // Planck peak sits deep in the UV. Given that, any disk anchored there
+        // ends up uniformly blue-white across the whole rendered radius (nothing
+        // falls below ~7000 K within 20 Rs), which is technically the true
+        // colour but it erases all the radial structure we actually want to see.
+        // diskPeakTemp still drives luminosity / flux / relativistic beaming
+        // below, so only the HUE uses the visible characteristic temperature,
+        // and that's what lets the physical r^(-3/4) gradient read in this
+        // order: gold(inner), orange, then red(outer).
+        //
+        // T_obs = T_colour(r) times D times g_grav, so the Doppler and gravitational
+        // frequency shift together produce the correct blue(approaching) and
+        // red(receding) asymmetry. Changing spin (rISCO) or the per-preset
+        // temperatures will visibly change the disk colour as a result.
+        float T_emit = diskDisplayTempInner * Tprofile;
+        float T_obs  = T_emit * clamp(freqShift, 0.08, 6.0);
+        color = kelvinToRGBLUT(T_obs);
+    } else {
+        // Legacy artistic path: interpolate displayTempInner/Outer, boost sat.
+        float radialColorGradient = pow(1.0 - tRad, 0.4);
+        float T_display = mix(diskDisplayTempOuter, diskDisplayTempInner, radialColorGradient);
+        // Doppler + gravitational shift affects observed blackbody color
+        // Wide range allows dramatic visual asymmetry: approaching side blazes blue-white,
+        // receding side dims to deep red as photons lose energy fighting gravity + recession.
+        T_display *= clamp(freqShift, 0.3, 3.0);
+        T_display = clamp(T_display, 600.0, 25000.0);
+        color = kelvinToRGB(T_display);
+        // Boost saturation, per-preset values
+        float radialColorGradient2 = pow(1.0 - tRad, 0.4);
+        float satBoost = mix(diskSatBoostInner, diskSatBoostOuter, radialColorGradient2);
+        float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        color = max(mix(vec3(lum), color, satBoost), 0.0);
+    }
     
     // === BEAM STRUCTURE (spiral arms + radial streaks + filaments) ===
     // Prominent logarithmic spiral arms, the dominant rotating feature.
@@ -882,10 +918,18 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     // Compress dynamic range: sqrt mapping preserves more brightness than pow(0.4)
     flux = mix(flux, sqrt(flux), 0.65);
     
-    // Relativistic surface brightness: I_obs ∝ D^3 × I_emit  (Liouville's theorem)
-    // Full D^3 beaming, essential for scientific accuracy
-    float dopplerBright = pow(clamp(D, 0.2, 4.0), 3.0);
-    dopplerBright = mix(1.0, dopplerBright, 0.65);  // Stronger asymmetry (was 0.35)
+    // ── Beaming / surface brightness ─────────────────────────────────────────
+    // Physical: bolometric I_obs ∝ g^4  (g = D × grav_factor)
+    // Legacy:   monochromatic I_obs ∝ D^3
+    float dopplerBright;
+    if (showPhysicalDiskColor == 1) {
+        // g^4 bolometric beaming; partial compression (0.7) avoids over-contrast.
+        float g4 = pow(clamp(freqShift, 0.15, 4.0), 4.0);
+        dopplerBright = mix(1.0, g4, 0.7);
+    } else {
+        dopplerBright = pow(clamp(D, 0.2, 4.0), 3.0);
+        dopplerBright = mix(1.0, dopplerBright, 0.65);  // Stronger asymmetry (was 0.35)
+    }
     
     // Inner hot region boost, TON 618 is hyperluminous, ISCO region blazing
     float innerBoost = 1.0 + 5.0 * exp(-(r - rISCO * 1.36) * (r - rISCO * 1.36) * 0.3);
@@ -899,7 +943,22 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     
     // Power-law compression to prevent ACES white crush
     I = pow(max(I, 0.0), 0.42) * 3.0;
-    
+
+    if (showPhysicalDiskColor == 1) {
+        // Hue-preserving luminance compression.
+        // Without this, the downstream ACES filmic tonemapper crushes every
+        // bright disk pixel down to featureless white. Once all three channels
+        // exceed about 2, they all clamp to 1.0 the same way, which erases
+        // whatever blackbody chroma we worked out above. Compressing the
+        // brightness here instead (it asymptotes to about 2) leaves the
+        // normalized blackbody colour ratios intact, so the physically-derived
+        // blue(inner), white, orange(outer) gradient actually survives tonemapping.
+        // The genuine inner core still exceeds 1.0, so it still blooms and
+        // whitens the way you'd expect near the ISCO.
+        float Lt = I / (1.0 + 0.5 * I);   // asymptote about 2.0
+        return color * Lt;
+    }
+
     return color * I;
 }
 

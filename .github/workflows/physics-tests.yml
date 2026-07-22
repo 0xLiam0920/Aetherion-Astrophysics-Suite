@@ -1,9 +1,11 @@
 name: physics-tests
 
 # Runs the physics regression suite on every push and pull request.
-# The test target depends only on the header-only scientific core
-# (src/2D/2D-physics + the photon integrator), so it builds without
-# Qt, SFML, OpenGL, or any GUI dependency — keeping CI fast and reliable.
+# The test target only depends on the header-only scientific core
+# (src/2D/2D-physics plus the photon integrator, and src/3D/bh3d_blackbody.hpp
+# for the accretion-disk colour physics), so it builds without Qt, SFML,
+# OpenGL, or any GUI dependency at all. That's what keeps this job fast and
+# reliable, since there's nothing heavy for it to install or link against.
 
 on:
   push:

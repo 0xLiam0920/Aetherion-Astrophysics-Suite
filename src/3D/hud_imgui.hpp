@@ -784,6 +784,18 @@ inline void drawOverlaysPanel(bh3d::State& s) {
             ImGui::PopStyleColor();
         }
 
+        ImGui::SeparatorText("Disk Colour");
+        if (toggleRow("Physical Disk Colour  [ON]", "Physical Disk Colour  [OFF]",
+                      s.physicalDiskColor, ImVec2(btnW, 24))) {
+            s.physicalDiskColor = !s.physicalDiskColor;
+        }
+        if (s.physicalDiskColor) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("T(r) \u221d r\u207b\u00be Novikov\u2013Thorne + Doppler/grav shift \u2192 CIE sRGB. "
+                               "Changing spin or mass now visibly alters disc colour.");
+            ImGui::PopStyleColor();
+        }
+
         ImGui::SeparatorText("Experimental");
         // Stubbed togglables (kept disabled to match legacy parity)
         ImGui::BeginDisabled();

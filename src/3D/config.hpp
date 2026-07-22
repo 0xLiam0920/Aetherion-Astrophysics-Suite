@@ -44,6 +44,9 @@ struct DiskConfig {
     float displayTempOuter = 1800.0f; // Display color temp at outer disk
     float saturationBoostInner = 2.2f; // Saturation boost at outer edge
     float saturationBoostOuter = 1.1f; // Saturation boost at inner edge
+    // Physical disk-colour mode: uses NT temperature profile + CIE XYZ LUT
+    // instead of the artistally-tuned displayTempInner/Outer knobs.
+    bool physicalDiskColor = true;
 };
 
 /*--------- Black hole ---------*/

@@ -1,11 +1,15 @@
 #include "bh3d_textureutils.hpp"
+#include "bh3d_blackbody.hpp"
 
 // Textures fall back to a 1x1 white pixel when an asset can't be loaded.
 
 #include <SFML/Graphics/Image.hpp>
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <algorithm>
+#include <vector>
 
 // 1x1 white fallback used when a real texture is missing.
 GLTexture2D createFallbackWhiteTexture() {
@@ -106,4 +110,39 @@ GLTexture2D createDiskTextureProcedural(unsigned int size) {
     GLTexture2D result;
     result.adopt(tex);
     return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Physical blackbody colour LUT (1,000 to 40,000 K)
+//
+// This integrates B(lambda,T) times the CIE 1931 CMF over 380 to 780 nm,
+// converts that to XYZ then D65 sRGB. Each entry gets normalised so
+// max(R,G,B) equals 1, since we only care about the chromaticity here.
+// Actual brightness is handled later by the shader's NT flux and beaming math.
+// ─────────────────────────────────────────────────────────────────────────────
+GLTexture2D createBlackbodyLUT(int nSamples) {
+    // The colour physics itself lives in bh3d_blackbody.hpp, since it's GL-free
+    // and shared with the CPU test suite. That way the exact values we upload
+    // here are the same ones the physics regression tests check against.
+    auto enc = [](double c) -> std::uint8_t {
+        return static_cast<std::uint8_t>(std::clamp(c * 255.0 + 0.5, 0.0, 255.0));
+    };
+
+    std::vector<std::uint8_t> px(static_cast<std::size_t>(nSamples) * 3);
+    for (int i = 0; i < nSamples; ++i) {
+        const double T = 1000.0 + 39000.0 * i / std::max(nSamples - 1, 1);
+        const std::array<double, 3> rgb = bh3d::physics::blackbodyRGB(T);
+        px[static_cast<std::size_t>(i) * 3 + 0] = enc(rgb[0]);
+        px[static_cast<std::size_t>(i) * 3 + 1] = enc(rgb[1]);
+        px[static_cast<std::size_t>(i) * 3 + 2] = enc(rgb[2]);
+    }
+    GLuint tex=0;
+    glGenTextures(1,&tex);
+    glBindTexture(GL_TEXTURE_2D,tex);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,nSamples,1,0,GL_RGB,GL_UNSIGNED_BYTE,px.data());
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    GLTexture2D lut; lut.adopt(tex); return lut;
 }

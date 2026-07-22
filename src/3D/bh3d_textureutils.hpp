@@ -12,4 +12,9 @@ GLTexture2D createFallbackWhiteTexture();
 GLTexture2D loadTexture2D(const std::string& path);
 
 // Generate a procedural accretion-disk texture
-GLTexture2D createDiskTextureProcedural(unsigned int size = 512);
+GLTexture2D createDiskTextureProcedural(unsigned int size = 256);
+
+// This call makes a 256×1 sRGB blackbody colour LUT from 1,000–40,000 K for the accretion disk
+// Uses the Planck spectrum against CIE 1931 CMFs → XYZ → sRGB.
+// for physical disc color only
+GLTexture2D createBlackbodyLUT(int nSamples = 256);

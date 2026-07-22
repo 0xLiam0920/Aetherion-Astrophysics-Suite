@@ -332,6 +332,8 @@ struct SceneUniforms {
     GLint maxStepsOverride;
     GLint diskPeakTemp, diskDisplayTempInner, diskDisplayTempOuter;
     GLint diskSatBoostInner, diskSatBoostOuter;
+    GLint showPhysicalDiskColor;
+    GLint blackbodyLUTTex;
 
     // Inspiralling merger BH identities
     GLint secBHActive, secBHDiskNormal, secBHSpin;
@@ -391,6 +393,8 @@ struct SceneUniforms {
         u.diskDisplayTempOuter = prog.uniform("diskDisplayTempOuter");
         u.diskSatBoostInner    = prog.uniform("diskSatBoostInner");
         u.diskSatBoostOuter    = prog.uniform("diskSatBoostOuter");
+        u.showPhysicalDiskColor = prog.uniform("showPhysicalDiskColor");
+        u.blackbodyLUTTex      = prog.uniform("blackbodyLUT");
         u.secBHActive          = prog.uniform("secBHActive");
         u.secBHDiskNormal      = prog.uniform("secBHDiskNormal");
         u.secBHSpin            = prog.uniform("secBHSpin");
@@ -409,7 +413,8 @@ struct SceneUniforms {
 
 inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
                              const PhysicsSnapshot& snap,
-                             GLuint bgTexId, GLuint diskTexId)
+                             GLuint bgTexId, GLuint diskTexId,
+                             GLuint blackbodyLUTId)
 {
     prog.use();
     glUniform2f(u.resolution,     float(snap.windowW), float(snap.windowH));
@@ -420,8 +425,9 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glUniform1f(u.blackHoleRadius, snap.bhRadius);
     glUniform3f(u.blackHolePos,   snap.bhPosition.x, snap.bhPosition.y, snap.bhPosition.z);
 
-    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, bgTexId);   glUniform1i(u.backgroundTex, 0);
-    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, diskTexId); glUniform1i(u.diskTex, 1);
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, bgTexId);        glUniform1i(u.backgroundTex, 0);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, diskTexId);      glUniform1i(u.diskTex, 1);
+    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, blackbodyLUTId); glUniform1i(u.blackbodyLUTTex, 2);
 
     glUniform1f(u.diskInnerRadius,       snap.diskInnerRadius);
     glUniform1f(u.diskOuterRadius,       snap.diskOuterRadius);
@@ -431,6 +437,7 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glUniform1f(u.diskDisplayTempOuter,  snap.diskDisplayTempOuter);
     glUniform1f(u.diskSatBoostInner,     snap.diskSatBoostInner);
     glUniform1f(u.diskSatBoostOuter,     snap.diskSatBoostOuter);
+    glUniform1i(u.showPhysicalDiskColor, snap.diskPhysicalColor ? 1 : 0);
     glUniform1i(u.secBHActive,           snap.secBHActive ? 1 : 0);
     glUniform3f(u.secBHDiskNormal,       snap.secBHDiskNormal.x, snap.secBHDiskNormal.y, snap.secBHDiskNormal.z);
     glUniform1f(u.secBHSpin,             snap.secBHSpin);
@@ -535,6 +542,7 @@ struct State {
     GLTexture2D bgTex;
     GLTexture2D photorealDiskTex;
     GLTexture2D simpleDiskTex;
+    GLTexture2D blackbodyLUT;   // CIE XYZ blackbody color LUT/spectrum table
 
     // Bloom
     BloomPipeline bloom;
@@ -567,6 +575,7 @@ struct State {
     bool showHUD           = true;
     bool showDebugHUD      = false;
     bool trueScaleMode     = false; // shrink orbital bodies to physical Rs radii, false = scale to screen space
+    bool physicalDiskColor = true;  // NT+Doppler+grav colour via CIE LUT
 
     // Animation
     static constexpr float animSpeedPresets[3] = { 1.0f, 3.0f, 8.0f };
@@ -837,6 +846,7 @@ inline void initTextures(State& s, ResourceManager& res) {
         if (!s.bgTex) s.bgTex = createFallbackWhiteTexture();
     }
     s.photorealDiskTex = createFallbackWhiteTexture();
+    s.blackbodyLUT     = createBlackbodyLUT(256);
     {
         std::string diskPath = res.find("disk_texture.png");
         if (!diskPath.empty()) s.simpleDiskTex = loadTexture2D(diskPath.c_str());
@@ -1491,6 +1501,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.diskDisplayTempOuter  = s.config.disk.displayTempOuter;
     snap.diskSatBoostInner     = s.config.disk.saturationBoostInner;
     snap.diskSatBoostOuter     = s.config.disk.saturationBoostOuter;
+    snap.diskPhysicalColor     = s.physicalDiskColor;
     snap.jetRadius         = s.config.jet.radius;
     snap.jetLength         = s.config.jet.length;
     snap.jetColor          = s.config.jet.color;
@@ -1733,7 +1744,8 @@ inline void renderScene(State& s, int w, int h) {
         glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
         setSceneUniforms(*s.activeProgram, s.activeUfs, s.snap,
-                         s.bgTex.id(), s.photorealDiskTex.id());
+                         s.bgTex.id(), s.photorealDiskTex.id(),
+                         s.blackbodyLUT.id());
         s.quad.drawQuad();
         s.bloom.execute(s.quad, cfg::cinematicBloom(), true, s.totalTime);
     } else {
@@ -1742,7 +1754,8 @@ inline void renderScene(State& s, int w, int h) {
         glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
         setSceneUniforms(*s.activeProgram, s.activeUfs, s.snap,
-                         s.bgTex.id(), s.simpleDiskTex.id());
+                         s.bgTex.id(), s.simpleDiskTex.id(),
+                         s.blackbodyLUT.id());
         s.quad.drawQuad();
     }
     // bloom.execute() saves+restores prevFBO which ends up as sceneFBO; force
