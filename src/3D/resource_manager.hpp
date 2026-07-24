@@ -8,12 +8,16 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <filesystem>
 
 class ResourceManager {
 public:
     ResourceManager() {
         // Default search paths (in priority order)
-        searchPaths_ = { ".", "build", "..", "../build", "../..", "../../build", "src", "../src", "../../src" };
+        searchPaths_ = { ".", "build", "..", "../build", "../..", "../../build",
+                         "src", "../src", "../../src",
+                         "src/common/resources", "../src/common/resources",
+                         "../../src/common/resources" };
 
         // Prepend the directory of the running executable so that shaders and
         // textures are found regardless of the working directory.
@@ -71,6 +75,21 @@ public:
         // Also try filename directly (in case it's an absolute or already correct relative path)
         std::ifstream f(filename);
         if (f.good()) return filename;
+        return {};
+    }
+
+    // Find the first search path containing directory `dirname` with >=1 .json
+    // file. Returns the full relative path, or empty string if not found.
+    // (First-hit-wins, same semantics as find().)
+    std::string findDir(const std::string& dirname) const {
+        namespace fs = std::filesystem;
+        for (const auto& dir : searchPaths_) {
+            fs::path cand = fs::path(dir) / dirname;
+            std::error_code ec;
+            if (!fs::is_directory(cand, ec)) continue;
+            for (const auto& de : fs::directory_iterator(cand, ec))
+                if (de.path().extension() == ".json") return cand.string();
+        }
         return {};
     }
 

@@ -1,0 +1,67 @@
+{
+  "binary": {
+    "barycentric": true,
+    "companionMassSolar": 1.07
+  },
+  "description": "Dormant BH (~8.9 Msun), discovered via astrometry, red giant companion",
+  "galaxyBodies": [
+    {
+      "ecc": 0.52,
+      "inclination": 0.12,
+      "semiMajorRs": 30.0,
+      "type": "CompanionStar"
+    }
+  ],
+  "isGalacticCenter": false,
+  "massSolar": 8.94,
+  "name": "Gaia BH2",
+  "schema": 1,
+  "sortKey": 60,
+  "spin": 0.2,
+  "visual3d": {
+    "bloom": {
+      "exposure": 0.4,
+      "intensity": 0.04,
+      "threshold": 4.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        3.5,
+        15.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 1000.0,
+      "displayTempOuter": 1000.0,
+      "halfThickness": 0.0,
+      "innerRadius": 3.0,
+      "outerRadius": 0.0,
+      "peakTemp": 1000.0,
+      "saturationBoostInner": 0.0,
+      "saturationBoostOuter": 0.0
+    },
+    "jet": {
+      "color": [
+        0.1,
+        0.3,
+        0.6
+      ],
+      "length": 4.0,
+      "radius": 0.08
+    },
+    "orbital": {
+      "bodyRadius": 2.4,
+      "semiMajor": 30.0
+    }
+  }
+}

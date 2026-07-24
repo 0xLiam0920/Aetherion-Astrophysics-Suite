@@ -1,0 +1,83 @@
+{
+  "description": "First quasar identified (~8.9e8 Msun), bright jet",
+  "galaxyBodies": [
+    {
+      "ecc": 0.2,
+      "inclination": -0.3,
+      "semiMajorRs": 10.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.4,
+      "inclination": -0.1,
+      "semiMajorRs": 20.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.25,
+      "inclination": 0.1,
+      "semiMajorRs": 70.0,
+      "type": "DwarfGalaxy"
+    },
+    {
+      "ecc": 0.6,
+      "inclination": 0.3,
+      "semiMajorRs": 35.0,
+      "type": "Star"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 886000000.0,
+  "name": "3C 273",
+  "schema": 1,
+  "sortKey": 30,
+  "spin": 0.9,
+  "visual3d": {
+    "bloom": {
+      "exposure": 1.1,
+      "intensity": 0.6,
+      "threshold": 1.0
+    },
+    "blr": {
+      "innerRadius": 16.0,
+      "outerRadius": 38.0,
+      "strength": 0.75,
+      "thickness": 7.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        7.0,
+        28.0
+      ]
+    },
+    "defaults": {
+      "blr": true,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": true,
+      "jets": true,
+      "lab": true,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 6500.0,
+      "displayTempOuter": 2500.0,
+      "halfThickness": 0.015,
+      "innerRadius": 1.8,
+      "outerRadius": 22.0,
+      "peakTemp": 35000.0,
+      "saturationBoostInner": 1.8,
+      "saturationBoostOuter": 1.2
+    },
+    "jet": {
+      "color": [
+        0.3,
+        0.85,
+        1.5
+      ],
+      "length": 55.0,
+      "radius": 0.45
+    }
+  }
+}

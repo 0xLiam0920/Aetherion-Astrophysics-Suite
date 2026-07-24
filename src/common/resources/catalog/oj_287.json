@@ -1,0 +1,82 @@
+{
+  "description": "SMBH binary system (~1.8e10 Msun primary), blazar, optical outbursts",
+  "galaxyBodies": [
+    {
+      "ecc": 0.66,
+      "inclination": -0.2,
+      "semiMajorRs": 15.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.3,
+      "inclination": 0.05,
+      "semiMajorRs": 22.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.2,
+      "inclination": 0.3,
+      "semiMajorRs": 40.0,
+      "type": "GasCloud"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 18000000000.0,
+  "name": "OJ 287",
+  "schema": 1,
+  "sortKey": 120,
+  "spin": 0.82,
+  "visual3d": {
+    "bloom": {
+      "exposure": 1.15,
+      "intensity": 0.68,
+      "softKnee": 0.62,
+      "threshold": 0.88
+    },
+    "blr": {
+      "innerRadius": 17.0,
+      "outerRadius": 36.0,
+      "strength": 0.65,
+      "thickness": 7.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        7.0,
+        27.0
+      ]
+    },
+    "defaults": {
+      "blr": true,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": true,
+      "jets": true,
+      "lab": true,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 11000.0,
+      "displayTempOuter": 4200.0,
+      "halfThickness": 0.011,
+      "innerRadius": 1.75,
+      "outerRadius": 26.0,
+      "peakTemp": 38000.0,
+      "saturationBoostInner": 1.4,
+      "saturationBoostOuter": 2.8
+    },
+    "jet": {
+      "color": [
+        0.35,
+        0.85,
+        1.65
+      ],
+      "length": 48.0,
+      "radius": 0.45
+    },
+    "orbital": {
+      "bodyRadius": 2.2,
+      "semiMajor": 14.0
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "description": "Most luminous quasar (~1.7e10 Msun), extreme disk",
+  "galaxyBodies": [
+    {
+      "ecc": 0.1,
+      "inclination": -0.4,
+      "semiMajorRs": 9.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.35,
+      "inclination": -0.2,
+      "semiMajorRs": 18.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.7,
+      "inclination": 0.0,
+      "semiMajorRs": 14.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.2,
+      "inclination": 0.2,
+      "semiMajorRs": 45.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.15,
+      "inclination": 0.4,
+      "semiMajorRs": 65.0,
+      "type": "StellarCluster"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 17000000000.0,
+  "name": "J0529-4351",
+  "schema": 1,
+  "sortKey": 40,
+  "spin": 0.95,
+  "visual3d": {
+    "bloom": {
+      "exposure": 1.2,
+      "intensity": 0.75,
+      "softKnee": 0.7,
+      "threshold": 0.8
+    },
+    "blr": {
+      "innerRadius": 20.0,
+      "outerRadius": 42.0,
+      "strength": 0.9,
+      "thickness": 8.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        8.0,
+        32.0
+      ]
+    },
+    "defaults": {
+      "blr": true,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": true,
+      "jets": true,
+      "lab": true,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 7000.0,
+      "displayTempOuter": 2800.0,
+      "halfThickness": 0.01,
+      "innerRadius": 1.5,
+      "outerRadius": 30.0,
+      "peakTemp": 40000.0,
+      "saturationBoostInner": 1.6,
+      "saturationBoostOuter": 1.3
+    },
+    "jet": {
+      "color": [
+        0.35,
+        0.95,
+        1.6
+      ],
+      "length": 50.0,
+      "radius": 0.5
+    }
+  }
+}

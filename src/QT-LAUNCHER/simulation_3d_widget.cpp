@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "bh3d_core.hpp"
+#include "bh3d_catalog_adapter.hpp"
 
 #ifdef AETHERION_QT_HOST
 #include "hud_imgui.hpp"
@@ -71,13 +72,15 @@ void Simulation3DWidget::onInit()
 
     // Build pimpl with the camera config from the default profile so the
     // CameraController can be constructed; bh3d::initProfiles will reset it.
+    std::vector<BlackHoleProfile> loaded;
     {
-        auto probe = profiles::allProfiles();
-        state_ = std::make_unique<Sim3DState>(probe[0].config.camera);
+        ResourceManager res;
+        loaded = bh3d_catalog::loadProfiles(res);
+        state_ = std::make_unique<Sim3DState>(loaded[0].config.camera);
     }
     auto& s = state_->core;
 
-    bh3d::initProfiles(s, /*initialIdx=*/0); // start on TON 618
+    bh3d::initProfiles(s, std::move(loaded), /*initialIdx=*/0); // start on TON 618
 
     // Apply custom config if the caller pushed one before show()
     if (hasPendingConfig_) {

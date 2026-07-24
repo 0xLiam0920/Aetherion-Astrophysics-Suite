@@ -1,0 +1,70 @@
+{
+  "description": "Most massive known quasar (~6.6e10 Msun)",
+  "galaxyBodies": [
+    {
+      "ecc": 0.15,
+      "inclination": -0.4,
+      "semiMajorRs": 8.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.55,
+      "inclination": -0.22,
+      "semiMajorRs": 15.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.3,
+      "inclination": -0.04,
+      "semiMajorRs": 25.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.8,
+      "inclination": 0.14,
+      "semiMajorRs": 12.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.2,
+      "inclination": 0.32,
+      "semiMajorRs": 50.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.1,
+      "inclination": 0.5,
+      "semiMajorRs": 80.0,
+      "type": "StellarCluster"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 66000000000.0,
+  "name": "TON 618",
+  "schema": 1,
+  "sortKey": 0,
+  "spin": 0.8,
+  "visual3d": {
+    "blr": {
+      "strength": 1.0
+    },
+    "defaults": {
+      "blr": true,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": true,
+      "jets": true,
+      "lab": true,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 5500.0,
+      "displayTempOuter": 2200.0,
+      "saturationBoostInner": 2.0
+    },
+    "orbital": {
+      "bodyRadius": 1.5,
+      "semiMajor": 100.0
+    }
+  }
+}

@@ -988,20 +988,6 @@ inline std::array<BlackHoleProfile, 14> allProfiles() {
 
 constexpr int NUM_PROFILES = 14;
 
-// Look up a full profile by its display name (matches BlackHoleProfile::name).
-// Returns nullptr if no profile carries that name. Used to give an inspiralling
-// merger secondary the accretion-disk / spin / jet identity of its standalone
-// counterpart. The returned pointer refers to a function-local static, valid
-// for the lifetime of the program.
-inline const BlackHoleProfile* findProfileByName(const char* name) {
-    if (!name) return nullptr;
-    static const std::array<BlackHoleProfile, 14> kProfiles = allProfiles();
-    for (const auto& p : kProfiles) {
-        if (p.name == name) return &p;
-    }
-    return nullptr;
-}
-
 } // namespace profiles
 
 /*--------- Legacy compatibility for BlackHole2D ---------*/

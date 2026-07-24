@@ -1,0 +1,100 @@
+{
+  "description": "Milky Way center (~4.3e6 Msun), dim, quiet",
+  "galaxyBodies": [
+    {
+      "ecc": 0.88,
+      "inclination": -0.35,
+      "label": "S2",
+      "semiMajorRs": 20.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.95,
+      "inclination": -0.15,
+      "label": "S14",
+      "semiMajorRs": 10.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.3,
+      "inclination": 0.05,
+      "label": "IRS 16",
+      "semiMajorRs": 40.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.15,
+      "inclination": 0.25,
+      "label": "Circumnuclear Gas",
+      "semiMajorRs": 60.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.5,
+      "inclination": 0.45,
+      "label": "S-cluster",
+      "semiMajorRs": 30.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.72,
+      "inclination": -0.55,
+      "label": "BLPSR",
+      "semiMajorRs": 6.5,
+      "type": "NeutronStar"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 4300000.0,
+  "name": "Sgr A*",
+  "schema": 1,
+  "sortKey": 10,
+  "spin": 0.5,
+  "visual3d": {
+    "bloom": {
+      "exposure": 0.9,
+      "intensity": 0.35,
+      "threshold": 1.5
+    },
+    "blr": {
+      "innerRadius": 8.0,
+      "outerRadius": 14.0,
+      "thickness": 2.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        4.0,
+        18.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 3200.0,
+      "displayTempOuter": 1600.0,
+      "halfThickness": 0.04,
+      "innerRadius": 3.0,
+      "outerRadius": 10.0,
+      "peakTemp": 8000.0,
+      "saturationBoostInner": 2.8,
+      "saturationBoostOuter": 1.8
+    },
+    "jet": {
+      "color": [
+        0.15,
+        0.5,
+        0.8
+      ],
+      "length": 10.0,
+      "radius": 0.15
+    }
+  }
+}

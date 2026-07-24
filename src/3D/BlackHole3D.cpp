@@ -21,6 +21,7 @@
 #include <iostream>
 
 #include "bh3d_core.hpp"
+#include "bh3d_catalog_adapter.hpp"
 
 #include "imgui.h"
 #include "imgui-SFML.h"
@@ -43,9 +44,14 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Build core state from selected profile ────────────
-    auto bhProfilesProbe = profiles::allProfiles();                 // we have to call this to get the config for the initial camera setup, but we'll reload it properly in initProfiles 
-    bh3d::State state(bhProfilesProbe[profileIdx].config.camera);   // right after. a bit wasteful but it only happens once and it's simpler than refactoring initProfiles to take a config arg or something.
-    bh3d::initProfiles(state, profileIdx);
+    // Load the black hole catalog once (JSON if present, built-in profiles
+    // otherwise). The initial profile's camera config seeds the CameraController
+    // before the full list is handed to initProfiles.
+    ResourceManager res;
+    auto loadedProfiles = bh3d_catalog::loadProfiles(res);
+    profileIdx = std::max(0, std::min<int>(profileIdx, (int)loadedProfiles.size() - 1));
+    bh3d::State state(loadedProfiles[profileIdx].config.camera);
+    bh3d::initProfiles(state, std::move(loadedProfiles), profileIdx);
 
     // ── Window & GL context ───────────────────────────────
     sf::ContextSettings settings;

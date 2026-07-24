@@ -1,0 +1,63 @@
+{
+  "description": "First confirmed stellar BH (~6.6 Msun), quiescent K-dwarf",
+  "galaxyBodies": [
+    {
+      "ecc": 0.0,
+      "inclination": 0.04,
+      "semiMajorRs": 24.0,
+      "type": "CompanionStar"
+    }
+  ],
+  "isGalacticCenter": false,
+  "massSolar": 6.61,
+  "name": "A0620-00",
+  "schema": 1,
+  "sortKey": 90,
+  "spin": 0.12,
+  "visual3d": {
+    "bloom": {
+      "exposure": 0.72,
+      "intensity": 0.22,
+      "threshold": 1.95
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        3.0,
+        13.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 3000.0,
+      "displayTempOuter": 2100.0,
+      "halfThickness": 0.065,
+      "innerRadius": 3.2,
+      "outerRadius": 8.0,
+      "peakTemp": 8000.0,
+      "saturationBoostInner": 3.6,
+      "saturationBoostOuter": 2.8
+    },
+    "jet": {
+      "color": [
+        0.1,
+        0.25,
+        0.5
+      ],
+      "length": 4.0,
+      "radius": 0.08
+    },
+    "orbital": {
+      "bodyRadius": 1.1,
+      "semiMajor": 24.0
+    }
+  }
+}

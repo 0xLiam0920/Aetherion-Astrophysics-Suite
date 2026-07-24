@@ -175,7 +175,7 @@ inline bool drawPresetMenu(bh3d::State& s) {
                           ImGuiChildFlags_None,
                           ImGuiWindowFlags_None);
 
-        for (int i = 0; i < profiles::NUM_PROFILES; ++i) {
+        for (int i = 0; i < s.numProfiles(); ++i) {
             const auto& p = s.profilesArr[i];
             const bool  isCur = (i == s.profileIdx);
 
@@ -211,7 +211,7 @@ inline bool drawPresetMenu(bh3d::State& s) {
         ImGui::Spacing();
 
         // Description block for the highlighted item
-        if (m.selected >= 0 && m.selected < profiles::NUM_PROFILES) {
+        if (m.selected >= 0 && m.selected < s.numProfiles()) {
             const auto& p = s.profilesArr[m.selected];
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.92f, 1.00f, 1.00f));
             ImGui::TextUnformatted(p.name.c_str());
@@ -234,7 +234,7 @@ inline bool drawPresetMenu(bh3d::State& s) {
             m.selected = std::max(0, m.selected - 1);
         }
         if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) {
-            m.selected = std::min(profiles::NUM_PROFILES - 1, m.selected + 1);
+            m.selected = std::min(s.numProfiles() - 1, m.selected + 1);
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
             ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {

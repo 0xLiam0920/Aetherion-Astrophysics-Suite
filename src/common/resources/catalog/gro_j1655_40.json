@@ -1,0 +1,62 @@
+{
+  "description": "Microquasar with relativistic jets (~6.3 Msun), F-star companion",
+  "galaxyBodies": [
+    {
+      "ecc": 0.0,
+      "inclination": 0.06,
+      "semiMajorRs": 22.0,
+      "type": "CompanionStar"
+    }
+  ],
+  "isGalacticCenter": false,
+  "massSolar": 6.3,
+  "name": "GRO J1655-40",
+  "schema": 1,
+  "sortKey": 100,
+  "spin": 0.7,
+  "visual3d": {
+    "bloom": {
+      "exposure": 1.05,
+      "threshold": 1.25
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        3.5,
+        16.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": true,
+      "lab": false,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 9500.0,
+      "displayTempOuter": 4500.0,
+      "halfThickness": 0.025,
+      "innerRadius": 1.9,
+      "outerRadius": 10.0,
+      "peakTemp": 40000.0,
+      "saturationBoostInner": 1.5,
+      "saturationBoostOuter": 2.6
+    },
+    "jet": {
+      "color": [
+        0.3,
+        0.8,
+        1.6
+      ],
+      "length": 18.0,
+      "radius": 0.24
+    },
+    "orbital": {
+      "bodyRadius": 1.3,
+      "semiMajor": 22.0
+    }
+  }
+}

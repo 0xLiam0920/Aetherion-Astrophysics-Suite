@@ -1,0 +1,67 @@
+{
+  "binary": {
+    "barycentric": true,
+    "companionMassSolar": 0.93
+  },
+  "description": "Nearest dormant BH (~9.6 Msun), discovered via astrometry, no disk",
+  "galaxyBodies": [
+    {
+      "ecc": 0.45,
+      "inclination": 0.1,
+      "semiMajorRs": 28.0,
+      "type": "CompanionStar"
+    }
+  ],
+  "isGalacticCenter": false,
+  "massSolar": 9.62,
+  "name": "Gaia BH1",
+  "schema": 1,
+  "sortKey": 50,
+  "spin": 0.3,
+  "visual3d": {
+    "bloom": {
+      "exposure": 0.4,
+      "intensity": 0.04,
+      "threshold": 4.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        3.5,
+        15.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 1000.0,
+      "displayTempOuter": 1000.0,
+      "halfThickness": 0.0,
+      "innerRadius": 3.0,
+      "outerRadius": 0.0,
+      "peakTemp": 1000.0,
+      "saturationBoostInner": 0.0,
+      "saturationBoostOuter": 0.0
+    },
+    "jet": {
+      "color": [
+        0.1,
+        0.3,
+        0.6
+      ],
+      "length": 4.0,
+      "radius": 0.08
+    },
+    "orbital": {
+      "bodyRadius": 1.2,
+      "semiMajor": 28.0
+    }
+  }
+}

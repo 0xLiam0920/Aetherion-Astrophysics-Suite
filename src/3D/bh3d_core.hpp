@@ -517,9 +517,11 @@ inline void rebuildOrbBodies(std::vector<OrbitalBody>& out,
 // ────────────────────────────────────────────────────────────
 struct State {
     // Profiles
-    std::array<BlackHoleProfile, profiles::NUM_PROFILES> profilesArr;
+    std::vector<BlackHoleProfile> profilesArr;
     int            profileIdx = 0;
     cfg::SimConfig config;
+
+    int numProfiles() const { return (int)profilesArr.size(); }
 
     // Orbital bodies
     std::vector<OrbitalBody> orbBodies;
@@ -760,10 +762,12 @@ struct State {
 // ────────────────────────────────────────────────────────────
 
 // Load profiles, set initial profile, build orbital bodies, set toggle defaults.
-inline void initProfiles(State& s, int initialIdx = 0) {
-    auto bh = profiles::allProfiles();
-    s.profilesArr = std::move(bh);
-    s.profileIdx  = std::max(0, std::min<int>(initialIdx, profiles::NUM_PROFILES - 1));
+// Takes the pre-loaded profile list (from bh3d_catalog::loadProfiles or a
+// fallback) so the JSON catalog is read exactly once at startup.
+inline void initProfiles(State& s, std::vector<BlackHoleProfile> loaded,
+                         int initialIdx = 0) {
+    s.profilesArr = std::move(loaded);
+    s.profileIdx  = std::max(0, std::min<int>(initialIdx, s.numProfiles() - 1));
     s.config      = s.profilesArr[s.profileIdx].config;
     rebuildOrbBodies(s.orbBodies, s.profilesArr[s.profileIdx], s.config);
     s.orbBodyDisrupted.assign(s.orbBodies.size(), false);
@@ -776,6 +780,16 @@ inline void initProfiles(State& s, int initialIdx = 0) {
     s.hostGalaxyEnabled = prof.defaultHostGalaxy;
     s.labEnabled        = prof.defaultLAB;
     s.cgmEnabled        = prof.defaultCGM;
+}
+
+// Look up a loaded profile by display name. Returns nullptr if no profile
+// carries that name. Resolves merger-secondary profile references against the
+// live (possibly user-extended) catalog rather than a static copy.
+inline const BlackHoleProfile* findProfile(const State& s, const char* name) {
+    if (!name) return nullptr;
+    for (const auto& p : s.profilesArr)
+        if (p.name == name) return &p;
+    return nullptr;
 }
 
 // Try the standard list of monospace font paths; populate glFont.
@@ -974,7 +988,7 @@ inline void startMerger3D(State& s, MergerSecondaryKind3D kind, double massSolar
             v.diskNormal = glm::normalize(glm::vec3(0.18f, ci, si * 0.85f));
         }
         const ::BlackHoleProfile* prof =
-            secProfileName ? profiles::findProfileByName(secProfileName) : nullptr;
+            secProfileName ? findProfile(s, secProfileName) : nullptr;
         if (prof) {
             const auto& c = prof->config;
             float pR0 = std::max(0.05f, c.blackHole.radius);
@@ -1855,15 +1869,17 @@ inline void renderHUD(State& s, int w, int h) {
     // Skipped entirely when an ImGui-based HUD is active in the host.
     if (!s.useImGuiHud && s.presetMenu.t > 0.001f) {
         // Build parallel name/description arrays from the loaded profiles.
-        std::array<std::string, profiles::NUM_PROFILES> names;
-        std::array<std::string, profiles::NUM_PROFILES> descs;
-        for (int i = 0; i < profiles::NUM_PROFILES; ++i) {
-            names[i] = s.profilesArr[i].name;
-            descs[i] = s.profilesArr[i].description;
+        std::vector<std::string> names;
+        std::vector<std::string> descs;
+        names.reserve(s.profilesArr.size());
+        descs.reserve(s.profilesArr.size());
+        for (int i = 0; i < s.numProfiles(); ++i) {
+            names.push_back(s.profilesArr[i].name);
+            descs.push_back(s.profilesArr[i].description);
         }
         hud::drawPresetMenu(s.glFont, s.hudFrame, s.presetMenu,
                             names.data(), descs.data(),
-                            profiles::NUM_PROFILES, s.profileIdx,
+                            s.numProfiles(), s.profileIdx,
                             s.snap.windowW, s.snap.windowH);
     }
 
@@ -1875,7 +1891,8 @@ inline void renderHUD(State& s, int w, int h) {
 //  Profile switching
 // ────────────────────────────────────────────────────────────
 inline void switchToProfile(State& s, int newIdx) {
-    s.profileIdx = ((newIdx % profiles::NUM_PROFILES) + profiles::NUM_PROFILES) % profiles::NUM_PROFILES;
+    const int n = s.numProfiles();
+    s.profileIdx = ((newIdx % n) + n) % n;
     const auto& prof = s.profilesArr[s.profileIdx];
     s.config            = prof.config;
     s.jetsEnabled       = prof.defaultJets;
@@ -1922,7 +1939,7 @@ inline void onActionKey(State& s, sf::Keyboard::Key code) {
                 return;
             }
             if (code == sf::Keyboard::Key::Down) {
-                s.presetMenu.selected = std::min(profiles::NUM_PROFILES - 1,
+                s.presetMenu.selected = std::min(s.numProfiles() - 1,
                                                  s.presetMenu.selected + 1);
                 return;
             }

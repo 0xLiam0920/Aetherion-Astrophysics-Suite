@@ -1,0 +1,85 @@
+{
+  "description": "Overmassive SMBH in compact elliptical (~1.7e10 Msun)",
+  "galaxyBodies": [
+    {
+      "ecc": 0.3,
+      "inclination": -0.25,
+      "semiMajorRs": 12.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.45,
+      "inclination": -0.05,
+      "semiMajorRs": 20.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.2,
+      "inclination": 0.15,
+      "semiMajorRs": 30.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.1,
+      "inclination": 0.35,
+      "semiMajorRs": 75.0,
+      "type": "StellarCluster"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 17000000000.0,
+  "name": "NGC 1277",
+  "schema": 1,
+  "sortKey": 110,
+  "spin": 0.65,
+  "visual3d": {
+    "bloom": {
+      "exposure": 1.1,
+      "intensity": 0.58,
+      "threshold": 1.05
+    },
+    "blr": {
+      "innerRadius": 13.0,
+      "outerRadius": 28.0,
+      "strength": 0.55,
+      "thickness": 5.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        6.0,
+        24.0
+      ]
+    },
+    "defaults": {
+      "blr": true,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": true,
+      "jets": false,
+      "lab": false,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 6800.0,
+      "displayTempOuter": 3000.0,
+      "halfThickness": 0.014,
+      "innerRadius": 1.9,
+      "peakTemp": 28000.0,
+      "saturationBoostOuter": 3.2
+    },
+    "jet": {
+      "color": [
+        0.22,
+        0.7,
+        1.35
+      ],
+      "length": 28.0,
+      "radius": 0.3
+    },
+    "orbital": {
+      "bodyRadius": 1.5,
+      "semiMajor": 80.0
+    }
+  }
+}

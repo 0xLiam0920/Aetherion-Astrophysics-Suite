@@ -152,6 +152,7 @@ target_include_directories(blackhole-sim PRIVATE
     ${CMAKE_SOURCE_DIR}/src/2D
     ${CMAKE_SOURCE_DIR}/src/3D
     ${CMAKE_SOURCE_DIR}/src          # exposes platform.hpp as "platform.hpp"
+    ${CMAKE_SOURCE_DIR}/external/json
     ${CMAKE_SOURCE_DIR}
 )
 
@@ -249,6 +250,7 @@ add_executable(blackhole-2D src/2D/BlackHole2D.cpp)
 target_include_directories(blackhole-2D PRIVATE
     ${CMAKE_SOURCE_DIR}/src/2D
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/external/json   # future 2D catalog adapter
 )
 target_link_libraries(blackhole-2D PRIVATE SFML::Graphics SFML::Window SFML::System)
 
@@ -291,6 +293,7 @@ add_executable(blackhole-3D
 target_include_directories(blackhole-3D PRIVATE
     ${CMAKE_SOURCE_DIR}/src/3D
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/external/json
     ${CMAKE_SOURCE_DIR}
 )
 target_link_libraries(blackhole-3D PRIVATE
@@ -337,6 +340,24 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/src/disk_texture.png)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_SOURCE_DIR}/src/disk_texture.png
                 $<TARGET_FILE_DIR:blackhole-3D>/disk_texture.png)
+endif()
+
+# Copy the black hole JSON catalog next to each executable so ResourceManager's
+# findDir("catalog") resolves it in dev/run-from-build-dir workflows.
+foreach(_bh_target blackhole-sim blackhole-3D)
+    add_custom_command(TARGET ${_bh_target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/common/resources/catalog
+                $<TARGET_FILE_DIR:${_bh_target}>/catalog)
+endforeach()
+
+# macOS: also land the catalog inside the .app bundle Resources (mirrors the
+# icon copy). The bundle's Resources dir is on the ResourceManager search path in this case
+if(APPLE)
+    add_custom_command(TARGET blackhole-sim POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/common/resources/catalog
+                ${CMAKE_BINARY_DIR}/Aetherion.app/Contents/Resources/catalog)
 endif()
 
 # Copy app icon next to the executable (sidebar logo display at runtime).
@@ -404,6 +425,10 @@ install(FILES
 if(EXISTS ${CMAKE_SOURCE_DIR}/src/disk_texture.png)
     install(FILES src/disk_texture.png DESTINATION share/aetherionsuite)
 endif()
+
+# Black hole JSON catalog is at share/aetherionsuite/catalog (covered by the XDG
+# search paths ResourceManager already probes on Linux/Flatpak).
+install(DIRECTORY src/common/resources/catalog DESTINATION share/aetherionsuite)
 if(EXISTS ${CMAKE_SOURCE_DIR}/build/background.png)
     install(FILES build/background.png DESTINATION share/aetherionsuite)
 elseif(EXISTS ${CMAKE_SOURCE_DIR}/background.png)
@@ -449,7 +474,19 @@ target_include_directories(physics-regression-tests PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/2D
+    ${CMAKE_SOURCE_DIR}/external/json
 )
+
+# Enable the JSON-catalog round-trip test when glm is available (it needs
+# config.hpp). The test header-guards itself on <glm/glm.hpp> + <nlohmann/json.hpp>
+# so the lightweight CI compile (no glm) simply skips it.
+if(glm_FOUND)
+    target_link_libraries(physics-regression-tests PRIVATE glm::glm)
+elseif(DEFINED GLM_INCLUDE_DIRS)
+    target_include_directories(physics-regression-tests PRIVATE ${GLM_INCLUDE_DIRS})
+endif()
+target_compile_definitions(physics-regression-tests PRIVATE
+    AETHERION_CATALOG_DIR="${CMAKE_SOURCE_DIR}/src/common/resources/catalog")
 
 add_test(
     NAME physics-regression

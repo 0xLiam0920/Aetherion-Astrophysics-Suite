@@ -1,0 +1,104 @@
+{
+  "description": "First imaged BH (~6.5e9 Msun), EHT ring + relativistic jet",
+  "galaxyBodies": [
+    {
+      "ecc": 0.12,
+      "inclination": -0.22,
+      "label": "Ionised Gas Disk",
+      "semiMajorRs": 8.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.22,
+      "inclination": 0.06,
+      "label": "Nuclear Filament",
+      "semiMajorRs": 13.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.55,
+      "inclination": 0.3,
+      "label": "Nuclear Star",
+      "semiMajorRs": 17.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.4,
+      "inclination": -0.18,
+      "label": "Inner S-star",
+      "semiMajorRs": 24.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.12,
+      "inclination": 0.42,
+      "label": "Globular Cluster",
+      "semiMajorRs": 70.0,
+      "type": "StellarCluster"
+    },
+    {
+      "ecc": 0.22,
+      "inclination": -0.3,
+      "label": "Infalling Satellite",
+      "semiMajorRs": 120.0,
+      "type": "DwarfGalaxy"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 6500000000.0,
+  "name": "M87*",
+  "schema": 1,
+  "sortKey": 20,
+  "spin": 0.9,
+  "visual3d": {
+    "bloom": {
+      "exposure": 1.05,
+      "intensity": 0.55,
+      "threshold": 1.1
+    },
+    "blr": {
+      "innerRadius": 12.0,
+      "outerRadius": 26.0,
+      "strength": 0.15,
+      "thickness": 5.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        7.0,
+        26.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": true,
+      "jets": true,
+      "lab": false,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 4200.0,
+      "displayTempOuter": 2000.0,
+      "halfThickness": 0.05,
+      "outerRadius": 18.0,
+      "peakTemp": 12000.0,
+      "saturationBoostInner": 2.6,
+      "saturationBoostOuter": 1.7
+    },
+    "jet": {
+      "color": [
+        0.35,
+        0.8,
+        1.5
+      ],
+      "length": 60.0,
+      "radius": 0.4
+    },
+    "orbital": {
+      "bodyRadius": 1.5,
+      "semiMajor": 60.0
+    }
+  }
+}

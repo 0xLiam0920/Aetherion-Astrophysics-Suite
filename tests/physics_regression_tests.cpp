@@ -9,6 +9,21 @@
 #include "src/2D/2D-simulation/photon.hpp"
 #include "src/3D/bh3d_blackbody.hpp"
 
+// The JSON-catalog round-trip test needs glm (config.hpp) and nlohmann/json.
+// The lightweight CI job (a bare `c++ -I. …` invocation) has neither on its
+// include path, so we compile this block in only when both are available —
+// which is exactly the CMake build, where the catalog dir is passed via
+// AETHERION_CATALOG_DIR. CI keeps running the five GUI-free physics tests.
+#if defined(__has_include)
+#  if __has_include(<glm/glm.hpp>) && __has_include(<nlohmann/json.hpp>)
+#    define AETHERION_HAVE_CATALOG 1
+#    include "src/common/catalog.hpp"
+#    include "src/3D/bh3d_presets.hpp"
+#    include "src/3D/bh3d_catalog_adapter.hpp"
+#    include <vector>
+#  endif
+#endif
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -479,6 +494,111 @@ bool testDiskColourGradient() {
     return ok;
 }
 
+#ifdef AETHERION_HAVE_CATALOG
+// Round-trip: the JSON catalog must reconstruct the compiled-in profiles
+// exactly. Keeps the two in lockstep until the C++ profiles are retired.
+bool testCatalogRoundTrip() {
+#ifndef AETHERION_CATALOG_DIR
+#  define AETHERION_CATALOG_DIR "src/common/resources/catalog"
+#endif
+    const std::string dir = AETHERION_CATALOG_DIR;
+
+    auto feq = [](float a, float b) {
+        return std::fabs(a - b) <= 1e-3 * std::max(1.0f, std::fabs(a));
+    };
+
+    auto lr = catalog::loadDir(dir);
+    if (!lr.ok()) {
+        std::cerr << "[FAIL] catalog round-trip: no entries loaded from " << dir << "\n";
+        return false;
+    }
+    for (const auto& err : lr.errors)
+        std::cerr << "[WARN] catalog round-trip: skipped " << err << "\n";
+
+    const auto builtin = profiles::allProfiles();
+    if (lr.entries.size() != builtin.size()) {
+        std::cerr << "[FAIL] catalog round-trip: " << lr.entries.size()
+                  << " JSON entries vs " << builtin.size() << " built-in profiles\n";
+        return false;
+    }
+
+    bool ok = true;
+    auto fail = [&](size_t i, const std::string& what) {
+        std::cerr << "[FAIL] catalog round-trip [" << i << "] "
+                  << builtin[i].name << ": " << what << "\n";
+        ok = false;
+    };
+
+    for (size_t i = 0; i < builtin.size(); ++i) {
+        const BlackHoleProfile got = bh3d_catalog::toProfile(lr.entries[i]);
+        const BlackHoleProfile& exp = builtin[i];
+
+        if (got.name != exp.name) { fail(i, "name mismatch: " + got.name); continue; }
+        if (got.description != exp.description) fail(i, "description mismatch");
+        if (std::abs(got.massSolar - exp.massSolar) > 1e-3 * std::max(1.0, std::abs(exp.massSolar)))
+            fail(i, "massSolar mismatch");
+
+        const auto& gc = got.config; const auto& ec = exp.config;
+        if (!feq(gc.blackHole.spinParameter, ec.blackHole.spinParameter)) fail(i, "spin mismatch");
+        if (!feq(gc.disk.innerRadius, ec.disk.innerRadius)) fail(i, "disk.innerRadius");
+        if (!feq(gc.disk.outerRadius, ec.disk.outerRadius)) fail(i, "disk.outerRadius");
+        if (!feq(gc.disk.halfThickness, ec.disk.halfThickness)) fail(i, "disk.halfThickness");
+        if (!feq(gc.disk.peakTemp, ec.disk.peakTemp)) fail(i, "disk.peakTemp");
+        if (!feq(gc.disk.displayTempInner, ec.disk.displayTempInner)) fail(i, "disk.displayTempInner");
+        if (!feq(gc.disk.displayTempOuter, ec.disk.displayTempOuter)) fail(i, "disk.displayTempOuter");
+        if (!feq(gc.disk.saturationBoostInner, ec.disk.saturationBoostInner)) fail(i, "disk.satInner");
+        if (!feq(gc.disk.saturationBoostOuter, ec.disk.saturationBoostOuter)) fail(i, "disk.satOuter");
+        if (!feq(gc.jet.radius, ec.jet.radius)) fail(i, "jet.radius");
+        if (!feq(gc.jet.length, ec.jet.length)) fail(i, "jet.length");
+        if (!feq(gc.jet.color.r, ec.jet.color.r) || !feq(gc.jet.color.g, ec.jet.color.g) ||
+            !feq(gc.jet.color.b, ec.jet.color.b)) fail(i, "jet.color");
+        if (!feq(gc.blr.innerRadius, ec.blr.innerRadius)) fail(i, "blr.innerRadius");
+        if (!feq(gc.blr.outerRadius, ec.blr.outerRadius)) fail(i, "blr.outerRadius");
+        if (!feq(gc.blr.thickness, ec.blr.thickness)) fail(i, "blr.thickness");
+        if (!feq(gc.blr.strength, ec.blr.strength)) fail(i, "blr.strength");
+        if (!feq(gc.orbital.semiMajor, ec.orbital.semiMajor)) fail(i, "orbital.semiMajor");
+        if (!feq(gc.orbital.bodyRadius, ec.orbital.bodyRadius)) fail(i, "orbital.bodyRadius");
+        if (!feq(gc.bloom.threshold, ec.bloom.threshold)) fail(i, "bloom.threshold");
+        if (!feq(gc.bloom.softKnee, ec.bloom.softKnee)) fail(i, "bloom.softKnee");
+        if (!feq(gc.bloom.intensity, ec.bloom.intensity)) fail(i, "bloom.intensity");
+        if (!feq(gc.bloom.exposure, ec.bloom.exposure)) fail(i, "bloom.exposure");
+        if (!feq(gc.camera.initialPos.x, ec.camera.initialPos.x) ||
+            !feq(gc.camera.initialPos.y, ec.camera.initialPos.y) ||
+            !feq(gc.camera.initialPos.z, ec.camera.initialPos.z)) fail(i, "camera.initialPos");
+
+        if (got.defaultJets       != exp.defaultJets)       fail(i, "defaultJets");
+        if (got.defaultBLR        != exp.defaultBLR)        fail(i, "defaultBLR");
+        if (got.defaultOrbBody    != exp.defaultOrbBody)    fail(i, "defaultOrbBody");
+        if (got.defaultDoppler    != exp.defaultDoppler)    fail(i, "defaultDoppler");
+        if (got.defaultHostGalaxy != exp.defaultHostGalaxy) fail(i, "defaultHostGalaxy");
+        if (got.defaultLAB        != exp.defaultLAB)        fail(i, "defaultLAB");
+        if (got.defaultCGM        != exp.defaultCGM)        fail(i, "defaultCGM");
+
+        if (got.isBinaryWithBarycenter != exp.isBinaryWithBarycenter) fail(i, "barycentric");
+        if (std::abs(got.companionMassSolar - exp.companionMassSolar) > 1e-6) fail(i, "companionMassSolar");
+
+        if (got.galaxyBodies.size() != exp.galaxyBodies.size()) {
+            fail(i, "galaxyBodies count");
+            continue;
+        }
+        for (size_t b = 0; b < exp.galaxyBodies.size(); ++b) {
+            const auto& gb = got.galaxyBodies[b];
+            const auto& eb = exp.galaxyBodies[b];
+            if (gb.type != eb.type) fail(i, "body type");
+            if (!feq(gb.semiMajorRs, eb.semiMajorRs)) fail(i, "body semiMajorRs");
+            if (!feq(gb.eccentricity, eb.eccentricity)) fail(i, "body ecc");
+            if (!feq(gb.inclination, eb.inclination)) fail(i, "body inclination");
+            if (gb.label != eb.label) fail(i, "body label");
+        }
+    }
+
+    if (ok)
+        std::cout << "[PASS] catalog round-trip: " << builtin.size()
+                  << " JSON profiles match built-in profiles field-for-field\n";
+    return ok;
+}
+#endif  // AETHERION_HAVE_CATALOG
+
 }  // namespace
 
 int main() {
@@ -496,6 +616,11 @@ int main() {
     ok = testNovikovThorneProfile() && ok;
     ok = testComputeISCO() && ok;
     ok = testDiskColourGradient() && ok;
+
+#ifdef AETHERION_HAVE_CATALOG
+    // JSON catalog must reconstruct the compiled-in profiles exactly.
+    ok = testCatalogRoundTrip() && ok;
+#endif
 
     if (!ok) {
         std::cerr << "Physics regression tests FAILED\n";

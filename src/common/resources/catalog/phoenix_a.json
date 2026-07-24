@@ -1,0 +1,105 @@
+{
+  "description": "Largest known BH (~1.0e11 Msun), Rs~1970 AU, Phoenix Cluster BCG",
+  "galaxyBodies": [
+    {
+      "ecc": 0.1,
+      "inclination": -0.3,
+      "semiMajorRs": 9.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.2,
+      "inclination": -0.08,
+      "semiMajorRs": 14.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.35,
+      "inclination": 0.12,
+      "semiMajorRs": 22.0,
+      "type": "GasCloud"
+    },
+    {
+      "ecc": 0.6,
+      "inclination": 0.28,
+      "semiMajorRs": 18.0,
+      "type": "Star"
+    },
+    {
+      "ecc": 0.15,
+      "inclination": 0.4,
+      "semiMajorRs": 55.0,
+      "type": "StellarCluster"
+    },
+    {
+      "ecc": 0.08,
+      "inclination": -0.2,
+      "semiMajorRs": 90.0,
+      "type": "StellarCluster"
+    },
+    {
+      "ecc": 0.25,
+      "inclination": 0.55,
+      "semiMajorRs": 130.0,
+      "type": "DwarfGalaxy"
+    }
+  ],
+  "isGalacticCenter": true,
+  "massSolar": 100000000000.0,
+  "name": "Phoenix A",
+  "schema": 1,
+  "sortKey": 130,
+  "spin": 0.35,
+  "visual3d": {
+    "bloom": {
+      "exposure": 1.15,
+      "intensity": 0.7,
+      "softKnee": 0.58,
+      "threshold": 0.92
+    },
+    "blr": {
+      "innerRadius": 16.0,
+      "strength": 0.7,
+      "thickness": 7.0
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        8.0,
+        34.0
+      ]
+    },
+    "defaults": {
+      "blr": true,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": true,
+      "jets": true,
+      "lab": true,
+      "orbBody": true
+    },
+    "disk": {
+      "displayTempInner": 4800.0,
+      "displayTempOuter": 1900.0,
+      "halfThickness": 0.01,
+      "innerRadius": 5.0,
+      "outerRadius": 30.0,
+      "peakTemp": 26000.0,
+      "saturationBoostInner": 2.4,
+      "saturationBoostOuter": 1.6
+    },
+    "jet": {
+      "color": [
+        0.3,
+        0.72,
+        1.5
+      ],
+      "length": 55.0,
+      "radius": 0.5
+    },
+    "orbital": {
+      "bodyRadius": 1.5,
+      "semiMajor": 110.0
+    }
+  }
+}
