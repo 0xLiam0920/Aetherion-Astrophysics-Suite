@@ -99,6 +99,12 @@ struct PhysicsSnapshot {
     int windowW;
     int windowH;
 
+    /*--------- Sub-pixel ray jitter (progressive accumulation / SSAA capture) ---------*/
+    // Offset in pixels applied to the primary ray. Zero during normal
+    // navigation; set to a low-discrepancy sub-pixel value when the still-camera
+    // accumulator or the beauty-shot capture is converging a supersampled image.
+    glm::vec2 pixelJitter = glm::vec2(0.0f);
+
     /*--------- Performance ---------*/
     float fps; // TODO: expose frame time (ms) alongside FPS for more useful profiling
 

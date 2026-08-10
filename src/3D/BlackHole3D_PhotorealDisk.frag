@@ -40,6 +40,7 @@ out vec4 FragColor;
 uniform sampler2D backgroundTex;
 uniform sampler2D diskTex;       // Unused (kept for compatibility)
 uniform vec2 resolution;
+uniform vec2 pixelJitter;         // Sub-pixel ray offset [px] for progressive/SSAA accumulation
 uniform vec3 cameraPos;
 uniform vec3 cameraDir;
 uniform vec3 cameraUp;
@@ -1587,7 +1588,8 @@ void traceRay(
 
 /*----------------------Main function-----------------------*/
 void main() { // note, we chose void here since we're returning early on absorption of each ray, but I guess you could just return black if you're lazy
-    vec3 rayDir = getRayDir(fragUV, cameraPos, cameraDir, cameraUp, fov); // Compute initial ray direction from camera through pixel (janky ahh approach but it works)
+    vec2 juv = fragUV + pixelJitter / resolution; // sub-pixel jitter for still-frame / beauty-shot accumulation (0 while navigating, much better than before)
+    vec3 rayDir = getRayDir(juv, cameraPos, cameraDir, cameraUp, fov); // Compute initial ray direction from camera through pixel (janky ahh approach but it works)
     vec3 rayOrigin = cameraPos;
     
     // No early sphere test here, the ray marcher handles absorption

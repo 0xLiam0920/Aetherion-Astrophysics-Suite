@@ -21,6 +21,7 @@
 #include <SFML/Window/Mouse.hpp>
 #include <SFML/System/Clock.hpp>
 #include <SFML/Graphics/Font.hpp>
+#include <SFML/Graphics/Image.hpp>
 #include <glm/glm.hpp>
 
 #include "gl_types.hpp"
@@ -45,6 +46,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <deque>
 #include <algorithm>
 #include <filesystem>
@@ -173,6 +175,7 @@ struct ActionKeybinds {
     sf::Keyboard::Key toggleRK4Photons = sf::Keyboard::Key::L;
     sf::Keyboard::Key toggleSpacetime  = sf::Keyboard::Key::T;
     sf::Keyboard::Key openMergerMenu   = sf::Keyboard::Key::C;
+    sf::Keyboard::Key toggleProgressive = sf::Keyboard::Key::I;
 };
 
 inline std::filesystem::path keybindConfigPath() {
@@ -190,7 +193,7 @@ inline void enforceKeybindConflicts(ActionKeybinds& keys) {
                k == sf::Keyboard::Key::LShift;
     };
     struct Entry { const char* name; sf::Keyboard::Key* key; sf::Keyboard::Key def; };
-    std::array<Entry, 23> entries = {{
+    std::array<Entry, 24> entries = {{
         {"toggle_freelook",   &keys.toggleFreelook,   defaults.toggleFreelook},
         {"toggle_jets",       &keys.toggleJets,       defaults.toggleJets},
         {"toggle_blr",        &keys.toggleBLR,        defaults.toggleBLR},
@@ -213,7 +216,8 @@ inline void enforceKeybindConflicts(ActionKeybinds& keys) {
         {"toggle_rk4_orbits", &keys.toggleRK4Orbits,  defaults.toggleRK4Orbits},
         {"toggle_rk4_photons",&keys.toggleRK4Photons, defaults.toggleRK4Photons},
         {"toggle_spacetime",  &keys.toggleSpacetime,  defaults.toggleSpacetime},
-        {"open_merger_menu",  &keys.openMergerMenu,   defaults.openMergerMenu}
+        {"open_merger_menu",  &keys.openMergerMenu,   defaults.openMergerMenu},
+        {"toggle_progressive",&keys.toggleProgressive, defaults.toggleProgressive}
     }};
     for (auto& e : entries) {
         if (isMovementKey(*e.key)) *e.key = e.def;
@@ -255,6 +259,7 @@ inline void writeDefaultKeybindFile(const std::filesystem::path& path, const Act
     out << "toggle_rk4_photons="<< keyToString(k.toggleRK4Photons) << "\n";
     out << "toggle_spacetime="  << keyToString(k.toggleSpacetime)  << "\n";
     out << "open_merger_menu="  << keyToString(k.openMergerMenu)   << "\n";
+    out << "toggle_progressive="<< keyToString(k.toggleProgressive) << "\n";
 }
 
 inline ActionKeybinds loadActionKeybinds() {
@@ -289,7 +294,8 @@ inline ActionKeybinds loadActionKeybinds() {
         {"toggle_rk4_orbits", &keys.toggleRK4Orbits},
         {"toggle_rk4_photons",&keys.toggleRK4Photons},
         {"toggle_spacetime",  &keys.toggleSpacetime},
-        {"open_merger_menu",  &keys.openMergerMenu}
+        {"open_merger_menu",  &keys.openMergerMenu},
+        {"toggle_progressive",&keys.toggleProgressive}
     };
     std::string line;
     while (std::getline(in, line)) {
@@ -313,6 +319,7 @@ inline ActionKeybinds loadActionKeybinds() {
 // ────────────────────────────────────────────────────────────
 struct SceneUniforms {
     GLint resolution, cameraPos, cameraDir, cameraUp, fov;
+    GLint pixelJitter;
     GLint blackHoleRadius, blackHolePos, backgroundTex, diskTex;
     GLint diskInnerRadius, diskOuterRadius, diskHalfThickness;
     GLint spinParameter;
@@ -344,6 +351,7 @@ struct SceneUniforms {
     static SceneUniforms lookup(GLProgram& prog) {
         SceneUniforms u;
         u.resolution           = prog.uniform("resolution");
+        u.pixelJitter          = prog.uniform("pixelJitter");
         u.cameraPos            = prog.uniform("cameraPos");
         u.cameraDir            = prog.uniform("cameraDir");
         u.cameraUp             = prog.uniform("cameraUp");
@@ -418,6 +426,7 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
 {
     prog.use();
     glUniform2f(u.resolution,     float(snap.windowW), float(snap.windowH));
+    glUniform2f(u.pixelJitter,    snap.pixelJitter.x, snap.pixelJitter.y);
     glUniform3f(u.cameraPos,      snap.cameraPos.x, snap.cameraPos.y, snap.cameraPos.z);
     glUniform3f(u.cameraDir,      snap.cameraDir.x, snap.cameraDir.y, snap.cameraDir.z);
     glUniform3f(u.cameraUp,       snap.cameraUp.x,  snap.cameraUp.y,  snap.cameraUp.z);
@@ -513,6 +522,127 @@ inline void rebuildOrbBodies(std::vector<OrbitalBody>& out,
 }
 
 // ────────────────────────────────────────────────────────────
+//  Progressive still-frame refinement (temporal supersampling)
+// ────────────────────────────────────────────────────────────
+// When the camera has been still for a short delay, we freeze the scene and
+// keep re-rendering it with a low-discrepancy sub-pixel jitter, folding each
+// frame into a running-average float buffer. Within a second or two the image
+// converges to a crisp, supersampled, noise-free version — "screenshot
+// quality" while parked — and instantly resets the moment the user moves.
+
+// Radical-inverse Halton sequence, used for both the still accumulator and the
+// beauty-shot capture so successive samples spread evenly across the pixel.
+inline float progressiveHalton(int index, int base) {
+    float f = 1.0f, r = 0.0f;
+    while (index > 0) {
+        f /= float(base);
+        r += f * float(index % base);
+        index /= base;
+    }
+    return r;
+}
+
+struct ProgressiveRenderer {
+    bool  enabled = true;      // master on/off (navigation is never affected)
+    bool  converging = false;  // currently folding jittered samples together
+    float idleTimer = 0.0f;    // seconds the camera has been perfectly still
+    int   sampleCount = 0;     // jittered samples accumulated so far
+
+    // Last camera pose, for exact-equality stillness detection (the controller
+    // is fully deterministic with no inertia, so identical input → identical
+    // pose → safe to accumulate).
+    glm::vec3 lastPos{0.0f}, lastDir{0.0f}, lastUp{0.0f};
+    float     lastFov = -1.0f;
+    bool      havePose = false;
+
+    glm::vec2 currentJitter{0.0f};
+
+    // GL resources (lazily built on first use).
+    bool        glReady = false;
+    Framebuffer resolve;    // final composited frame for the current sample
+    Framebuffer accum;      // scratch target for the running average
+    Framebuffer accumPrev;  // holds the latest running average (present source)
+    GLProgram   avgProg;    // running-average fold
+    GLProgram   blitProg;   // present average to screen
+    int         lastW = 0, lastH = 0;
+
+    static constexpr float IDLE_DELAY  = 0.5f;  // stillness before converging [s]
+    static constexpr int   MAX_SAMPLES = 96;    // stops once this many of the amount is folded in
+
+    static const char* avgFragSrc() {
+        return R"(#version 330 core
+in vec2 fragUV; out vec4 FragColor;
+uniform sampler2D prevTex;   // running average so far
+uniform sampler2D curTex;    // this sample's frame
+uniform float weight;        // 1/n
+void main() {
+    vec3 prev = texture(prevTex, fragUV).rgb;
+    vec3 cur  = texture(curTex,  fragUV).rgb;
+    FragColor = vec4(mix(prev, cur, weight), 1.0);
+})";
+    }
+    static const char* blitFragSrc() {
+        return R"(#version 330 core
+in vec2 fragUV; out vec4 FragColor;
+uniform sampler2D srcTex;
+void main() { FragColor = vec4(texture(srcTex, fragUV).rgb, 1.0); })";
+    }
+
+    void ensureGL(int w, int h) {
+        if (!glReady) {
+            avgProg.build(vertexShaderSrc, avgFragSrc());
+            blitProg.build(vertexShaderSrc, blitFragSrc());
+            glReady = true;
+        }
+        if (w != lastW || h != lastH) {
+            resolve.resize(w, h, true);
+            accum.resize(w, h, true);
+            accumPrev.resize(w, h, true);
+            lastW = w; lastH = h;
+        }
+    }
+
+    // Fold the just-rendered `resolve` frame into the running average as
+    // sample n (1-based). accumPrev holds the freshest average afterwards.
+    void accumulate(const GLVertexArray& quad, int n) { // simplified explanation of the above: accumPrev = (accumPrev * (n-1) + resolve) / n
+        GLint prevFBO = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
+        accum.bind();
+        glClear(GL_COLOR_BUFFER_BIT);
+        avgProg.use();
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, accumPrev.colorTex);
+        avgProg.set1i("prevTex", 0);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, resolve.colorTex);
+        avgProg.set1i("curTex", 1);
+        avgProg.set1f("weight", 1.0f / float(n));
+        quad.drawQuad();
+        std::swap(accum, accumPrev); // accumPrev now holds the latest average
+        glActiveTexture(GL_TEXTURE0);
+        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prevFBO);
+    }
+
+    // Blit the converged average to the default framebuffer.
+    void present(const GLVertexArray& quad, int w, int h) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, w, h);
+        glClear(GL_COLOR_BUFFER_BIT);
+        blitProg.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, accumPrev.colorTex);
+        blitProg.set1i("srcTex", 0);
+        quad.drawQuad();
+    }
+
+    void reset() {
+        converging = false;
+        idleTimer  = 0.0f;
+        sampleCount = 0;
+        havePose = false;
+        currentJitter = glm::vec2(0.0f);
+    }
+};
+
+// ────────────────────────────────────────────────────────────
 //  All per-instance simulation state
 // ────────────────────────────────────────────────────────────
 struct State {
@@ -549,6 +679,12 @@ struct State {
     // Bloom
     BloomPipeline bloom;
     int           lastW = 0, lastH = 0;
+
+    // Progressive still-frame refinement (temporal supersampling when parked).
+    ProgressiveRenderer progressive;
+    // So when true, the frontend advances physics with dt=0 so the accumulator
+    // sees an identical scene each sample (this is Set by renderFrame while converging, as a side note).
+    bool          freezeSim = false;
 
     // HUD
     GLBitmapFont       glFont;
@@ -1745,9 +1881,10 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
 //  Render: scene + (optional) bloom + HUD overlay
 // ────────────────────────────────────────────────────────────
 
-// Render the scene. Caller must have an active GL context and a default
-// framebuffer bound (this function will switch FBOs internally for bloom).
-inline void renderScene(State& s, int w, int h) {
+// Render the scene. Caller must have an active GL context. The final image is
+// written to `finalTarget` (0 = default framebuffer / screen); the progressive
+// accumulator and beauty-shot capture pass their own float FBO instead.
+inline void renderScene(State& s, int w, int h, GLuint finalTarget = 0) {
     if (w != s.lastW || h != s.lastH) {
         glViewport(0, 0, w, h);
         s.bloom.resize(w, h);
@@ -1761,9 +1898,9 @@ inline void renderScene(State& s, int w, int h) {
                          s.bgTex.id(), s.photorealDiskTex.id(),
                          s.blackbodyLUT.id());
         s.quad.drawQuad();
-        s.bloom.execute(s.quad, cfg::cinematicBloom(), true, s.totalTime);
+        s.bloom.execute(s.quad, cfg::cinematicBloom(), true, s.totalTime, finalTarget);
     } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, finalTarget);
         glViewport(0, 0, w, h);
         glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -1773,8 +1910,8 @@ inline void renderScene(State& s, int w, int h) {
         s.quad.drawQuad();
     }
     // bloom.execute() saves+restores prevFBO which ends up as sceneFBO; force
-    // back to default before any HUD or display(), required on macOS Metal-GL.
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // back to the final target before any HUD or display(), required on macOS Metal-GL.
+    glBindFramebuffer(GL_FRAMEBUFFER, finalTarget);
     glViewport(0, 0, w, h);
 
     // RK4 orbit + photon-ray overlays (world-space lines, drawn over the
@@ -1789,6 +1926,178 @@ inline void renderScene(State& s, int w, int h) {
         }
         s.physOverlay.draw(s.snap);
     }
+}
+
+// ────────────────────────────────────────────────────────────
+//  Frame driver: live render, or progressive still-frame refinement
+// ────────────────────────────────────────────────────────────
+// This wraps renderScene with the still-camera accumulator. While the camera moves
+// (or a dynamic event/menu is up) it renders live to the screen. Once the
+// camera has been parked for IDLE_DELAY it freezes the scene and folds jittered
+// samples into a float average, presenting the ever-crisper result each frame.
+//
+// `dt` is the real wall-clock delta (for the idle timer); the caller must have
+// already advanced physics with dt == 0 whenever s.freezeSim is set, so the
+// accumulated samples all depict the identical, frozen scene.
+inline void renderFrame(State& s, int w, int h, float dt) {
+    auto& pr = s.progressive;
+
+    // Exact-equality pose stillness (deterministic controller, no inertia).
+    const glm::vec3 pos = s.snap.cameraPos;
+    const glm::vec3 dir = s.snap.cameraDir;
+    const glm::vec3 up  = s.snap.cameraUp;
+    const float     fov = s.snap.fov;
+    const bool poseSame = pr.havePose &&
+        pos == pr.lastPos && dir == pr.lastDir && up == pr.lastUp && fov == pr.lastFov;
+    pr.lastPos = pos; pr.lastDir = dir; pr.lastUp = up; pr.lastFov = fov;
+    pr.havePose = true;
+
+    // Anything that keeps the image changing on its own disqualifies accumulation.
+    const bool dynamic  = s.merger.active || s.tde3D.active;
+    const bool menus    = s.presetMenu.open || s.mergerMenu.open ||
+                          s.presetMenu.t > 0.0f || s.mergerMenu.t > 0.0f;
+    const bool easing   = s.focusEaseT < 1.0f;   // camera gliding to a picked body
+    const bool keysHeld = s.keys.anyMovement();
+    const bool eligible = pr.enabled && poseSame && !dynamic && !menus && !easing && !keysHeld;
+
+    if (!eligible) {
+        pr.converging = false;
+        pr.idleTimer  = 0.0f;
+        pr.sampleCount = 0;
+        s.freezeSim = false;
+        s.snap.pixelJitter = glm::vec2(0.0f);
+        renderScene(s, w, h, 0);
+        return;
+    }
+
+    if (!pr.converging) {
+        // Still, but keep rendering live during the short settle window so a
+        // brief pause doesn't visibly freeze the animation.
+        pr.idleTimer += dt;
+        s.snap.pixelJitter = glm::vec2(0.0f);
+        renderScene(s, w, h, 0);
+        if (pr.idleTimer >= ProgressiveRenderer::IDLE_DELAY) {
+            pr.converging  = true;
+            pr.sampleCount = 0;
+            s.freezeSim    = true;   // freeze the scene from the next frame on
+        }
+        return;
+    }
+
+    // Converged enough: stop paying for it, just re-present the finished image.
+    if (pr.sampleCount >= ProgressiveRenderer::MAX_SAMPLES) {
+        pr.present(s.quad, w, h);
+        return;
+    }
+
+    // Fold one more jittered sample into the running average.
+    pr.ensureGL(w, h);
+    const int n = pr.sampleCount + 1;
+    pr.currentJitter = glm::vec2(progressiveHalton(n, 2) - 0.5f,
+                                 progressiveHalton(n, 3) - 0.5f);
+    s.snap.pixelJitter = pr.currentJitter;
+    renderScene(s, w, h, pr.resolve.fbo);
+    pr.accumulate(s.quad, n);
+    pr.sampleCount = n;
+    pr.present(s.quad, w, h);
+}
+
+// ────────────────────────────────────────────────────────────
+//  High-quality offline still capture ("beauty shot")
+// ────────────────────────────────────────────────────────────
+// Default filename for a capture: aetherion_shot_YYYYMMDD_HHMMSS.png in CWD.
+inline std::string beautyShotPath() {
+    std::time_t t = std::time(nullptr);
+    std::tm tmv{};
+#if defined(_WIN32)
+    localtime_s(&tmv, &t);
+#else
+    localtime_r(&t, &tmv);
+#endif
+    char buf[64];
+    std::strftime(buf, sizeof(buf), "aetherion_shot_%Y%m%d_%H%M%S.png", &tmv);
+    return std::string(buf);
+}
+
+// Render one still at `scale`× the window resolution with the ray-march step
+// budget cranked to max, averaging `samples` jittered passes for clean edges,
+// then read it back and save a PNG. Blocks for a beat; that's the trade — a
+// crisp export instead of fighting for framerate. Restores all mutated state.
+inline bool captureBeautyShot(State& s, int w, int h, int scale,
+                              const std::string& outPath, int samples = 8) {
+    scale   = std::clamp(scale, 1, 4);
+    samples = std::clamp(samples, 1, 32);
+    const int hiW = w * scale, hiH = h * scale;
+
+    Framebuffer hi;
+    if (!hi.create(hiW, hiH, true)) {
+        std::cerr << "[bh3d] beauty shot: could not allocate "
+                  << hiW << "x" << hiH << " framebuffer\n";
+        return false;
+    }
+
+    // Remember everything we clobber.
+    const int       savedAdaptive = s.adaptiveMaxSteps;
+    const int       savedLastW = s.lastW, savedLastH = s.lastH;
+    const int       savedSnapW = s.snap.windowW, savedSnapH = s.snap.windowH;
+    const int       savedSteps = s.snap.maxSteps;
+    const glm::vec2 savedJitter = s.snap.pixelJitter;
+
+    // Hard-max the ray-march budget (matches the shader's internal clamps).
+    s.adaptiveMaxSteps = s.cinematicMode ? 300 : 200;
+
+    std::vector<float> accum(size_t(hiW) * size_t(hiH) * 4, 0.0f);
+    std::vector<float> frame(size_t(hiW) * size_t(hiH) * 4, 0.0f);
+
+    for (int i = 0; i < samples; ++i) {
+        s.snap.pixelJitter = (samples == 1)
+            ? glm::vec2(0.0f)
+            : glm::vec2(progressiveHalton(i + 1, 2) - 0.5f,
+                        progressiveHalton(i + 1, 3) - 0.5f);
+        s.snap.maxSteps = s.adaptiveMaxSteps;
+        s.snap.windowW  = hiW;
+        s.snap.windowH  = hiH;
+        renderScene(s, hiW, hiH, hi.fbo);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, hi.fbo);
+        glReadPixels(0, 0, hiW, hiH, GL_RGBA, GL_FLOAT, frame.data());
+        for (size_t k = 0; k < accum.size(); ++k) accum[k] += frame[k];
+    }
+
+    // Average, tonemap-clamp, flip vertically (GL is bottom-left origin), pack 8-bit.
+    const float inv = 1.0f / float(samples);
+    std::vector<std::uint8_t> pix(size_t(hiW) * size_t(hiH) * 4);
+    for (int y = 0; y < hiH; ++y) {
+        const size_t srcRow = size_t(hiH - 1 - y) * size_t(hiW) * 4;
+        const size_t dstRow = size_t(y) * size_t(hiW) * 4;
+        for (int x = 0; x < hiW; ++x) {
+            for (int c = 0; c < 3; ++c) {
+                float v = std::clamp(accum[srcRow + x * 4 + c] * inv, 0.0f, 1.0f);
+                pix[dstRow + x * 4 + c] = (std::uint8_t)std::lround(v * 255.0f);
+            }
+            pix[dstRow + x * 4 + 3] = 255;
+        }
+    }
+
+    sf::Image img(sf::Vector2u{(unsigned)hiW, (unsigned)hiH}, pix.data());
+    const bool okSave = img.saveToFile(outPath);
+    if (!okSave)
+        std::cerr << "[bh3d] beauty shot: failed to save " << outPath << "\n";
+
+    // Restore render state and put bloom back at window resolution.
+    s.adaptiveMaxSteps = savedAdaptive;
+    s.snap.pixelJitter = savedJitter;
+    s.snap.windowW = savedSnapW;
+    s.snap.windowH = savedSnapH;
+    s.snap.maxSteps = savedSteps;
+    s.lastW = savedLastW;
+    s.lastH = savedLastH;
+    s.bloom.resize(w, h);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w, h);
+    s.progressive.reset();
+    s.freezeSim = false;
+    return okSave;
 }
 
 // Render the panel-based HUD + label-view overlay + overlays toggle panel.
@@ -1853,6 +2162,7 @@ inline void renderHUD(State& s, int w, int h) {
         dbg.doppler      = s.snap.dopplerEnabled;
         dbg.havePhotoreal= s.havePhotoreal;
         dbg.haveSimple   = s.haveSimple;
+        dbg.progressiveEnabled = s.progressive.enabled;
         dbg.animSpeed    = s.snap.animSpeed;
         dbg.fps          = s.snap.fps;
         dbg.totalTime    = s.snap.totalTime;
@@ -1990,6 +2300,11 @@ inline void onActionKey(State& s, sf::Keyboard::Key code) {
     else if (code == kb.toggleSpacetime) {
         s.physOverlay.spacetimeEnabled = !s.physOverlay.spacetimeEnabled;
         s.physOverlay.markDirty();
+    }
+    else if (code == kb.toggleProgressive) {
+        s.progressive.enabled = !s.progressive.enabled;
+        // Reset accumulation state when toggling so we don't start mid-convergence.
+        s.progressive.reset();
     }
     else if (code == kb.resetTilt)         s.camera.resetRoll();
     else if (code == kb.nextProfile) {

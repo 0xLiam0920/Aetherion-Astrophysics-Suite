@@ -54,9 +54,10 @@ struct BloomPipeline {
 
     // Execute the full bloom post-process (passes 2-4).
     // Assumes the scene has already been rendered into sceneFBO and the
-    // given quad VAO is currently bound. 
+    // given quad VAO is currently bound. As a side note, the final composite is written to
+    // targetFBO (0 = default framebuffer / screen).
     void execute(const GLVertexArray& quad, const cfg::BloomConfig& bc,
-                 bool cinematic = false, float time = 0.0f) {
+                 bool cinematic = false, float time = 0.0f, GLuint targetFBO = 0) {
         // Save GL state that we're about to clobber
         GLint prevProgram = 0, prevFBO = 0, prevActiveTexture = 0;
         GLint prevViewport[4] = {};
@@ -130,7 +131,7 @@ struct BloomPipeline {
         }
 
         /*--------- Pass 4: composite bloom onto scene ---------*/
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
         glViewport(0, 0, sceneFBO.width, sceneFBO.height);
         glClear(GL_COLOR_BUFFER_BIT);
         compositeProg.use();

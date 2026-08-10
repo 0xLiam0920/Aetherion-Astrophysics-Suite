@@ -32,6 +32,13 @@ struct KeyState {
         }
     }
 
+    // This will be true while any camera-motion key is held. Tis is Used by the progressive
+    // still-frame accumulator to stay alive while the user is navigating,
+    // even if the camera is momentarily pinned against a clamp.
+    bool anyMovement() const {
+        return w || a || s || d || up || down || q || e;
+    }
+
     void onKeyReleased(sf::Keyboard::Key code) {
         switch (code) {
             case sf::Keyboard::Key::W:        w = false;    break;

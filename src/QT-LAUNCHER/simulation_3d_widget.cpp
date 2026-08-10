@@ -147,14 +147,16 @@ void Simulation3DWidget::onUpdate()
 
     const float dt = s.frameClock.restart().asSeconds();
     bh3d::tickFPS(s);
-    bh3d::tickPhysics(s, dt);
+    // Freeze the scene (dt = 0) while the still-frame accumulator converges.
+    const float simDt = s.freezeSim ? 0.0f : dt;
+    bh3d::tickPhysics(s, simDt);
 
     const auto sz = getSize();
     const int w = std::max((int)sz.x, 1);
     const int h = std::max((int)sz.y, 1);
 
-    bh3d::buildSnapshot(s, w, h, dt);
-    bh3d::renderScene(s, w, h);
+    bh3d::buildSnapshot(s, w, h, simDt);
+    bh3d::renderFrame(s, w, h, dt);
 
 #ifdef AETHERION_QT_HOST
     if (imguiReady_) {

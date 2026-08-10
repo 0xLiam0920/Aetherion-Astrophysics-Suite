@@ -395,6 +395,7 @@ inline void drawControlsHint(const GLBitmapFont& font, int sw, int sh) {
 struct DebugPanelInfo {
     bool cinematic, freelook, jets, blr, doppler;
     bool havePhotoreal, haveSimple;
+    bool progressiveEnabled;
     float animSpeed, fps, totalTime, animTime, rollDeg;
     int maxSteps;
     glm::vec3 camPos, camDir;
@@ -409,7 +410,7 @@ inline void drawDebugPanel(const GLBitmapFont& font, const DebugPanelInfo& d, in
     // Layout: 5 sections (Shader/Camera/Render/Animation/Window) with rows
     int rows = 1 /*shader*/ + 2 /*compiled*/
              + 1 /*mode*/   + 3 /*pos/dir/tilt*/
-             + 1 /*render*/ + 2 /*steps/cinematic*/
+             + 1 /*render*/ + 3 /*steps/cinematic/progressive*/
              + 1 /*anim*/   + 3 /*speed/animT/totalT*/
              + 1 /*window*/ + 1 /*size*/;
     int dividers = 4;
@@ -455,6 +456,8 @@ inline void drawDebugPanel(const GLBitmapFont& font, const DebugPanelInfo& d, in
     kv("Max Steps", buf, col::textPrimary);
     kv("Cinematic", d.cinematic ? "ON" : "OFF",
        d.cinematic ? col::valueOn : col::valueOff);
+    kv("Progressive", d.progressiveEnabled ? "ON" : "OFF",
+       d.progressiveEnabled ? col::valueOn : col::valueOff);
     divider();
 
     sect("Animation");

@@ -145,6 +145,17 @@ int main(int argc, char* argv[]) {
                 // except for the menu toggle (N) and release-mouse (Esc) keys
                 // which the user expects to always work.
                 state.keys.onKeyPressed(kp->code);
+                // F12: high-quality offline still capture (2x SSAA, max steps).
+                // Handled directly here so it works even while ImGui has focus.
+                if (kp->code == sf::Keyboard::Key::F12) {
+                    const int cw = std::max(1, (int)window.getSize().x);
+                    const int ch = std::max(1, (int)window.getSize().y);
+                    const std::string shot = bh3d::beautyShotPath();
+                    if (bh3d::captureBeautyShot(state, cw, ch, 2, shot))
+                        std::cerr << "[bh3d] beauty shot saved: " << shot << "\n";
+                    else
+                        std::cerr << "[bh3d] beauty shot failed\n";
+                }
                 const bool isToggle = (kp->code == state.actionKeys.nextProfile)
                                    || (kp->code == state.actionKeys.openMergerMenu)
                                    || (kp->code == state.actionKeys.releaseMouse);
@@ -197,11 +208,14 @@ int main(int argc, char* argv[]) {
         }
 
         // ── Physics, snapshot, render ─────────────────────
-        bh3d::tickPhysics(state, dt);
+        // While the still-frame accumulator is converging it freezes the scene
+        // (dt = 0) so every jittered sample depicts the identical image.
+        const float simDt = state.freezeSim ? 0.0f : dt;
+        bh3d::tickPhysics(state, simDt);
         const int w = std::max(1, (int)window.getSize().x);
         const int h = std::max(1, (int)window.getSize().y);
-        bh3d::buildSnapshot(state, w, h, dt);
-        bh3d::renderScene(state, w, h);
+        bh3d::buildSnapshot(state, w, h, simDt);
+        bh3d::renderFrame(state, w, h, dt);
         bh3d::renderHUD(state, w, h);
 
         // ── ImGui frame (preset menu lives here) ─────────

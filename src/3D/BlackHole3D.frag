@@ -11,6 +11,7 @@ out vec4 FragColor;
 uniform sampler2D backgroundTex; // Background (star field, accretion disk, etc.)
 uniform sampler2D diskTex;       // Accretion disk RGBA (polar mapped)
 uniform vec2 resolution;         // Screen resolution
+uniform vec2 pixelJitter;         // Sub-pixel ray offset [px] for progressive/SSAA accumulation
 uniform vec3 cameraPos;          // Camera position in world space
 uniform vec3 cameraDir;          // Camera forward direction
 uniform vec3 cameraUp;           // Camera up vector
@@ -769,8 +770,12 @@ vec3 bodyEmissionSimple(int idx, vec3 ro, vec3 rd) {
 }
 
 void main() {
-    // Get ray direction from camera through this pixel
-    vec3 rayDir = getRayDir(fragUV, cameraPos, cameraDir, cameraUp, fov);
+    // Get ray direction from camera through this pixel. pixelJitter nudges the
+    // ray by a sub-pixel amount so the still-camera accumulator (and the
+    // high-res beauty-shot capture) converge to a supersampled, anti-aliased
+    // image; it is zero during normal navigation.
+    vec2 juv = fragUV + pixelJitter / resolution;
+    vec3 rayDir = getRayDir(juv, cameraPos, cameraDir, cameraUp, fov);
     vec3 rayOrigin = cameraPos;
 
     // ── Orbiting bodies (straight-ray approximation) ──────────────────────
