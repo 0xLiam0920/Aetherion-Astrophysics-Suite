@@ -115,6 +115,61 @@ flatpak-builder --user --install --force-clean build-flatpak \
 flatpak run io.github.0xLiam0920.AetherionSuite
 ```
 
+### Windows (MSVC + vcpkg)
+
+Prerequisites (all one-time):
+
+1. **Git**, **CMake ≥ 3.21**, and **Visual Studio 2022** with the
+   *Desktop development with C++* workload. From an elevated PowerShell:
+
+   ```powershell
+   winget install --id Git.Git -e
+   winget install --id Kitware.CMake -e
+   # Full IDE:
+   winget install --id Microsoft.VisualStudio.2022.Community -e `
+     --override "--quiet --wait --add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended"
+   # …or Build Tools only (no IDE, ~6 GB smaller):
+   winget install --id Microsoft.VisualStudio.2022.BuildTools -e `
+     --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+   ```
+
+2. **vcpkg**, bootstrapped and exported on the environment:
+
+   ```powershell
+   git clone https://github.com/microsoft/vcpkg C:\vcpkg
+   C:\vcpkg\bootstrap-vcpkg.bat
+   [Environment]::SetEnvironmentVariable('VCPKG_ROOT', 'C:\vcpkg', 'User')
+   $env:VCPKG_ROOT = 'C:\vcpkg'
+   ```
+
+3. **Dependencies** (x64-windows triplet):
+
+   ```powershell
+   C:\vcpkg\vcpkg.exe install sfml glm glew qtbase qtcharts --triplet x64-windows
+   ```
+
+Then clone and build:
+
+```powershell
+git clone https://github.com/0xLiam0920/Aetherion-Astrophysics-Suite.git
+cd Aetherion-Astrophysics-Suite
+.\rebuild_windows.ps1 -Config Release
+.\build\Release\blackhole-sim.exe
+```
+
+The build script auto-detects `VCPKG_ROOT`, invokes the Visual Studio 2022
+generator, and deploys the required Qt/SFML runtime DLLs plus the
+`platforms\qwindows.dll` plugin next to each executable. Output binaries:
+
+- `build\Release\blackhole-sim.exe` — main Qt launcher
+- `build\Release\blackhole-2D.exe` — standalone 2D sim
+- `build\Release\blackhole-3D.exe` — standalone 3D sim
+
+> **Note:** `rebuild_windows.ps1` must run from a shell where the MSVC toolchain
+> is on `PATH`. Either launch *Developer PowerShell for VS 2022* from the Start
+> menu, or dot-source `Launch-VsDevShell.ps1 -Arch amd64` from a regular
+> PowerShell first.
+
 ### Physics regression tests
 
 ```bash
@@ -129,7 +184,7 @@ ctest --output-on-failure -R physics-regression
 - SFML 2.x is not supported, 3.x API is required.
 - On Wayland, the app forces X11/XWayland via `QT_QPA_PLATFORM=xcb` (required by SFML). Set `QT_QPA_PLATFORM=xcb` manually if needed.
 - Pulsar and merger objects are still in progress; 2d logic is mostly complete, but the 3d ones are about 40% through as of `v0.2.1`
-- Windows support is now first-class: build with MSVC + vcpkg using `rebuild_windows.ps1` / `rebuild_windows.sh`, and package an `.exe` installer with `make_exe.sh`. "First-class" here means it compiles and runs fine.
+- Windows: MSVC + vcpkg via `rebuild_windows.ps1` is the supported path (see *Installation → Windows*). Packaging an `.exe` installer is handled by `make_exe.sh`.
 ---
 
 ## License

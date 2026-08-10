@@ -387,24 +387,26 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/icon_transparent.png)
     endif()
 endif()
 
-# Background texture (optional) is often kept next to the executable in build/.
-if(EXISTS ${CMAKE_SOURCE_DIR}/build/background.png)
+# Background texture: canonical location is src/common/resources/ (tracked in
+# git). Fall back to build/ or repo root for legacy dev layouts.
+set(_bg_src "")
+foreach(_cand
+        "${CMAKE_SOURCE_DIR}/src/common/resources/background.png"
+        "${CMAKE_SOURCE_DIR}/build/background.png"
+        "${CMAKE_SOURCE_DIR}/background.png")
+    if(EXISTS "${_cand}")
+        set(_bg_src "${_cand}")
+        break()
+    endif()
+endforeach()
+if(_bg_src)
     add_custom_command(TARGET blackhole-sim POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${CMAKE_SOURCE_DIR}/build/background.png
+                "${_bg_src}"
                 $<TARGET_FILE_DIR:blackhole-sim>/background.png)
     add_custom_command(TARGET blackhole-3D POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${CMAKE_SOURCE_DIR}/build/background.png
-                $<TARGET_FILE_DIR:blackhole-3D>/background.png)
-elseif(EXISTS ${CMAKE_SOURCE_DIR}/background.png)
-    add_custom_command(TARGET blackhole-sim POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${CMAKE_SOURCE_DIR}/background.png
-                $<TARGET_FILE_DIR:blackhole-sim>/background.png)
-    add_custom_command(TARGET blackhole-3D POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${CMAKE_SOURCE_DIR}/background.png
+                "${_bg_src}"
                 $<TARGET_FILE_DIR:blackhole-3D>/background.png)
 endif()
 
@@ -429,10 +431,8 @@ endif()
 # Black hole JSON catalog is at share/aetherionsuite/catalog (covered by the XDG
 # search paths ResourceManager already probes on Linux/Flatpak).
 install(DIRECTORY src/common/resources/catalog DESTINATION share/aetherionsuite)
-if(EXISTS ${CMAKE_SOURCE_DIR}/build/background.png)
-    install(FILES build/background.png DESTINATION share/aetherionsuite)
-elseif(EXISTS ${CMAKE_SOURCE_DIR}/background.png)
-    install(FILES background.png DESTINATION share/aetherionsuite)
+if(_bg_src)
+    install(FILES "${_bg_src}" DESTINATION share/aetherionsuite)
 endif()
 if(EXISTS ${CMAKE_SOURCE_DIR}/icon.png)
     install(FILES icon.png DESTINATION share/aetherionsuite)
