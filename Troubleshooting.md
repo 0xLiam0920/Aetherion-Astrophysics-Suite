@@ -1,33 +1,6 @@
-Skip to content
-0xLiam0920
-Aetherion-Astrophysics-Suite
-Repository navigation
-Code
-Issues
-Pull requests
-Agents
-Actions
-Projects
-Wiki
-Security and quality
-Insights
-Settings
-Editing Troubleshooting
- 
- 
-Title *
-Troubleshooting
-Write
-Preview
-Edit mode: 
-Markdown
-Page content *
 # FAQ & Troubleshooting
 
-Common questions, common mistakes, and the occasional rant. If your problem
-isn't in here, congratulations, you've found a new and exciting one. Please
-file an issue with actual error output, not a screenshot of a screenshot.
-
+Common questions, common mistakes, and common solutions. If you have a question that isn't answered here, please open an issue on GitHub.
 ---
 
 ## Build Issues
@@ -47,7 +20,7 @@ Could not find a package configuration file provided by "SFML"
   ```bash
   vcpkg install sfml glm
   ```
-- FreeBSD: yeah no I ain't adding compat for that bud, best you switch to something mainstream
+- FreeBSD: FreeBSD is not currently supported. Contributions to add support are welcome.
 
 - If SFML is installed in a non-standard location, pass its path to CMake:
   ```bash
@@ -106,7 +79,7 @@ error: no matching constructor for 'sf::VideoMode'
 No CMAKE_CXX_COMPILER could be found.
 ```
 
-**Cause:** You are trying to compile C++ without a C++ compiler, don't be a doofus.
+**Cause:** A C++ compiler is not installed or is not available on your `PATH`.
 
 **Solution:**
 ```bash
@@ -125,7 +98,7 @@ sudo apt install build-essential
    glxinfo | grep "OpenGL version"   # Linux
    ```
    On macOS, OpenGL 3.3 is supported on all Macs from 2012 onwards.
-   On windows, check your GPU specs online, or use a tool like GPU-Z. Corrupted drivers can also cause this, so use DDU or something along that line.
+  On Windows, check your GPU specifications or use a tool such as GPU-Z. Corrupted drivers can also cause this; reinstalling the graphics driver may help.
 
 2. **Shader files missing**, The build copies `.frag` files next to the executable. If you moved the binary, make sure `BlackHole3D.frag` and `BlackHole3D_PhotorealDisk.frag` are in the same directory as the executable, or in the project's `src/3D/` directory.
 
@@ -163,12 +136,12 @@ Shader compilation failed: ...
 
 **Tips:**
 - The 3D simulator is GPU-bound (full-screen ray marching every frame). A discrete GPU is recommended for good performance.
-- Reduce the window size, don't use fullscreen to avoid fps stuttering.
+- Reduce the window size or disable fullscreen if you experience frame-rate stuttering.
 - Toggle off expensive features:
   - **J**, disable relativistic jets
   - **G**, disable Broad Line Region
   - **V**, disable Doppler beaming
-- Check that your system isn't falling back to software rendering (integrated GPU), for windows sometimes task manager priority going to very high/realtime can fix this.
+  - Check that your system is not falling back to software rendering. On Windows, verify that the application is using the intended GPU in the graphics settings.
 
 ### Mouse cursor stuck / input not working
 
@@ -182,7 +155,7 @@ Shader compilation failed: ...
 
 ### `.app` bundle won't open ("damaged" or "unidentified developer")
 
-**Cause:** The bundle isn't code-signed, because Apple charges $100/year for the privilege of telling macOS that I am, in fact, a real person and not a Russian botnet.
+**Cause:** The bundle is not code-signed or notarized, so macOS cannot verify its developer identity.
 
 **Solution:**
 ```bash
@@ -275,30 +248,30 @@ cmake -DCMAKE_PREFIX_PATH=/usr/local ..
 
 ## Windows-Specific Issues
 
-### What you actually need before running anything
+### Prerequisites
 
-The `rebuild_windows.ps1` / `rebuild_windows.sh` scripts assume you have already done all of the following. 
+The `rebuild_windows.ps1` / `rebuild_windows.sh` scripts assume you have completed the following prerequisites.
 
-1. **Visual Studio 2022** with the **"Desktop development with C++"** workload. Not VS Code. The full IDE with that exact workload checked. The Community edition is free.
-  
-3. **vcpkg** cloned and bootstrapped somewhere sane (e.g. `C:\vcpkg`):
+1. **Visual Studio 2022** with the **"Desktop development with C++"** workload. The Community edition is free; make sure the full IDE and this workload are installed.
+
+2. **vcpkg** cloned and bootstrapped in a location such as `C:\vcpkg`:
    ```powershell
    git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
    C:\vcpkg\bootstrap-vcpkg.bat
    ```
-4. **The actual libraries**, installed via vcpkg with the **x64-windows** triplet 
+3. **The required libraries**, installed via vcpkg with the **x64-windows** triplet:
    ```powershell
    C:\vcpkg\vcpkg.exe install qt6-base qt6-charts sfml glm glew --triplet x64-windows
    ```
 
-5. **`VCPKG_ROOT` set in your environment** (or pass `--vcpkg-root` every time, which gets old fast):
+4. **`VCPKG_ROOT` set in your environment** (or pass `--vcpkg-root` when running the scripts):
    ```powershell
    [Environment]::SetEnvironmentVariable('VCPKG_ROOT', 'C:\vcpkg', 'User')
    ```
    Open a new shell after setting this.
-6. A **"Developer PowerShell for VS 2022"** prompt (Start menu → search "Developer PowerShell"). This is the one that has `cmake.exe`, `cl.exe`, and friends on PATH
+5. A **"Developer PowerShell for VS 2022"** prompt (Start menu → search "Developer PowerShell"). This provides `cmake.exe`, `cl.exe`, and the other Visual Studio build tools on `PATH`.
 
-### Now actually build it
+### Build the project
 
 From the repo root in that Developer PowerShell window:
 ```powershell
@@ -312,18 +285,18 @@ The output executables land in `build\Release\` as `blackhole-sim.exe`, `blackho
 
 ### "CMake Error: Could not find package configuration file for Qt6" (or SFML, or GLM…)
 
-**Cause:** Either `VCPKG_ROOT` isn't set, or you ran the script without passing `--vcpkg-root`, or you installed the wrong triplet. Almost always the triplet, in my experience.
+**Cause:** Either `VCPKG_ROOT` is not set, the script was run without `--vcpkg-root`, or the wrong triplet was installed. The triplet is the most common cause.
 
 **Solution:** Check that all three of these are true:
 - `vcpkg list` shows the package with `:x64-windows` after its name (not `:x86-windows`).
 - `echo $env:VCPKG_ROOT` in PowerShell prints a real path with a `scripts\buildsystems\vcpkg.cmake` file inside it.
 - You are in a Developer PowerShell for VS 2022 window.
 
-If all three check out and it still fails, remake the build folder from scratch using make/cmake commands
+If all three checks pass and configuration still fails, remove and recreate the build directory, then run CMake again.
 
 ### "The application failed to start because Qt6Core.dll was not found"
 
-**Cause:** Qt's runtime DLLs aren't next to the `.exe`. The build links against vcpkg's Qt, but Windows won't go hunting through vcpkg's install tree at runtime.
+**Cause:** Qt's runtime DLLs are not next to the `.exe`. The build links against vcpkg's Qt, but Windows does not search the vcpkg installation tree at runtime.
 
 **Solution:** Deploy them with `windeployqt`:
 ```powershell
@@ -363,18 +336,18 @@ git config --global core.autocrlf input
 git rm --cached rebuild_windows.sh make_exe.sh bundle_app.sh
 git checkout -- rebuild_windows.sh make_exe.sh bundle_app.sh
 ```
-Or just run the `.ps1` instead and avoid the whole class of problem.
+Alternatively, run the `.ps1` script from a Developer PowerShell prompt.
 
 ### "Antivirus quarantined Aetherion.exe"
 
-**Cause:** You compiled a brand-new unsigned executable that does GPU things and reads files from disk, behavior common with false positives.
+**Cause:** The executable is new and unsigned, and its GPU and file-system access can resemble behavior associated with false positives.
 
-**Solution:** Add an exclusion for the build folder, or submit a false-positive report to your AV vendor. 
+**Solution:** Add an exclusion for the build folder, or submit a false-positive report to your AV vendor.
 
 ---
 
 Note:
-MacOS only supports OpenGL 3.3, so anything 2x for SFML is not going to happen for cross-compatibility sake.
+macOS supports OpenGL 3.3, and the project requires SFML 3.x for cross-platform compatibility.
 If you want to add support for a different version directly to this project, make a Pull Request. Any help here is appreciated, but my priority is in maintaining the codebase as-is for now.
 
 
@@ -387,21 +360,21 @@ If you want to add support for a different version directly to this project, mak
 | Executable | Description |
 |---|---|
 | `blackhole-sim` | Main launcher menu (ImGui interface to choose which simulator to run) |
-| `blackhole-2D` | 2D Schwarzschild null-geodesic simulator | if behaves as expected should be able to run either standalone (terminal) or in the aetherion app
-| `blackhole-3D` | 3D Kerr-metric ray-marched black hole with accretion disk, jets, bloom |, same case as above.
+| `blackhole-2D` | 2D Schwarzschild null-geodesic simulator | Can run standalone or through the Aetherion launcher. |
+| `blackhole-3D` | 3D Kerr-metric ray-marched black hole with accretion disk, jets, and bloom | Can run standalone or through the Aetherion launcher. |
 
 ### Can I edit shaders without recompiling?
 
-The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag` or `BlackHole3D_PhotorealDisk.frag` in the build directory and relaunch the simulator. 
+The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag` or `BlackHole3D_PhotorealDisk.frag` in the build directory and relaunch the simulator.
 
 ### What units does the simulation use?
 
-Simulation units are in standarized Schwarzschild radii (Rs = 1). For reference, TON 618's Schwarzschild radius is approximately 1,300 AU (1.95×10¹⁴ m).
+Simulation units are in standardized Schwarzschild radii (Rs = 1). For reference, TON 618's Schwarzschild radius is approximately 1,300 AU (1.95×10¹⁴ m).
 
 ### How do I switch between black hole presets?
 
 The 3D simulator includes presets for TON 618, Sgr A*, M87*, and others. Check the HUD overlay (**H** to toggle) and key bindings for preset switching. Presets are defined in [src/3D/presets.hpp](src/3D/presets.hpp).
-  Note: You can change the keybinds to whatever you want at any time. Just edit the keybinds in the aetherion app
+  Note: You can change the key bindings by editing them in the Aetherion app.
 
 ### Does this work on Windows?
 
@@ -415,7 +388,7 @@ From a "Developer PowerShell for VS 2022" prompt run `rebuild_windows.ps1`, or f
 
 ### How do I regenerate the accretion disk texture?
 
-do this:
+Run:
 ```bash
 pip install Pillow
 python makedisktexture.py

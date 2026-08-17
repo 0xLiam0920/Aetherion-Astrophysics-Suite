@@ -79,6 +79,7 @@ uniform float diskSatBoostOuter;     // Saturation multiplier at inner edge
 // Physical colour mode
 uniform int         showPhysicalDiskColor; // 1 = NT+Doppler+grav CIE LUT path
 uniform sampler2D   blackbodyLUT;         // 256×1 sRGB blackbody, 1000–40000 K
+uniform int         showCorona;           // 1 = draw the X-ray corona haze
 
 // Orbiting bodies
 const int MAX_ORB_BODIES = 10;
@@ -902,6 +903,19 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     // Fine filaments from MHD turbulence, slowly evolving in time
     float turbTime = uTime * 0.35;  // Turbulent evolution rate
     float filaments = 0.70 + 0.30 * fbm(vec2(angle * 6.0 + turbTime * 0.7, r * 2.0 + turbTime * 0.3), 2);
+    /*
+    // The below is my Magneto-rotational instability (MRI) texture. The disk plasma orbits
+    // differentially, inner rings lap the outer ones, so the turbulence gets
+    // sheared out azimuthally by an amount that grows with radius. We sample a
+    few octaves of FBM in that sheared frame and drift it inward over time,
+   which is what gives the mottled, filamentary look real MHD disks have
+    // instead of a smooth Novikov-Thorne gradient. Kept low-amplitude so it
+modulates the existing structure rather than fighting it.
+    float mriShear = angle * 3.0 - log(max(r / rIn, 0.01)) * 7.0 + uTime * 0.9;
+    float mri = fbm(vec2(mriShear, r * 3.5 - uTime * 0.4), 3);
+    mri += 0.5 * fbm(vec2(mriShear * 2.3 + 11.0, r * 7.0 + uTime * 0.25), 2);
+    mri = 0.78 + 0.34 * clamp(mri / 1.5, 0.0, 1.0);   // settle into ~[0.78, 1.12]
+    */
     // Concentric density waves, spiral inward over time
     float wavePropagation = uTime * 0.5;  // Inward-propagating density waves
     float waves = 0.82 + 0.18 * sin(r * 5.0 + angle * 2.0 - wavePropagation) * sin(r * 3.0 + wavePropagation * 0.5);
@@ -939,6 +953,7 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     
     float I = flux * innerFade * outerFade * spiralArm * streaks * filaments * waves * dopplerBright * innerBoost * pulse;
     I += hotspot * innerFade * dopplerBright;  // Orbiting hotspot adds on top
+    // I *= mri;   // FIXME/INVESTIGATE: When enabled, this MRI texture makes any other visual settings other than default fail. Why? I have zero idea, but disabling it during (uncommitted) testing worked.
     // Wobble slightly modulates brightness (surface normal tilts toward/away from viewer)
     I *= (1.0 + wobble);
     
@@ -1656,6 +1671,21 @@ void main() { // note, we chose void here since we're returning early on absorpt
             
             vec3 ringColor = vec3(1.0, 0.85, 0.55); // Warm gold matching inner disk
             color += ringColor * (ring * 1.8 + glow) * edgeBright;
+
+            /* THis is the toggle for the X-ray corona: the compact, hot (kT ~ 100 keV) Comptonizing cloud
+            // that sits just above the inner disk and up-scatters disk photons
+            // into hard X-rays. Nearly every AGN and X-ray binary has one, so
+            without it the inner region looks a bit bare. We draw it as a soft
+             blue-white haze hugging the shadow, a few Rs across, and keep it
+             out of the shadow interior so it doesn't fill the hole in.*/
+            if (showCorona != 0) {
+                float coronaScreen = shadowScreen * 1.9;
+                float cd = distFromBH / max(coronaScreen, 1e-4);
+                float corona = exp(-cd * cd * 2.2);
+                corona *= smoothstep(shadowScreen * 0.85, shadowScreen * 1.05, distFromBH);
+                vec3 coronaCol = vec3(0.72, 0.86, 1.05); // hard X-ray blue-white
+                color += coronaCol * corona * 0.30;
+            }
         }
     }
     

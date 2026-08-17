@@ -39,6 +39,7 @@ uniform float blrOuterRadius;    // BLR outer edge (world units)     [ADDED 2026
 uniform float blrThickness;      // BLR vertical half-thickness      [ADDED 2026-04-24]
 uniform float blrStrength;       // [0,1] cloud opacity scaler per black hole
 uniform int   maxStepsOverride;  // Runtime step limit [ADDED 2026-05-25: was previously dead]
+uniform int   showCorona;        // 1 = draw the X-ray corona haze over the inner disk
 
 // ── Orbiting bodies [ADDED 2026: ported from the photoreal shader so the ──
 //    low-quality path shows orbiting stars/clouds, tidal-disruption victims
@@ -854,6 +855,21 @@ void main() {
 
     // ── Emissive layers on top (jets, BLR, body coronae / photon rings) ───
     color += jetAcc + blrAcc + coronaAcc;
+
+    // X-ray corona: hot Comptonizing haze hugging the inner disk / shadow rim.
+    // The high-quality path draws this in screen space; here we approximate it
+    // from the closest approach of the primary ray to the hole, hollowing out
+    // the shadow interior so the glow reads as a rim halo rather than a filled
+    // disc. Same hard blue-white as the photoreal shader for consistency purposes and whatnot
+    if (showCorona != 0) {
+        vec3  oc  = rayOrigin - blackHolePos;
+        float tca = -dot(oc, rayDir);
+        float d2  = dot(oc, oc) - tca * tca;
+        float cr  = 3.0 * blackHoleRadius;
+        float glow = exp(-d2 / (cr * cr)) * step(0.0, tca);
+        float rimHole = smoothstep(0.7 * blackHoleRadius, 1.4 * blackHoleRadius, sqrt(max(d2, 0.0)));
+        color += vec3(0.72, 0.86, 1.05) * glow * rimHole * 0.30;
+    }
 
     FragColor = vec4(color, 1.0);
 }

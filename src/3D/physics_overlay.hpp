@@ -36,11 +36,11 @@
 
 namespace bh3d {
 
-// ────────────────────────────────────────────────────────────
+// ============================================================
 //  Tiny self-contained Schwarzschild + RK4 helpers
 //  (mirrors src/2D/2D-physics/{schwarzschild,geodesic,integrator}.hpp
 //   but kept local to avoid cross-module include dependencies)
-// ────────────────────────────────────────────────────────────
+// ============================================================
 namespace overlay_phys {
 
 struct Sch {
@@ -107,11 +107,35 @@ inline NullState stepNull(const Sch& s, const NullState& y, double dphi) {
     });
 }
 
+
+// ============================================================
+//  Kerr characteristic radii (all returned in units of M).
+//  Spin `a` here is the dimensionless a* = J/(GM²/c) in [0, 1).
+// ============================================================
+
+// Bardeen (1972) marginally-stable circular orbit (ISCO). The prograde and
+// retrograde roots collapse onto the single Schwarzschild value 6M when a = 0.
+inline void kerrIsco(double a, double& rPro, double& rRetro) {
+    const double Z1 = 1.0 + std::cbrt(1.0 - a*a)
+                          * (std::cbrt(1.0 + a) + std::cbrt(1.0 - a));
+    const double Z2 = std::sqrt(3.0*a*a + Z1*Z1);
+    const double s  = std::sqrt(std::max(0.0, (3.0 - Z1) * (3.0 + Z1 + 2.0*Z2)));
+    rPro   = 3.0 + Z2 - s;   // co-rotating photons truncate the disk here
+    rRetro = 3.0 + Z2 + s;
+}
+
+// Equatorial unstable photon-orbit radii. Both branches give 3M (= 1.5 Rs)
+// at a = 0, which is the familiar Schwarzschild photon sphere.
+inline void kerrPhotonEquatorial(double a, double& rPro, double& rRetro) {
+    rPro   = 2.0 * (1.0 + std::cos((2.0/3.0) * std::acos(-a)));
+    rRetro = 2.0 * (1.0 + std::cos((2.0/3.0) * std::acos( a)));
+}
+
 } // namespace overlay_phys
 
-// ────────────────────────────────────────────────────────────
+// ============================================================
 //  Overlay shader sources
-// ────────────────────────────────────────────────────────────
+// ============================================================
 inline const char* kOverlayVS = R"(#version 330 core
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec4 aColor;
@@ -132,9 +156,9 @@ void main() {
 }
 )";
 
-// ────────────────────────────────────────────────────────────
+// ============================================================
 //  PhysicsOverlay: owns GL resources + vertex caches for the two overlays.
-// ────────────────────────────────────────────────────────────
+// ============================================================
 class PhysicsOverlay {
 public:
     struct Vertex { glm::vec3 pos; glm::vec4 color; };
@@ -152,6 +176,15 @@ public:
     int   spacetimeSpokes  = 24;     // radial spokes
     int   spacetimeRingSeg = 96;     // segments per ring (smoothness)
     float spacetimeOuterMul= 18.0f;  // outer radius in units of M
+
+    // Kerr characteristic-geometric overlay. Basically, the spin comes from the snapshot's
+    // bhSpin each rebuild, so all of these follow the spin slider live.
+    bool  iscoEnabled          = false;  // marginally-stable orbit rings
+    bool  photonSphereEnabled  = false;  // unstable photon-orbit shell
+    bool  ergosphereEnabled    = false;  // static-limit surface (Kerr only)
+    bool  shadowContourEnabled = false;  // Bardeen apparent shadow edge
+    bool  bfieldEnabled        = false;  // Blandford-Znajek field-line sketch
+    int   ringSegments         = 128;    // smoothness for the characteristic rings. 
 
     bool init() {
         if (inited_) return true;
@@ -196,6 +229,12 @@ public:
             spacetimeCount_ = (int)strips_.size() - spacetimeStart_;
         }
 
+        if (iscoEnabled)          buildISCO(snap);
+        if (photonSphereEnabled)  buildPhotonSphere(snap);
+        if (ergosphereEnabled)    buildErgosphere(snap);
+        if (shadowContourEnabled) buildShadowContour(snap);
+        if (bfieldEnabled)        buildBField(snap);
+
         glBindBuffer(GL_ARRAY_BUFFER, vbo_);
         glBufferData(GL_ARRAY_BUFFER,
                      (GLsizeiptr)(vertices_.size() * sizeof(Vertex)),
@@ -209,15 +248,15 @@ public:
     bool dirty() const { return dirty_; }
 
     // Marks dirty if any BH/disk scale parameter has changed since the last
-    // rebuild — without this, sliders that resize the BH or disk at runtime
+    // rebuild. Without this, sliders that resize the BH or disk at runtime
     // would leave the spacetime well and photon fan stuck at the old scale.
-    void notifyScale(float bhRadius, float diskOuterRadius) {
-        if (std::abs(bhRadius - lastBHRadius_)         > 1e-5f ||
-            std::abs(diskOuterRadius - lastDiskOuter_) > 1e-4f) {
-            lastBHRadius_  = bhRadius;
-            lastDiskOuter_ = diskOuterRadius;
-            dirty_ = true;
-        }
+    // Spin is folded in too so the Kerr overlays follow the spin slider.
+    void notifyScale(float bhRadius, float diskOuterRadius, float bhSpin = -1.0f) {
+        bool changed = false;
+        if (std::abs(bhRadius - lastBHRadius_) > 1e-5f)         { lastBHRadius_  = bhRadius;        changed = true; }
+        if (std::abs(diskOuterRadius - lastDiskOuter_) > 1e-4f) { lastDiskOuter_ = diskOuterRadius; changed = true; }
+        if (bhSpin >= 0.0f && std::abs(bhSpin - lastBHSpin_) > 1e-5f) { lastBHSpin_ = bhSpin;       changed = true; }
+        if (changed) dirty_ = true;
     }
 
     // Draw the cached strips. Builds view/proj from camera snapshot.
@@ -563,6 +602,426 @@ private:
         }
     }
 
+    // ============================================================
+    //  Kerr characteristic-geometry builders (items 14-18)
+    // ============================================================
+
+    // Shared helper: a full circle in the equatorial (XZ) plane. The disk in
+    // this engine lies in XZ with the spin axis along +Y, so every ISCO /
+    // photon ring is just a horizontal circle around the hole.
+    void appendEquatorialRing(const glm::vec3& origin, double r, const glm::vec4& col) {
+        if (r <= 0.0) return;
+        const int nSeg = std::max(24, ringSegments);
+        std::vector<Vertex> verts;
+        verts.reserve(nSeg + 1);
+        for (int s = 0; s <= nSeg; ++s) {
+            double phi = (2.0 * glm::pi<double>()) * (double)s / (double)nSeg;
+            glm::vec3 local((float)(r * std::cos(phi)), 0.0f, (float)(r * std::sin(phi)));
+            verts.push_back({ origin + local, col });
+        }
+        appendStrip(verts);
+    }
+
+    // Shared helper: a lat/long wireframe sphere around the +Y spin axis.
+    void appendWireSphere(const glm::vec3& origin, double r, const glm::vec4& col) {
+        if (r <= 0.0) return;
+        const int nLat = 9;
+        const int nSeg = std::max(32, ringSegments / 2);
+        for (int i = 1; i < nLat; ++i) {                 // latitude rings
+            double theta = glm::pi<double>() * (double)i / (double)nLat;
+            double y   = r * std::cos(theta);
+            double rho = r * std::sin(theta);
+            std::vector<Vertex> verts;
+            verts.reserve(nSeg + 1);
+            for (int s = 0; s <= nSeg; ++s) {
+                double phi = 2.0 * glm::pi<double>() * (double)s / (double)nSeg;
+                verts.push_back({ origin + glm::vec3((float)(rho * std::cos(phi)),
+                                                     (float)y,
+                                                     (float)(rho * std::sin(phi))), col });
+            }
+            appendStrip(verts);
+        }
+        const int nMer = 8;                              // meridian arcs (pole to pole)
+        const int nArc = std::max(24, nSeg / 2);
+        for (int j = 0; j < nMer; ++j) {
+            double phi = glm::pi<double>() * (double)j / (double)nMer;
+            double cphi = std::cos(phi), sphi = std::sin(phi);
+            std::vector<Vertex> verts;
+            verts.reserve(nArc + 1);
+            for (int k = 0; k <= nArc; ++k) {
+                double theta = glm::pi<double>() * (double)k / (double)nArc;
+                double y   = r * std::cos(theta);
+                double rho = r * std::sin(theta);
+                verts.push_back({ origin + glm::vec3((float)(rho * cphi),
+                                                     (float)y,
+                                                     (float)(rho * sphi)), col });
+            }
+            appendStrip(verts);
+        }
+    }
+
+    // ISCO rings. The prograde radius (gold) is the physically relevant one —
+    // that's where a co-rotating accretion disk actually ends. The retrograde
+    // radius (dim red) is drawn alongside so the spin dependence is obvious:
+    // crank a* up and watch the gold ring shrink toward the horizon while the
+    // red one grows. At a* = 0 they sit on top of each other at 3 Rs.
+    void buildISCO(const PhysicsSnapshot& snap) {
+        if (snap.bhRadius <= 0.0f) return;
+        const double M = (double)snap.bhRadius * 0.5;
+        const double a = std::clamp((double)snap.bhSpin, 0.0, 0.9999);
+        double rPro, rRetro;
+        overlay_phys::kerrIsco(a, rPro, rRetro);
+        appendEquatorialRing(snap.bhPosition, rPro   * M, glm::vec4(1.00f, 0.82f, 0.28f, 0.90f));
+        appendEquatorialRing(snap.bhPosition, rRetro * M, glm::vec4(0.95f, 0.28f, 0.22f, 0.50f));
+    }
+
+    // Photon-orbit shell. Kerr's photon region isn't actually a sphere (the
+    // orbit radius depends on inclination), so this is a readable stand-in:
+    // a single wireframe shell at the prograde equatorial photon radius, which
+    // is exactly the 1.5 Rs Schwarzschild photon sphere when a* = 0.
+    void buildPhotonSphere(const PhysicsSnapshot& snap) {
+        if (snap.bhRadius <= 0.0f) return;
+        const double M = (double)snap.bhRadius * 0.5;
+        const double a = std::clamp((double)snap.bhSpin, 0.0, 0.9999);
+        double rPro, rRetro;
+        overlay_phys::kerrPhotonEquatorial(a, rPro, rRetro);
+        appendWireSphere(snap.bhPosition, rPro * M, glm::vec4(0.65f, 0.80f, 1.00f, 0.30f));
+    }
+
+    // Ergosphere / static-limit surface. r_ergo(θ)/M = 1 + sqrt(1 - a²cos²θ),
+    // with the polar angle θ measured from the +Y spin axis. It touches the
+    // horizon at the poles and bulges out to 2M (= Rs) at the equator, so it
+    // only exists for a spinning hole; a* = 0 gets skipped.
+    void buildErgosphere(const PhysicsSnapshot& snap) {
+        if (snap.bhRadius <= 0.0f) return;
+        const double a = std::clamp((double)snap.bhSpin, 0.0, 0.9999);
+        if (a < 1e-3) return;
+        const double M = (double)snap.bhRadius * 0.5;
+        const glm::vec3 origin = snap.bhPosition;
+        const glm::vec4 col(0.78f, 0.45f, 0.98f, 0.32f);
+
+        auto rErgo = [&](double theta) {
+            double ct = std::cos(theta);
+            return (1.0 + std::sqrt(std::max(0.0, 1.0 - a*a*ct*ct))) * M;
+        };
+
+        const int nLat = 14;
+        const int nSeg = std::max(32, ringSegments / 2);
+        for (int i = 1; i < nLat; ++i) {                 // latitude rings
+            double theta = glm::pi<double>() * (double)i / (double)nLat;
+            double rE  = rErgo(theta);
+            double y   = rE * std::cos(theta);
+            double rho = rE * std::sin(theta);
+            std::vector<Vertex> verts;
+            verts.reserve(nSeg + 1);
+            for (int s = 0; s <= nSeg; ++s) {
+                double phi = 2.0 * glm::pi<double>() * (double)s / (double)nSeg;
+                verts.push_back({ origin + glm::vec3((float)(rho * std::cos(phi)),
+                                                     (float)y,
+                                                     (float)(rho * std::sin(phi))), col });
+            }
+            appendStrip(verts);
+        }
+        const int nMer = 12;                             // meridian arcs
+        const int nArc = std::max(24, ringSegments / 4);
+        for (int j = 0; j < nMer; ++j) {
+            double phi = 2.0 * glm::pi<double>() * (double)j / (double)nMer;
+            double cphi = std::cos(phi), sphi = std::sin(phi);
+            std::vector<Vertex> verts;
+            verts.reserve(nArc + 1);
+            for (int k = 0; k <= nArc; ++k) {
+                double theta = glm::pi<double>() * (double)k / (double)nArc;
+                double rE  = rErgo(theta);
+                double y   = rE * std::cos(theta);
+                double rho = rE * std::sin(theta);
+                verts.push_back({ origin + glm::vec3((float)(rho * cphi),
+                                                     (float)y,
+                                                     (float)(rho * sphi)), col });
+            }
+            appendStrip(verts);
+        }
+    }
+
+    // Apparent shadow edge, Bardeen (1972) celestial coordinates (α, β). The
+    // shadow is what the EHT actually images, and for a* > 0 it's flattened on
+    // one side because photons co-rotating with the hole fall in more easily.
+    //
+    // We compute the critical curve in the (α, β) image plane, then billboard
+    // it in front of the hole: β runs along the projected spin axis, α runs
+    // perpendicular to it. That keeps the flattened edge pointing the right way
+    // no matter where the camera is. It does mean the curve has to rebuild as
+    // the camera moves, which the draw gate handles by marking it dirty.
+    void buildShadowContour(const PhysicsSnapshot& snap) {
+        if (snap.bhRadius <= 0.0f) return;
+        const double M = (double)snap.bhRadius * 0.5;
+        const double a = std::clamp((double)snap.bhSpin, 0.0, 0.9999);
+
+        glm::vec3 toBH = snap.bhPosition - snap.cameraPos;
+        double len = (double)glm::length(toBH);
+        if (len < 1e-4) return;
+        glm::vec3 viewDir = toBH / (float)len;           // camera -> hole
+        glm::vec3 obsDir  = -viewDir;                    // hole -> observer
+
+        // Inclination is the angle between the spin axis (+Y) and the observer.
+        double cosI = std::clamp((double)obsDir.y, -1.0, 1.0);
+        double sinI = std::sqrt(std::max(1e-6, 1.0 - cosI * cosI));
+
+        // Billboard basis: "up" is the spin axis projected onto the image plane
+        // (so β aligns with it), "right" is perpendicular for α.
+        glm::vec3 yAxis(0.0f, 1.0f, 0.0f);
+        glm::vec3 up = yAxis - viewDir * glm::dot(yAxis, viewDir);
+        if (glm::length(up) < 1e-4f) up = snap.cameraUp; // near pole-on, pick any stable up
+        up = glm::normalize(up);
+        glm::vec3 right = glm::normalize(glm::cross(viewDir, up));
+
+        const glm::vec4 col(1.00f, 0.95f, 0.72f, 0.90f);
+        std::vector<Vertex> verts;
+
+        auto worldOf = [&](double alpha, double beta) {
+            // α, β are in units of M; place the point on the billboard plane.
+            return snap.bhPosition + (float)M * ((float)alpha * right + (float)beta * up);
+        };
+
+        if (a < 1e-3) {
+            // Schwarzschild: a perfect circle of radius 3√3 M (= √27).
+            const double rSh = std::sqrt(27.0);
+            const int nSeg = std::max(64, ringSegments);
+            verts.reserve(nSeg + 1);
+            for (int s = 0; s <= nSeg; ++s) {
+                double ang = 2.0 * glm::pi<double>() * (double)s / (double)nSeg;
+                verts.push_back({ worldOf(rSh * std::cos(ang), rSh * std::sin(ang)), col });
+            }
+            appendStrip(verts);
+            return;
+        }
+
+        // Conserved quantities of the spherical photon orbits, parametrised by
+        // Boyer-Lindquist radius r (units M). These are the standard Bardeen
+        // expressions; α = -λ/sinθ, β² = η + a²cos²θ - λ²cot²θ.
+        auto lambdaEta = [&](double r, double& lam, double& eta) {
+            double rm1 = r - 1.0;
+            lam = (r*r*(3.0 - r) - a*a*(r + 1.0)) / (a * rm1);
+            eta = (r*r*r*(4.0*a*a - r*(r - 3.0)*(r - 3.0))) / (a*a * rm1*rm1);
+        };
+
+        double r1, r2;
+        overlay_phys::kerrPhotonEquatorial(a, r1, r2);   // prograde .. retrograde
+        const double cot2 = (cosI * cosI) / (sinI * sinI);
+        const int nR = 160;
+        verts.reserve(2 * nR + 2);
+
+        auto addPoint = [&](double r, double sign) {
+            double lam, eta;
+            lambdaEta(r, lam, eta);
+            double beta2 = eta + a*a*cosI*cosI - lam*lam*cot2;
+            if (beta2 < 0.0) beta2 = 0.0;               // clamp the tiny endpoints
+            double alpha = -lam / sinI;
+            double beta  = sign * std::sqrt(beta2);
+            verts.push_back({ worldOf(alpha, beta), col });
+        };
+
+        for (int i = 0; i <= nR; ++i) { double r = r1 + (r2 - r1) * (double)i / (double)nR; addPoint(r, +1.0); }
+        for (int i = nR; i >= 0; --i) { double r = r1 + (r2 - r1) * (double)i / (double)nR; addPoint(r, -1.0); }
+        appendStrip(verts);
+    }
+
+    // Magnetic-field overlay. It
+    // gets drawn depends on what we actually know about the system, because a
+    // real field topology is almost never possible to observe, at least with current technology. it also doesn't
+    //  help that we essentially have a great wall of china for interstellar gas and dust.
+    //   1. Jet-launching hole  -> Blandford-Znajek funnel (needs spin + a real
+    //      large-scale field to tap, so we only draw it when the sim is actively
+    //      showing jets and the hole spins).
+    //   2. Wind-fed binary     -> a weak, unresolved stellar-wind field streaming
+    //      off the companion and being gravitationally focused past the hole. This
+    //      is the Gaia BH1 case: hypothetical, faint, and it tracks the companion's
+    //      live orbital position rather than being baked to a preset.
+    //   3. Isolated + quiescent -> we honestly don't know the field, so only a
+    //      barely-there dipole cage is hinted.
+    //
+    // Everything scales off snapshot properties (spin, Rs, companion position and
+    // radius, jet reach, activity) - no per-preset hand tuning.
+    void buildBField(const PhysicsSnapshot& snap) {
+        if (snap.bhRadius <= 0.0f) return;
+        const double a = std::clamp((double)snap.bhSpin, 0.0, 0.9999);
+        // BZ needs both spin and an accretion-powered field; "jets on" is our
+        // proxy for an active, jet-launching state.
+        const bool jetActive = snap.jetsEnabled && a > 0.08;
+        const int  compIdx   = findWindCompanion(snap);
+
+        if (jetActive)        buildBZFunnel(snap, a);
+        if (compIdx >= 0)     buildWindField(snap, compIdx, jetActive);
+        if (!jetActive && compIdx < 0) buildQuiescentHint(snap);
+    }
+
+    // Nearest wind-bearing companion (a real star, not a compact remnant).
+    // Returns the value '-1' when the hole is isolated or the companion is a compact object (i.e, like a neutron star or secondary black hole, as seen somewhere like OJ 287).
+    int findWindCompanion(const PhysicsSnapshot& snap) const {
+        if (!snap.orbBodyEnabled) return -1;
+        int best = -1;
+        double bestD = 1e30;
+        const glm::vec3 B = snap.bhPosition;
+        for (size_t i = 0; i < snap.orbBodyPositions.size(); ++i) {
+            const int t = (i < snap.orbBodyTypes.size()) ? snap.orbBodyTypes[i] : 0;
+            if (t != 0 && t != 6) continue;              // Star or CompanionStar only
+            const double d = (double)glm::length(snap.orbBodyPositions[i] - B);
+            if (d < bestD) { bestD = d; best = (int)i; }
+        }
+        return best;
+    }
+
+    // This is essentially just a topology solution.
+    // solution. Higher spin when both winds the field up harder (twist) and collimates
+    // it more tightly to induce some form of flare, so the shape actually responds to a*.
+    void buildBZFunnel(const PhysicsSnapshot& snap, double a) {
+        const double Rs = (double)snap.bhRadius;
+        const glm::vec3 origin = snap.bhPosition;
+        const glm::vec4 baseCol(0.10f, 0.20f, 0.85f, 0.75f);
+        const glm::vec4 tipCol (0.25f, 0.90f, 1.45f, 0.60f);
+
+        const double jetLen = std::max((double)snap.jetLength, Rs * 6.0);
+        const double footR  = 1.15 * Rs;                 // footpoint just outside the horizon
+        const double twist  = a * 6.0;                   // frame-drag winding grows with spin
+        const double flare  = 1.30 - 0.60 * a;           // high spin = tighter funnel
+        const int nLines = 12;
+        const int nSeg   = 60;
+
+        for (int L = 0; L < nLines; ++L) {
+            double phi0 = 2.0 * glm::pi<double>() * (double)L / (double)nLines;
+            for (int hemi = 0; hemi < 2; ++hemi) {
+                double dir = (hemi == 0) ? 1.0 : -1.0;   // north / south funnel
+                std::vector<Vertex> verts;
+                verts.reserve(nSeg + 1);
+                for (int k = 0; k <= nSeg; ++k) {
+                    double t = (double)k / (double)nSeg;
+                    double h   = dir * jetLen * t;
+                    double rho = footR + flare * (0.6 * Rs * std::sqrt(t) + 0.15 * jetLen * t);
+                    double phi = phi0 + twist * t;
+                    glm::vec3 p(origin.x + (float)(rho * std::cos(phi)),
+                                origin.y + (float)h,
+                                origin.z + (float)(rho * std::sin(phi)));
+                    verts.push_back({ p, glm::mix(baseCol, tipCol, (float)t) });
+                }
+                appendStrip(verts);
+            }
+        }
+    }
+
+    // Weak stellar-wind field from the companion, gravitationally
+    // focused as it streams past the hole. Kept faint and unassertive on purpose
+    // this is a model of an unresolved wind, and for a
+    // quiescent (non-accreting) system the bending stays gentle.
+    void buildWindField(const PhysicsSnapshot& snap, int idx, bool accreting) {
+        const double Rs = (double)snap.bhRadius;
+        const glm::vec3 B = snap.bhPosition;
+        const glm::vec3 C = snap.orbBodyPositions[idx];
+        const double Rc = (idx < (int)snap.orbBodyRadii.size())
+                        ? std::max((double)snap.orbBodyRadii[idx], Rs * 0.4) : Rs;
+
+        glm::vec3 CB = B - C;
+        double sep = (double)glm::length(CB);
+        if (sep < 1e-4) return;
+        glm::vec3 axis = CB / (float)sep;                // companion -> hole
+        glm::vec3 up   = (std::abs(axis.y) < 0.9f) ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
+        glm::vec3 e1   = glm::normalize(glm::cross(up, axis));
+        glm::vec3 e2   = glm::cross(axis, e1);
+
+
+        const float aMax = accreting ? 0.42f : 0.26f;
+        const glm::vec4 nearCol(0.55f, 0.70f, 0.95f, aMax);
+        const glm::vec4 farCol (0.30f, 0.55f, 0.90f, aMax * 0.45f);
+
+        const double ds      = std::max(Rs * 0.35, sep * 0.012);
+        const int    maxSteps = 240;
+        const double focusK  = accreting ? 0.60 : 0.32; // how hard the wind bends toward the hole
+        const int    nLines  = 16;
+
+        for (int L = 0; L < nLines; ++L) {
+            double ang    = 2.0 * glm::pi<double>() * (double)L / (double)nLines;
+            double spread = 0.15 + 0.75 * (double)((L % 4)) / 3.0;   // unfold the launch cone out
+            glm::vec3 dirLaunch = glm::normalize(
+                axis + (float)(spread * std::cos(ang)) * e1
+                     + (float)(spread * std::sin(ang)) * e2);
+            glm::vec3 p = C + dirLaunch * (float)Rc;     // start at the stellar surface
+            glm::vec3 v = dirLaunch;                     // wind leaves the star roughly radial
+
+            std::vector<Vertex> verts;
+            verts.reserve(maxSteps);
+            for (int k = 0; k < maxSteps; ++k) {
+                double rB = (double)glm::length(B - p);
+                if (rB < 1.4 * Rs) break;                // captured near the hole
+                if ((double)glm::length(p - C) > sep * 1.6) break;   // swept past / escaped
+                float frac = (float)std::min(1.0, (double)glm::length(p - C) / sep);
+                verts.push_back({ p, glm::mix(nearCol, farCol, frac) });
+
+                glm::vec3 toB    = glm::normalize(B - p);
+                glm::vec3 radial = glm::normalize(p - C);
+                double bend = focusK * std::min(1.0, (Rs * Rs) / (rB * rB)); // ~ (Rs/r)^2, capped
+                v = glm::normalize(v + (float)bend * toB + 0.04f * radial);
+                p += v * (float)ds;
+            }
+            if (verts.size() >= 2) appendStrip(verts);
+        }
+
+        buildCoronalLoops(C, Rc, axis, e1, e2, aMax);
+    }
+
+    // Small closed dipole loops anchored on the companion, echoing the classic
+    // solar-type coronal field. Purely illustrative of the wind's stellar origin.
+    void buildCoronalLoops(const glm::vec3& C, double Rc, const glm::vec3& axis,
+                           const glm::vec3& e1, const glm::vec3& e2, float aMax) {
+        const glm::vec4 col(0.65f, 0.75f, 1.0f, aMax * 0.8f);
+        const int nLoops = 6, nArc = 24;
+        glm::vec3 anti = -axis;                          // anchor on the near/side face
+        for (int l = 0; l < nLoops; ++l) {
+            double ang = 2.0 * glm::pi<double>() * (double)l / (double)nLoops;
+            glm::vec3 base = glm::normalize(anti * 0.5f
+                             + (float)std::cos(ang) * e1
+                             + (float)std::sin(ang) * e2);
+            glm::vec3 perp = glm::normalize(glm::cross(base, axis));
+            const double sepAng = 0.35;                  // angular footpoint separation
+            glm::vec3 f1 = glm::normalize(base * (float)std::cos(sepAng) + perp * (float)std::sin(sepAng));
+            glm::vec3 f2 = glm::normalize(base * (float)std::cos(sepAng) - perp * (float)std::sin(sepAng));
+            std::vector<Vertex> verts;
+            verts.reserve(nArc + 1);
+            for (int k = 0; k <= nArc; ++k) {
+                double u = (double)k / (double)nArc;
+                glm::vec3 dirp = glm::normalize(glm::mix(f1, f2, (float)u));
+                double bulge = 1.0 + 0.6 * std::sin(glm::pi<double>() * u); // loop rises above the surface
+                verts.push_back({ C + dirp * (float)(Rc * bulge), col });
+            }
+            appendStrip(verts);
+        }
+    }
+
+    // We don't know the field here, so this
+    // is intentionally almost invisible. Call it pseudo science, but a faint dipole cage just so the toggle
+    // shows the hole isn't claimed to be field-free.
+    void buildQuiescentHint(const PhysicsSnapshot& snap) {
+        const double Rs = (double)snap.bhRadius;
+        const glm::vec3 O = snap.bhPosition;
+        const glm::vec4 col(0.35f, 0.45f, 0.78f, 0.15f);
+        const int nLines = 8, nSeg = 60;
+        const double shells[3] = { 4.0 * Rs, 7.0 * Rs, 11.0 * Rs };
+        for (double Lmax : shells) {
+            for (int L = 0; L < nLines; ++L) {
+                double phi = 2.0 * glm::pi<double>() * (double)L / (double)nLines;
+                double cphi = std::cos(phi), sphi = std::sin(phi);
+                std::vector<Vertex> verts;
+                verts.reserve(nSeg + 1);
+                for (int k = 0; k <= nSeg; ++k) {
+                    // Dipole field line r = Lmax sin^2(theta), poles trimmed off.
+                    double th = glm::pi<double>() * (0.04 + 0.92 * (double)k / (double)nSeg);
+                    double r  = Lmax * std::sin(th) * std::sin(th);
+                    double y  = r * std::cos(th);
+                    double rho = r * std::sin(th);
+                    verts.push_back({ O + glm::vec3((float)(rho * cphi), (float)y, (float)(rho * sphi)), col });
+                }
+                appendStrip(verts);
+            }
+        }
+    }
+
     GLProgram prog_;
     GLuint    vao_ = 0;
     GLuint    vbo_ = 0;
@@ -574,6 +1033,7 @@ private:
     bool dirty_  = true;
     float lastBHRadius_  = -1.0f;
     float lastDiskOuter_ = -1.0f;
+    float lastBHSpin_    = -1.0f;
 };
 
 } // namespace bh3d

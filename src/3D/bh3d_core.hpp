@@ -340,6 +340,7 @@ struct SceneUniforms {
     GLint diskPeakTemp, diskDisplayTempInner, diskDisplayTempOuter;
     GLint diskSatBoostInner, diskSatBoostOuter;
     GLint showPhysicalDiskColor;
+    GLint showCorona;
     GLint blackbodyLUTTex;
 
     // Inspiralling merger BH identities
@@ -402,6 +403,7 @@ struct SceneUniforms {
         u.diskSatBoostInner    = prog.uniform("diskSatBoostInner");
         u.diskSatBoostOuter    = prog.uniform("diskSatBoostOuter");
         u.showPhysicalDiskColor = prog.uniform("showPhysicalDiskColor");
+        u.showCorona           = prog.uniform("showCorona");
         u.blackbodyLUTTex      = prog.uniform("blackbodyLUT");
         u.secBHActive          = prog.uniform("secBHActive");
         u.secBHDiskNormal      = prog.uniform("secBHDiskNormal");
@@ -447,6 +449,7 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glUniform1f(u.diskSatBoostInner,     snap.diskSatBoostInner);
     glUniform1f(u.diskSatBoostOuter,     snap.diskSatBoostOuter);
     glUniform1i(u.showPhysicalDiskColor, snap.diskPhysicalColor ? 1 : 0);
+    glUniform1i(u.showCorona,            snap.coronaEnabled ? 1 : 0);
     glUniform1i(u.secBHActive,           snap.secBHActive ? 1 : 0);
     glUniform3f(u.secBHDiskNormal,       snap.secBHDiskNormal.x, snap.secBHDiskNormal.y, snap.secBHDiskNormal.z);
     glUniform1f(u.secBHSpin,             snap.secBHSpin);
@@ -709,6 +712,7 @@ struct State {
     bool hostGalaxyEnabled = false;
     bool labEnabled        = false;
     bool cgmEnabled        = false;
+    bool coronaEnabled     = false; // X-ray corona (hot Comptonizing haze over the inner disk). For reference, the corona is like an outer shell in a way, but not really physical or anythingn.
     bool blueshiftEnabled  = true;
     bool showHUD           = true;
     bool showDebugHUD      = false;
@@ -1637,6 +1641,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.jetsEnabled       = s.jetsEnabled;
     snap.blrEnabled        = s.blrEnabled;
     snap.dopplerEnabled    = s.dopplerEnabled;
+    snap.coronaEnabled     = s.coronaEnabled;
     snap.blueshiftEnabled  = s.blueshiftEnabled;
     snap.cinematicMode     = s.cinematicMode;
     snap.bhRadius          = s.config.blackHole.radius;
@@ -1918,9 +1923,16 @@ inline void renderScene(State& s, int w, int h, GLuint finalTarget = 0) {
     // ray-marched scene). Lazy-init the GL resources on first draw so
     // tickPhysics doesn't have to know about GL context state.
     if (s.physOverlay.orbitsEnabled || s.physOverlay.photonsEnabled ||
-        s.physOverlay.spacetimeEnabled) {
+        s.physOverlay.spacetimeEnabled || s.physOverlay.iscoEnabled ||
+        s.physOverlay.photonSphereEnabled || s.physOverlay.ergosphereEnabled ||
+        s.physOverlay.shadowContourEnabled || s.physOverlay.bfieldEnabled) {
         s.physOverlay.init();
-        s.physOverlay.notifyScale(s.snap.bhRadius, s.snap.diskOuterRadius);
+        s.physOverlay.notifyScale(s.snap.bhRadius, s.snap.diskOuterRadius, s.snap.bhSpin);
+        // The shadow contour billboards to the camera and the field overlay's
+        // wind lines track the companion's live orbit, so both have to rebuild
+        // every frame while they're on.
+        if (s.physOverlay.shadowContourEnabled || s.physOverlay.bfieldEnabled)
+            s.physOverlay.markDirty();
         if (s.physOverlay.dirty()) {
             s.physOverlay.rebuild(s.snap, s.orbBodies);
         }

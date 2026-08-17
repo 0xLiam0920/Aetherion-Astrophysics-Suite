@@ -772,6 +772,46 @@ inline void drawOverlaysPanel(bh3d::State& s) {
             s.physOverlay.spacetimeEnabled = !s.physOverlay.spacetimeEnabled;
             s.physOverlay.markDirty();
         }
+            // Visual displays for the toggle of each overlay.
+        ImGui::SeparatorText("Kerr Geometry");
+        if (toggleRow("ISCO Rings   [ON]", "ISCO Rings   [OFF]",
+                      s.physOverlay.iscoEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.iscoEnabled = !s.physOverlay.iscoEnabled;
+            s.physOverlay.markDirty();
+        }
+        if (toggleRow("Photon Shell   [ON]", "Photon Shell   [OFF]",
+                      s.physOverlay.photonSphereEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.photonSphereEnabled = !s.physOverlay.photonSphereEnabled;
+            s.physOverlay.markDirty();
+        }
+        if (toggleRow("Ergosphere   [ON]", "Ergosphere   [OFF]",
+                      s.physOverlay.ergosphereEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.ergosphereEnabled = !s.physOverlay.ergosphereEnabled;
+            s.physOverlay.markDirty();
+        }
+        if (toggleRow("Shadow Contour   [ON]", "Shadow Contour   [OFF]",
+                      s.physOverlay.shadowContourEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.shadowContourEnabled = !s.physOverlay.shadowContourEnabled;
+            s.physOverlay.markDirty();
+        }
+        if (toggleRow("Magnetic Field   [ON]", "Magnetic Field   [OFF]",
+                      s.physOverlay.bfieldEnabled, ImVec2(btnW, 24))) {
+            s.physOverlay.bfieldEnabled = !s.physOverlay.bfieldEnabled;
+            s.physOverlay.markDirty();
+        }
+        if (s.physOverlay.bfieldEnabled) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("Model-dependent, not observed. Draws a jet funnel only when "
+                               "the hole is actively accreting and spinning; otherwise a weak, "
+                               "unresolved companion wind (or just a faint hint if isolated).");
+            ImGui::PopStyleColor();
+        }
+        if (s.snap.bhSpin < 1e-3f &&
+            (s.physOverlay.ergosphereEnabled)) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("Ergosphere vanishes at a* = 0; raise the spin to see it.");
+            ImGui::PopStyleColor();
+        }
 
         ImGui::SeparatorText("Scale");
         if (toggleRow("True Scale Bodies  [ON]", "True Scale Bodies  [OFF]",
@@ -793,6 +833,18 @@ inline void drawOverlaysPanel(bh3d::State& s) {
             ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
             ImGui::TextWrapped("T(r) \u221d r\u207b\u00be Novikov\u2013Thorne + Doppler/grav shift \u2192 CIE sRGB. "
                                "Changing spin or mass now visibly alters disc colour.");
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::SeparatorText("Emission");
+        if (toggleRow("X-ray Corona   [ON]", "X-ray Corona   [OFF]",
+                      s.coronaEnabled, ImVec2(btnW, 24))) {
+            s.coronaEnabled = !s.coronaEnabled;
+        }
+        if (s.coronaEnabled) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("Hot Comptonizing haze over the inner disk, the hard X-ray "
+                               "source seen in most AGN and X-ray binaries.");
             ImGui::PopStyleColor();
         }
 

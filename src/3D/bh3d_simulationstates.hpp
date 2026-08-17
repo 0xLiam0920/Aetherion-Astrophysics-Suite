@@ -33,6 +33,7 @@ struct PhysicsSnapshot {
     bool dopplerEnabled;
     bool blueshiftEnabled;
     bool cinematicMode;
+    bool coronaEnabled = false;   // X-ray corona haze over the inner disk
 
     /*--------- Black hole parameters (from config) ---------*/
     float     bhRadius;
