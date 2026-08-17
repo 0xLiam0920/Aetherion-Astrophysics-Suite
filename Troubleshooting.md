@@ -275,29 +275,28 @@ cmake -DCMAKE_PREFIX_PATH=/usr/local ..
 
 ## Windows-Specific Issues
 
-So you want to build Aetherion on Windows. First, deep breath. Second, follow this in order, because skipping a step here is the source of roughly 90% of the "doesn't work" issues people DM me about.
-
 ### What you actually need before running anything
 
-The `rebuild_windows.ps1` / `rebuild_windows.sh` scripts assume you have already done all of the following. They will not install these for you. They are scripts, not your IT department.
+The `rebuild_windows.ps1` / `rebuild_windows.sh` scripts assume you have already done all of the following. 
 
-1. **Visual Studio 2022** with the **"Desktop development with C++"** workload. Not VS Code. Not "I have Build Tools installed". The full IDE with that exact workload checked. The Community edition is free.
-2. **vcpkg** cloned and bootstrapped somewhere sane (e.g. `C:\vcpkg`):
+1. **Visual Studio 2022** with the **"Desktop development with C++"** workload. Not VS Code. The full IDE with that exact workload checked. The Community edition is free.
+  
+3. **vcpkg** cloned and bootstrapped somewhere sane (e.g. `C:\vcpkg`):
    ```powershell
    git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
    C:\vcpkg\bootstrap-vcpkg.bat
    ```
-3. **The actual libraries**, installed via vcpkg with the **x64-windows** triplet (the default `x86` triplet will silently install 32-bit binaries and then nothing will link, and you will be sad):
+4. **The actual libraries**, installed via vcpkg with the **x64-windows** triplet 
    ```powershell
    C:\vcpkg\vcpkg.exe install qt6-base qt6-charts sfml glm glew --triplet x64-windows
    ```
-   Go make a coffee. Go make lunch. This step takes a while because Qt is, structurally, a small operating system.
-4. **`VCPKG_ROOT` set in your environment** (or pass `--vcpkg-root` every time, which gets old fast):
+
+5. **`VCPKG_ROOT` set in your environment** (or pass `--vcpkg-root` every time, which gets old fast):
    ```powershell
    [Environment]::SetEnvironmentVariable('VCPKG_ROOT', 'C:\vcpkg', 'User')
    ```
-   Open a new shell after setting this. PowerShell will not magically pick it up in the current session.
-5. A **"Developer PowerShell for VS 2022"** prompt (Start menu → search "Developer PowerShell"). This is the one that has `cmake.exe`, `cl.exe`, and friends on PATH. A regular PowerShell window does not, and you will get baffling "CMAKE_CXX_COMPILER not found" errors.
+   Open a new shell after setting this.
+6. A **"Developer PowerShell for VS 2022"** prompt (Start menu → search "Developer PowerShell"). This is the one that has `cmake.exe`, `cl.exe`, and friends on PATH
 
 ### Now actually build it
 
@@ -320,7 +319,7 @@ The output executables land in `build\Release\` as `blackhole-sim.exe`, `blackho
 - `echo $env:VCPKG_ROOT` in PowerShell prints a real path with a `scripts\buildsystems\vcpkg.cmake` file inside it.
 - You are in a Developer PowerShell for VS 2022 window.
 
-If all three check out and it still fails, blow away the `build\` folder and configure from scratch. CMake caches are like cats; once they decide they don't like you, you replace them.
+If all three check out and it still fails, remake the build folder from scratch using make/cmake commands
 
 ### "The application failed to start because Qt6Core.dll was not found"
 
@@ -336,7 +335,7 @@ windeployqt build\Release\blackhole-3D.exe
 
 ### `make_exe.sh` says "makensis was not found"
 
-**Cause:** NSIS (the installer compiler) isn't installed. The script is honest about this and falls back to the portable `.zip` so you still get *something* useful.
+**Cause:** NSIS (the installer compiler) isn't installed.
 
 **Solution:** Install NSIS, then re-run with `--no-bundle` so you don't have to wait for the bundle step again:
 ```powershell
@@ -350,9 +349,9 @@ Then:
 
 ### SmartScreen says "Windows protected your PC" when running the installer
 
-**Cause:** The installer isn't code-signed. See the README rant. TL;DR: code-signing certificates cost real money for a hobby/research project, so the installer ships unsigned.
+**Cause:** The installer isn't code-signed.
 
-**Solution:** Click **"More info"** → **"Run anyway"**. If you don't trust the binary, that's fair, build it from source — that's literally why this is open source.
+**Solution:** Click **"More info"** → **"Run anyway"**.
 
 ### `bash: ./rebuild_windows.sh: /usr/bin/env: bad interpreter`
 
@@ -368,22 +367,16 @@ Or just run the `.ps1` instead and avoid the whole class of problem.
 
 ### "Antivirus quarantined Aetherion.exe"
 
-**Cause:** You compiled a brand-new unsigned executable that does GPU things and reads files from disk. To a heuristic AV, that is indistinguishable from approximately every piece of malware ever written.
+**Cause:** You compiled a brand-new unsigned executable that does GPU things and reads files from disk, behavior common with false positives.
 
-**Solution:** Add an exclusion for the build folder, or submit a false-positive report to your AV vendor. I cannot whitelist binaries with Windows Defender from a README, sadly.
+**Solution:** Add an exclusion for the build folder, or submit a false-positive report to your AV vendor. 
 
 ---
 
----------- RANT STARTS HERE ----------
-
-Note: No, I am not adding support for other versions of SFML or any graphical library. 
+Note:
 MacOS only supports OpenGL 3.3, so anything 2x for SFML is not going to happen for cross-compatibility sake.
-If you want to use an older or different version/alternative to any library here, fork this project and change the code to support it yourself. I will not be doing it for you.
-If you want to add support directly to this project, make a Pull Request. Any help here is appreciated, but my priority is in maintaining the codebase and adding research 
-grade features. Quality over quantity.
+If you want to add support for a different version directly to this project, make a Pull Request. Any help here is appreciated, but my priority is in maintaining the codebase as-is for now.
 
-
----------- RANT OVER ----------
 
 ---
 
@@ -399,7 +392,7 @@ grade features. Quality over quantity.
 
 ### Can I edit shaders without recompiling?
 
-The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag` or `BlackHole3D_PhotorealDisk.frag` in the build directory and relaunch the simulator. Do so at your own risk; GLSL is a fickle beast and "why is the screen entirely magenta" is almost always your fault, not mine.
+The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag` or `BlackHole3D_PhotorealDisk.frag` in the build directory and relaunch the simulator. 
 
 ### What units does the simulation use?
 
@@ -408,7 +401,7 @@ Simulation units are in standarized Schwarzschild radii (Rs = 1). For reference,
 ### How do I switch between black hole presets?
 
 The 3D simulator includes presets for TON 618, Sgr A*, M87*, and others. Check the HUD overlay (**H** to toggle) and key bindings for preset switching. Presets are defined in [src/3D/presets.hpp](src/3D/presets.hpp).
-  Note: You can change the keybinds to whatever you want at any time. Just edit the keybinds in the aetherion app, though try not to create conflicts.
+  Note: You can change the keybinds to whatever you want at any time. Just edit the keybinds in the aetherion app
 
 ### Does this work on Windows?
 
@@ -416,7 +409,7 @@ Yes. Windows is now a supported platform alongside macOS and Linux. The cross-pl
 - Visual Studio 2022 with the "Desktop development with C++" workload (or MinGW with C++17 support)
 - [vcpkg](https://vcpkg.io/) with: `vcpkg install qt6-base qt6-charts sfml glm glew --triplet x64-windows`
 - CMake ≥ 3.10
-- A GPU with OpenGL 3.3 support
+- A GPU (dGPU ideally) with OpenGL 3.3 support
 
 From a "Developer PowerShell for VS 2022" prompt run `rebuild_windows.ps1`, or from Git Bash / MSYS2 run `./rebuild_windows.sh`. To produce a redistributable installer, run `./make_exe.sh` (uses NSIS if available, otherwise falls back to a portable `.zip`).
 
