@@ -848,6 +848,20 @@ inline void drawOverlaysPanel(bh3d::State& s) {
             ImGui::PopStyleColor();
         }
 
+        ImGui::SeparatorText("Rendering");
+        if (toggleRow("Idle Mode   [ON]", "Idle Mode   [OFF]",
+                      s.progressive.enabled, ImVec2(btnW, 24))) {
+            s.progressive.enabled = !s.progressive.enabled;
+            if (!s.progressive.enabled) { s.progressive.reset(); s.freezeSim = false; }
+        }
+        if (s.progressive.enabled) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("When parked, this setting freezes the scene after 0.5 s and folds "
+                               "jittered SSAA samples for a sharper still image. "
+                               "Disabling keeps the disk and other areas animating indefinitely.");
+            ImGui::PopStyleColor();
+        }
+
         ImGui::SeparatorText("Experimental");
         // Stubbed togglables (kept disabled to match legacy parity)
         ImGui::BeginDisabled();
@@ -921,7 +935,7 @@ inline void drawPhysOverlayLegend(bh3d::State& s) {
 // ────────────────────────────────────────────────────────────
 // Body inspector card.
 // Anchored near the selected body's screen position (clamped to
-// viewport edges).  Double-click the card to dismiss; Escape also
+// viewport edges for your convenience).  Double-click the card to dismiss; Escape also
 // works via onActionKey.  All data is already in the snapshot.
 // ────────────────────────────────────────────────────────────
 inline void drawBodyInspector(bh3d::State& s) {

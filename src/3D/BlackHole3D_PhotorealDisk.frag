@@ -292,8 +292,9 @@ vec3 secondaryBHEmission(vec3 ro, vec3 rd, vec3 c, float r) {
                     // Radial colour gradient (inner hot → outer cool).
                     float gRad = pow(1.0 - tRad, 0.5);
                     vec3  col  = mix(secBHColorOuter, secBHColorInner, gRad);
-                    // Keplerian speed + special-relativistic Doppler beaming.
-                    float v   = clamp(sqrt(0.5 * r / max(rad, rIn)), 0.0, 0.7);
+                    // Locally-measured orbital speed v = sqrt(M/(rad-2M)) = sqrt(r/(2(rad-r))),
+                    // not the coordinate-Keplerian sqrt(r/(2 rad)) (diverges from it near the ISCO).
+                    float v   = clamp(sqrt(0.5 * r / max(rad - r, 0.05 * r)), 0.0, 0.95);
                     float cth = dot(velDir, -rd);
                     float gam = 1.0 / sqrt(max(1.0 - v * v, 0.01));
                     float D   = 1.0 / (gam * (1.0 - v * cth));
@@ -808,12 +809,15 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     float T_floor = mix(T_floor_inner, T_floor_outer, pow(tRad, 0.6));
     float T = max(T_peak * Tprofile, T_floor);
     
-    // === KEPLERIAN ORBITAL VELOCITY ===
-    // v/c = √(Rs / (2r)) for circular Schwarzschild orbits
-    // In our units Rs = blackHoleRadius = 1
+    // === LOCALLY-MEASURED ORBITAL VELOCITY ===
+    // v = √(M/(r-2M)), the speed measured by a local static observer, NOT
+    // the coordinate-Keplerian √(Rs/(2r)). The two diverge near the ISCO
+    // (correct value at r=3Rs is v=0.5c) and this feeds the Doppler beaming
+    // below, so the coordinate speed under-states approaching-side brightening.
     float rs = blackHoleRadius;
-    float v = sqrt(rs / (2.0 * max(r, rISCO)));
-    v = clamp(v, 0.0, 0.7);  // Cap at ~0.7c (physical limit near ISCO)
+    float rOrbit = max(r, rISCO);
+    float v = sqrt(rs / (2.0 * max(rOrbit - rs, 0.05 * rs)));
+    v = clamp(v, 0.0, 0.95);  // Cap as r approaches the photon sphere
     
     // Tangential velocity direction (prograde, counter-clockwise in XZ plane)
     vec3 velDir = normalize(vec3(-rel.z, 0.0, rel.x));

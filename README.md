@@ -8,8 +8,15 @@ Aetherion is an open source astrophysics simulation and analysis suite for exper
 
 DISCLAIMER!
                                                        
-As of 17-04-2026, Aetherion is in active BETA, with core features implemented and undergoing testing. 
-DO NOT EXPECT PERFECT STABILITY OR COMPLETE FEATURE SET YET! (and if you do find a way to crash it spectacularly, please file an issue, I'm collecting them.)
+As of 17 April 2026, Aetherion is in active beta. The core simulation, visualization,
+analysis, and export workflows are implemented and continue to undergo testing and
+refinement. Features and interfaces may change between releases, hence the project
+is not ready to be considered production-grade.
+
+If you encounter a crash, incorrect result, or other reproducible issue, please open
+a GitHub issue with the relevant platform, build configuration, inputs / scenario,
+and steps required to reproduce the problem. This information is particularly useful
+while the project’s regression coverage and platform support continue to expand.
 
 **Physics Model Limitations:**
 - **Temperature/Sound Speed Model:** The gas temperature calculations assume ideal gas behavior, which is optimistic for hot accreting plasma near black holes where radiation pressure and magnetic effects dominate. This is fine for Bondi radius order-of-magnitude estimates but should not be relied upon for precision plasma dynamics.
@@ -25,7 +32,7 @@ The program focuses on:
 - Clean data export for external or in-app analysis
 - Built-in visualisation
 
-The goal is reproducible results without having to fight the tooling.
+The goal is reproducible results without having to handle inputs and test outputs manually. 
 
 ---
 
@@ -183,8 +190,10 @@ ctest --output-on-failure -R physics-regression
 
 - SFML 2.x is not supported, 3.x API is required.
 - On Wayland, the app forces X11/XWayland via `QT_QPA_PLATFORM=xcb` (required by SFML). Set `QT_QPA_PLATFORM=xcb` manually if needed.
-- Pulsar and merger objects are still in progress; 2d logic is mostly complete, but the 3d ones are about 40% through as of `v0.2.1`
+- None of the packages are certified/signed for their relevant platforms; your AV may flag them as potentially dangerous. Just whitelist the app (or binaries if building from source) as needed
+- Various scenarios and objects are still in progress; 2d subprogram logic is largely complete, but the 3d ones are about 40% through as of `v0.2.1`
 - Windows: MSVC + vcpkg via `rebuild_windows.ps1` is the supported path (see *Installation → Windows*). Packaging an `.exe` installer is handled by `make_exe.sh`.
+- If you build from source, the background file (`background.png`) may not be copied to the build directory. If you see a white background, either the copy is corrupted or missing, so just copy it over. Will be fixed as live backgrounds based on star data are added ("BETA 3").
 ---
 
 ## License

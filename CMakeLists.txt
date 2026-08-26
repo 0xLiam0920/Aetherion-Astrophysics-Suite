@@ -1,3 +1,12 @@
+#⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+#⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣴⣿⣿⣿⣿⣿⣿⣿⣶⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀
+#⠀⠀⠀⠀⠀⠀⠀⠀⢀⣶⣿⣿⡿⠛⠉⠉⠉⠛⢿⣿⣿⣷⣄⠀⠀⠀⠀⠀⠀⠀
+#⠀⠀⠀⠀⠀⠀⢀⣴⣿⣿⣿⠋⡀⠀⠀⠀⠀⠀⠀⠙⣿⣿⣿⣿⣦⡀⠀⠀⠀⠀
+#⠀⠀⣀⣰⣶⣿⣿⣿⣿⣿⣿⣀⣀⣀⣀⣀⣀⣰⣰⣶⣿⣿⣿⣿⣿⣿⣷⣦⣤⣀
+# ⠉⠉⠉⠉⠈⠉⠛⠛⠛⠛⣿⣿⡽⣏⠉⠉⠉⠉⠉⣽⣿⠛⠉⠉⠉⠉⠉⠉⠉⠁
+#⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⣷⣦⣄⣀⣠⣴⣾⡿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀
+#⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠛⠿⠿⠿⠟⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+
 cmake_minimum_required(VERSION 3.10)
 project(blackhole-sim LANGUAGES CXX)
 
@@ -7,7 +16,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# ── Windows / MSVC global compile flags ───────────────────────
+# == Windows / MSVC global compile flags =======================
 # _USE_MATH_DEFINES: expose M_PI and friends from <cmath> (MSVC omits them).
 # NOMINMAX:          prevent <windows.h> from defining min/max macros that
 #                    break std::min / std::max and ADL-resolved calls.
@@ -25,7 +34,7 @@ if(WIN32)
     endif()
 endif()
 
-# ── Platform-specific package search hints ────────────────────
+# == Platform-specific package search hints ==================
 if(APPLE)
     # Help CMake find Homebrew-provided packages when configured via IDE tools.
     if(EXISTS "/opt/homebrew")
@@ -44,7 +53,7 @@ elseif(UNIX)
         endif()
     endforeach()
 elseif(WIN32)
-    # ── Windows: MSYS2 / mingw-w64 ─────────────────────────────
+    # == Windows: MSYS2 / mingw-w64 =============================
     # When building with MSYS2 + mingw-w64, CMake is typically invoked from
     # the MSYS2 shell and already has the right paths. These are fallbacks.
     foreach(_prefix
@@ -56,7 +65,7 @@ elseif(WIN32)
             list(APPEND CMAKE_PREFIX_PATH "${_prefix}")
         endif()
     endforeach()
-    # ── Windows: vcpkg ──────────────────────────────────────────
+    # == Windows: vcpkg ==========================================
     # If using vcpkg, pass -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
     # at configure time. No extra hints needed here in that case.
 endif()
@@ -97,14 +106,14 @@ endif()
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
-# ── GLEW (Linux / Windows, not needed on macOS) ─────────────
+# == GLEW (Linux / Windows, not needed on macOS) =============
 # macOS uses the system OpenGL framework directly (Core Profile via
 # OpenGL/gl3.h). All other platforms need a runtime loader.
 if(NOT APPLE)
     find_package(GLEW REQUIRED)
 endif()
 
-# ── Unified Qt6-based Application with Embedded Simulations ──
+# == Unified Qt6-based Application with Embedded Simulations ==
 # All windows and simulations are tied to one executable instance
 # WIN32 tells MSVC/MinGW to use the Windows GUI subsystem (no console window).
 # NOTE: WIN32 must be a literal CMake keyword (parsed before generator
@@ -163,7 +172,7 @@ target_link_libraries(blackhole-sim PRIVATE
     aetherion_imgui
 )
 
-# ── Application version (must match the GitHub release tag, without 'v') ──
+# == Application version (must match the GitHub release tag, without 'v') ==
 set(AETHERION_VERSION "0.1.3")
 target_compile_definitions(blackhole-sim PRIVATE
     AETHERION_VERSION="${AETHERION_VERSION}"
@@ -193,7 +202,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     target_link_libraries(blackhole-sim PRIVATE stdc++fs)
 endif()
 
-# ── Windows: deploy Qt platform plugin ────────────────────────────────────
+# == Windows: deploy Qt platform plugin ====================================
 # Qt apps fail at startup with "could not find or load the Qt platform plugin
 # 'windows'" unless qwindows.dll sits in a `platforms/` subfolder next to the
 # exe. vcpkg copies the core Qt6*.dll files automatically but does NOT copy
@@ -245,7 +254,7 @@ add_custom_command(TARGET blackhole-sim POST_BUILD
             ${CMAKE_SOURCE_DIR}/src/3D/BlackHole3D_PhotorealDisk.frag
             $<TARGET_FILE_DIR:blackhole-sim>/BlackHole3D_PhotorealDisk.frag)
 
-# ── Standalone simulation executables (restored) ───────────────────────────
+# == Standalone simulation executables (restored) ===========================
 add_executable(blackhole-2D src/2D/BlackHole2D.cpp)
 target_include_directories(blackhole-2D PRIVATE
     ${CMAKE_SOURCE_DIR}/src/2D
@@ -254,7 +263,7 @@ target_include_directories(blackhole-2D PRIVATE
 )
 target_link_libraries(blackhole-2D PRIVATE SFML::Graphics SFML::Window SFML::System)
 
-# ── Dear ImGui static library ─────────────────────────────────────────────
+# == Dear ImGui static library ===========================================
 # Contains imgui core + imgui-SFML (standalone path) + imgui_impl_opengl3
 # (Qt-embedded path). Both backends coexist: the SFML backend is used by
 # blackhole-3D; the raw GL3 backend is used by blackhole-sim (AETHERION_QT_HOST).
@@ -309,7 +318,7 @@ else()
     target_include_directories(blackhole-3D PRIVATE ${GLM_INCLUDE_DIRS})
 endif()
 
-# ── Shader copy: file-driven so any .frag edit triggers a re-copy ────────────
+# == Shader copy: file-driven so any .frag edit triggers a re-copy ============
 # Using add_custom_command with OUTPUT means cmake tracks the .frag as a real
 # dependency, editing the source file causes a rebuild of the copy target,
 # regardless of whether any C++ source changed.
@@ -410,7 +419,7 @@ if(_bg_src)
                 $<TARGET_FILE_DIR:blackhole-3D>/background.png)
 endif()
 
-# ── Install targets ───────────────────────────────────────────
+# == Install targets =========================================
 if(APPLE)
     install(TARGETS blackhole-sim blackhole-2D blackhole-3D RUNTIME DESTINATION bin BUNDLE DESTINATION .)
 else()
@@ -454,7 +463,7 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/flatpak/io.github.0xLiam0920.AetherionSuite.metain
         DESTINATION share/metainfo)
 endif()
 
-# ── macOS .app bundle target ──────────────────────────────────
+# == macOS .app bundle targeting ==================================
 if(APPLE)
     add_custom_target(bundle
         COMMAND bash ${CMAKE_SOURCE_DIR}/bundle_app.sh
@@ -464,7 +473,7 @@ if(APPLE)
     )
 endif()
 
-# ── Physics regression tests (beta validation) ──────────────────────────────
+# == Physics regression tests (beta validation) ==============================
 enable_testing()
 
 add_executable(physics-regression-tests
@@ -492,3 +501,5 @@ add_test(
     NAME physics-regression
     COMMAND physics-regression-tests
 )
+
+

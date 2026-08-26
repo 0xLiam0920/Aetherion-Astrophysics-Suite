@@ -175,7 +175,7 @@ struct ActionKeybinds {
     sf::Keyboard::Key toggleRK4Photons = sf::Keyboard::Key::L;
     sf::Keyboard::Key toggleSpacetime  = sf::Keyboard::Key::T;
     sf::Keyboard::Key openMergerMenu   = sf::Keyboard::Key::C;
-    sf::Keyboard::Key toggleProgressive = sf::Keyboard::Key::I;
+    sf::Keyboard::Key toggleIdleMode    = sf::Keyboard::Key::I;
 };
 
 inline std::filesystem::path keybindConfigPath() {
@@ -217,7 +217,7 @@ inline void enforceKeybindConflicts(ActionKeybinds& keys) {
         {"toggle_rk4_photons",&keys.toggleRK4Photons, defaults.toggleRK4Photons},
         {"toggle_spacetime",  &keys.toggleSpacetime,  defaults.toggleSpacetime},
         {"open_merger_menu",  &keys.openMergerMenu,   defaults.openMergerMenu},
-        {"toggle_progressive",&keys.toggleProgressive, defaults.toggleProgressive}
+        {"toggle_idle_mode",  &keys.toggleIdleMode,   defaults.toggleIdleMode}
     }};
     for (auto& e : entries) {
         if (isMovementKey(*e.key)) *e.key = e.def;
@@ -259,7 +259,7 @@ inline void writeDefaultKeybindFile(const std::filesystem::path& path, const Act
     out << "toggle_rk4_photons="<< keyToString(k.toggleRK4Photons) << "\n";
     out << "toggle_spacetime="  << keyToString(k.toggleSpacetime)  << "\n";
     out << "open_merger_menu="  << keyToString(k.openMergerMenu)   << "\n";
-    out << "toggle_progressive="<< keyToString(k.toggleProgressive) << "\n";
+    out << "toggle_idle_mode="  << keyToString(k.toggleIdleMode)   << "\n";
 }
 
 inline ActionKeybinds loadActionKeybinds() {
@@ -295,7 +295,7 @@ inline ActionKeybinds loadActionKeybinds() {
         {"toggle_rk4_photons",&keys.toggleRK4Photons},
         {"toggle_spacetime",  &keys.toggleSpacetime},
         {"open_merger_menu",  &keys.openMergerMenu},
-        {"toggle_progressive",&keys.toggleProgressive}
+        {"toggle_idle_mode",  &keys.toggleIdleMode}
     };
     std::string line;
     while (std::getline(in, line)) {
@@ -546,7 +546,7 @@ inline float progressiveHalton(int index, int base) {
 }
 
 struct ProgressiveRenderer {
-    bool  enabled = true;      // master on/off (navigation is never affected)
+    bool  enabled = false;     // idle mode: off by default, toggled with I
     bool  converging = false;  // currently folding jittered samples together
     float idleTimer = 0.0f;    // seconds the camera has been perfectly still
     int   sampleCount = 0;     // jittered samples accumulated so far
@@ -2174,7 +2174,7 @@ inline void renderHUD(State& s, int w, int h) {
         dbg.doppler      = s.snap.dopplerEnabled;
         dbg.havePhotoreal= s.havePhotoreal;
         dbg.haveSimple   = s.haveSimple;
-        dbg.progressiveEnabled = s.progressive.enabled;
+        dbg.idleModeEnabled    = s.progressive.enabled;
         dbg.animSpeed    = s.snap.animSpeed;
         dbg.fps          = s.snap.fps;
         dbg.totalTime    = s.snap.totalTime;
@@ -2313,10 +2313,9 @@ inline void onActionKey(State& s, sf::Keyboard::Key code) {
         s.physOverlay.spacetimeEnabled = !s.physOverlay.spacetimeEnabled;
         s.physOverlay.markDirty();
     }
-    else if (code == kb.toggleProgressive) {
+    else if (code == kb.toggleIdleMode) {
         s.progressive.enabled = !s.progressive.enabled;
-        // Reset accumulation state when toggling so we don't start mid-convergence.
-        s.progressive.reset();
+        if (!s.progressive.enabled) { s.progressive.reset(); s.freezeSim = false; }
     }
     else if (code == kb.resetTilt)         s.camera.resetRoll();
     else if (code == kb.nextProfile) {

@@ -29,8 +29,8 @@
 #include <array>
 #include <cmath>
 
-namespace bh3d {
-namespace physics {
+namespace bh3d { // Looking back, I honestly failed to understand so much of this. I'm just lucky it worked as well as it did. 
+namespace physics { // TODO August 18th: Better understand physics of blackbody and the CIE 1931 2° CMF. I think I understand the Planck function, but the rest is still a bit of a mystery.
 
 // CIE 1931 2° standard-observer colour-matching functions,
 // sampled 380–780 nm at 10 nm steps (41 samples).
@@ -45,7 +45,7 @@ inline constexpr double kCMF_x[kCMFSamples] = {
     0.001440, 0.000690, 0.000332, 0.000166, 0.000083, 0.000041
 };
 inline constexpr double kCMF_y[kCMFSamples] = {
-    0.000039, 0.000120, 0.000396, 0.001210, 0.004000, 0.011600, 0.023000,
+    0.000039, 0.000120, 0.000396, 0.001210, 0.004000, 0.011600, 0.023000, // The exact values of this are based on a (presumably human) observer. 
     0.038000, 0.060000, 0.090980, 0.139020, 0.208020, 0.323000, 0.503000,
     0.710000, 0.862000, 0.954000, 0.994950, 0.995000, 0.952000, 0.870000,
     0.757000, 0.631000, 0.503000, 0.381000, 0.265000, 0.175000, 0.107000,
@@ -53,7 +53,7 @@ inline constexpr double kCMF_y[kCMFSamples] = {
     0.000520, 0.000249, 0.000120, 0.000060, 0.000030, 0.000015
 };
 inline constexpr double kCMF_z[kCMFSamples] = {
-    0.006450, 0.020050, 0.067850, 0.207400, 0.645600, 1.385600, 1.747060,
+    0.006450, 0.020050, 0.067850, 0.207400, 0.645600, 1.385600, 1.747060, 
     1.772110, 1.669200, 1.287640, 0.812950, 0.465180, 0.272000, 0.158200,
     0.078250, 0.042160, 0.020300, 0.008750, 0.003900, 0.002100, 0.001650,
     0.001100, 0.000800, 0.000340, 0.000190, 0.000070, 0.000020, 0.000000,
@@ -76,7 +76,7 @@ inline double srgbGamma(double c) {
 inline std::array<double, 3> blackbodyRGB(double kelvin) {
     const double T = std::clamp(kelvin, 1000.0, 40000.0);
 
-    double X = 0.0, Y = 0.0, Z = 0.0;
+    double X = 0.0, Y = 0.0, Z = 0.0; 
     for (int j = 0; j < kCMFSamples; ++j) {
         const double lam = (380.0 + j * 10.0) * 1e-9;   // metres
         const double e   = kHC_K / (lam * T);
@@ -144,3 +144,4 @@ inline double diskColorTemperature(double displayTempInner, double r, double rIS
 }  // namespace bh3d
 
 #endif  // BH3D_BLACKBODY_HPP
+
