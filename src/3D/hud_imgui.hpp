@@ -847,6 +847,17 @@ inline void drawOverlaysPanel(bh3d::State& s) {
                                "source seen in most AGN and X-ray binaries.");
             ImGui::PopStyleColor();
         }
+        if (toggleRow("Black Hole Star Envelope   [ON]", "Black Hole Star Envelope   [OFF]",
+                      s.bhStarEnabled, ImVec2(btnW, 24))) {
+            s.bhStarEnabled = !s.bhStarEnabled;
+        }
+        if (s.bhStarEnabled) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("Quasi-star hydrogen pseudo-photosphere: a solar-system-sized "
+                               "red cocoon around the horizon (e.g. the JWST little red dot "
+                               "MoM-BH*-1). Hides the accretion disk behind a dark-cored envelope.");
+            ImGui::PopStyleColor();
+        }
 
         ImGui::SeparatorText("Rendering");
         if (toggleRow("Idle Mode   [ON]", "Idle Mode   [OFF]",

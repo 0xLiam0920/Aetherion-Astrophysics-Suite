@@ -336,6 +336,8 @@ struct SceneUniforms {
     GLint showHostGalaxy, hostGalaxyRadius, hostGalaxyColor;
     GLint showLAB, labPos, labRadius, labColor;
     GLint showCGM, cgmRadius, cgmColor;
+    GLint showBHStar, bhStarEnvelopeRadius, bhStarCoreRadius;
+    GLint bhStarColorInner, bhStarColorOuter, bhStarDensity;
     GLint maxStepsOverride;
     GLint diskPeakTemp, diskDisplayTempInner, diskDisplayTempOuter;
     GLint diskSatBoostInner, diskSatBoostOuter;
@@ -396,6 +398,12 @@ struct SceneUniforms {
         u.showCGM              = prog.uniform("showCGM");
         u.cgmRadius            = prog.uniform("cgmRadius");
         u.cgmColor             = prog.uniform("cgmColor");
+        u.showBHStar           = prog.uniform("showBHStar");
+        u.bhStarEnvelopeRadius = prog.uniform("bhStarEnvelopeRadius");
+        u.bhStarCoreRadius     = prog.uniform("bhStarCoreRadius");
+        u.bhStarColorInner     = prog.uniform("bhStarColorInner");
+        u.bhStarColorOuter     = prog.uniform("bhStarColorOuter");
+        u.bhStarDensity        = prog.uniform("bhStarDensity");
         u.maxStepsOverride     = prog.uniform("maxStepsOverride");
         u.diskPeakTemp         = prog.uniform("diskPeakTemp");
         u.diskDisplayTempInner = prog.uniform("diskDisplayTempInner");
@@ -494,6 +502,12 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glUniform1i(u.showCGM,          snap.cgmEnabled ? 1 : 0);
     glUniform1f(u.cgmRadius,        200.0f);
     glUniform3f(u.cgmColor,         0.3f, 0.5f, 0.8f);
+    glUniform1i(u.showBHStar,           snap.bhStarEnabled ? 1 : 0);
+    glUniform1f(u.bhStarEnvelopeRadius, snap.bhStarEnvelopeRadius);
+    glUniform1f(u.bhStarCoreRadius,     snap.bhStarCoreRadius);
+    glUniform3f(u.bhStarColorInner,     snap.bhStarColorInner.x, snap.bhStarColorInner.y, snap.bhStarColorInner.z);
+    glUniform3f(u.bhStarColorOuter,     snap.bhStarColorOuter.x, snap.bhStarColorOuter.y, snap.bhStarColorOuter.z);
+    glUniform1f(u.bhStarDensity,        snap.bhStarDensity);
     glUniform1i(u.maxStepsOverride, snap.maxSteps);
 }
 
@@ -712,6 +726,7 @@ struct State {
     bool hostGalaxyEnabled = false;
     bool labEnabled        = false;
     bool cgmEnabled        = false;
+    bool bhStarEnabled     = false; // quasi-star hydrogen-based object (aka a black hole star)
     bool coronaEnabled     = false; // X-ray corona (hot Comptonizing haze over the inner disk). For reference, the corona is like an outer shell in a way, but not really physical or anythingn.
     bool blueshiftEnabled  = true;
     bool showHUD           = true;
@@ -920,6 +935,7 @@ inline void initProfiles(State& s, std::vector<BlackHoleProfile> loaded,
     s.hostGalaxyEnabled = prof.defaultHostGalaxy;
     s.labEnabled        = prof.defaultLAB;
     s.cgmEnabled        = prof.defaultCGM;
+    s.bhStarEnabled     = prof.config.bhStar.enabled;
 }
 
 // Look up a loaded profile by display name. Returns nullptr if no profile
@@ -1828,6 +1844,12 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.hostGalaxyEnabled = s.hostGalaxyEnabled;
     snap.labEnabled        = s.labEnabled;
     snap.cgmEnabled        = s.cgmEnabled;
+    snap.bhStarEnabled        = s.bhStarEnabled;
+    snap.bhStarEnvelopeRadius = s.config.bhStar.envelopeRadius;
+    snap.bhStarCoreRadius     = s.config.bhStar.coreRadius;
+    snap.bhStarColorInner     = s.config.bhStar.colorInner;
+    snap.bhStarColorOuter     = s.config.bhStar.colorOuter;
+    snap.bhStarDensity        = s.config.bhStar.density;
     snap.maxSteps          = std::clamp(s.adaptiveMaxSteps, (s.cinematicMode ? 300 : 200) / 2, s.cinematicMode ? 300 : 200);
     snap.profileName       = s.profilesArr[s.profileIdx].name;
     snap.massSolar         = s.profilesArr[s.profileIdx].massSolar;
@@ -2224,6 +2246,7 @@ inline void switchToProfile(State& s, int newIdx) {
     s.hostGalaxyEnabled = prof.defaultHostGalaxy;
     s.labEnabled        = prof.defaultLAB;
     s.cgmEnabled        = prof.defaultCGM;
+    s.bhStarEnabled     = prof.config.bhStar.enabled;
     s.camera            = CameraController(prof.config.camera);
     rebuildOrbBodies(s.orbBodies, prof, s.config);
     s.orbBodyDisrupted.assign(s.orbBodies.size(), false);

@@ -978,15 +978,75 @@ inline BlackHoleProfile m87() {
     return p;
 }
 
+/*--------- MoM-BH*-1, the first "black hole star" (quasi-star) ---------*/
+// A JWST "little red dot" (LRD) at z ~ 6 (≈660 Myr after the Big Bang), interpreted
+// by Naidu et al. (2026, Nature) as a ~100,000 M☉ black hole enshrouded in a
+// dense, solar-system-sized hydrogen shell. It's basically a huge red
+// pseudo-photosphere rather than a standard black hole; so no jets, no
+// BLR, very much metal-free (H + He only), with a Balmer
+// break effect giving it its extremely red colour. 
+inline BlackHoleProfile momBHStar1() {
+    BlackHoleProfile p;
+    p.name        = "MoM-BH*-1";
+    p.description = "Black hole star: ~100,000 Msun core cloaked in a solar-system-sized hydrogen envelope (z~6, JWST little red dot)";
+    p.massSolar   = 1.0e5;
+
+    cfg::SimConfig c;
+    // NOTE: Spin is unconstrained; Naidu et al. (2026) only report a mass estimate.
+    c.blackHole.spinParameter = 0.3f;
+    c.blackHole.radius        = 1.0f;
+
+    // No visible accretion disk: the accretion flow is buried inside the
+    // envelope. outerRadius = 0 makes the shader disk condition always false,
+    // exactly as the dormant Gaia profiles do.
+    c.disk.innerRadius   = 3.0f;
+    c.disk.outerRadius   = 0.0f;
+    c.disk.halfThickness = 0.0f;
+    c.disk.peakTemp             = 1000.0f;
+    c.disk.displayTempInner     = 1000.0f;
+    c.disk.displayTempOuter     = 1000.0f;
+    c.disk.saturationBoostInner = 0.0f;
+    c.disk.saturationBoostOuter = 0.0f;
+
+    c.jet.radius = 0.08f; c.jet.length = 4.0f;
+    c.jet.color  = glm::vec3(0.1f, 0.3f, 0.6f);
+
+    // The red hydrogen-based shell.
+    c.bhStar.enabled        = true;
+    c.bhStar.envelopeRadius = 18.0f;
+    c.bhStar.coreRadius     = 2.4f;
+c.bhStar.colorInner     = glm::vec3(0.92f, 0.24f, 0.09f);
+    c.bhStar.colorOuter     = glm::vec3(0.34f, 0.025f, 0.015f);
+    c.bhStar.density        = 1.40f;
+
+    // Pull the camera back so the whole envelope fits in frame.
+    c.camera.initialPos = glm::vec3(0.0f, 6.0f, 42.0f);
+
+    // Soft red bloom: enough to make the cocoon glow without blowing out.
+    c.bloom.threshold = 1.1f;
+    c.bloom.intensity = 0.5f;
+    c.bloom.exposure  = 1.0f;
+
+    p.config = c;
+    p.defaultJets       = false;
+    p.defaultBLR        = false;
+    p.defaultOrbBody    = false;  // one  hole star
+    p.defaultDoppler    = true;
+    p.defaultHostGalaxy = false;  // isolated little red dot (LRD)
+    p.defaultLAB        = false;
+    p.defaultCGM        = false;
+    return p;
+}
+
 /*--------- All profiles in order ---------*/
-inline std::array<BlackHoleProfile, 14> allProfiles() {
+inline std::array<BlackHoleProfile, 15> allProfiles() {
     return { ton618(), sgrAstar(), m87(), qso3c273(), j0529(),
              gaiaBH1(), gaiaBH2(), gaiaBH3(),
              v404Cyg(), a062000(), groJ165540(),
-             ngc1277(), oj287(), phoenixA() };
+             ngc1277(), oj287(), phoenixA(), momBHStar1() };
 }
 
-constexpr int NUM_PROFILES = 14;
+constexpr int NUM_PROFILES = 15;
 
 } // namespace profiles
 

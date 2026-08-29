@@ -117,6 +117,16 @@ uniform int   showCGM;                         // Toggle Circumgalactic Medium v
 uniform float cgmRadius;                       // Radius of CGM [kpc, scaled]
 uniform vec3  cgmColor;                        // Color of CGM
 
+// ===================== Black hole star (quasi-star) ========================
+// DEFINITION: A dense, very red, pseudo-star the size of our solar system cloaking the EH,
+// with a dark core where the shadow reads through. It's a replacement for the disk here.
+uniform int   showBHStar;              // 1 = render the envelope (MoM-BH*-1 etc.)
+uniform float bhStarEnvelopeRadius;    // Outer envelope radius [Rs]
+uniform float bhStarCoreRadius;        // Dark inner cavity radius [Rs]
+uniform vec3  bhStarColorInner;        // Warm inner glow colour
+uniform vec3  bhStarColorOuter;        // Balmer-break deep red edge colour
+uniform float bhStarDensity;           // Overall opacity / emission scaler
+
 // Inspiralling secondary black hole's own look (accretion disk / spin / jets)
 // so a merger companion matches how it renders as a standalone primary. The
 // disk and jet sizes below are ratios of the secondary's radius, scaled here.
@@ -1252,6 +1262,54 @@ vec3 cgmEmission(vec3 pos, vec3 bhPos) {
     return cgmColor * density * 0.02;  // Very faint halo
 }
 
+// == Black hole star envelope: radial density of the hydrogen pseudo-photosphere.
+// clumpy, filamentary shell in between.
+float bhStarDensityAt(vec3 pos, vec3 bhPos) {
+    if (showBHStar == 0) return 0.0;
+    vec3  rel = pos - bhPos;
+    float r   = length(rel);
+    // Cheap bounding reject with head-room for the wavy boundary.
+    if (r <= bhStarCoreRadius * 0.85 || r >= bhStarEnvelopeRadius * 1.18) return 0.0;
+
+    vec3 dir = rel / max(r, 1e-4);
+    // Amorphous, billowing boundaries: perturb the core and envelope radii by
+    // direction noise so neither area is a smooth sphere or anything.
+    float envR  = bhStarEnvelopeRadius * (0.80 + 0.34 * fbm3D(dir * 2.3 + vec3(0.0, uTime * 0.02, 0.0), 3));
+    float coreR = bhStarCoreRadius     * (0.90 + 0.20 * fbm3D(dir * 3.3 + 7.0, 2));
+    if (r <= coreR || r >= envR) return 0.0;
+
+    // Dense just outside the dark core, tapering to the wispy rim.
+    float inner = smoothstep(coreR, coreR * 1.25, r);
+    float outer = 1.0 - smoothstep(envR * 0.5, envR, r);
+    float base  = inner * outer;
+
+    // Domain-warped turbulence is somewhat relative to the billowy filaments and knots.
+    vec3  q    = pos * 0.30 + vec3(0.0, uTime * 0.025, 0.0);
+    vec3  warp = vec3(fbm3D(q, 2), fbm3D(q + 13.7, 2), fbm3D(q + 27.1, 2)) - 0.5;
+    float n    = fbm3D(q + warp * 2.0, 4);
+    n = pow(clamp(n, 0.0, 1.0), 1.35);            
+    float clumps = mix(0.30, 1.65, n);
+
+    // Faint convective striations radiating outward.
+    float ang  = atan(rel.z, rel.x);
+    float stri = 0.86 + 0.14 * sin(ang * 8.0 + r * 0.8 + uTime * 0.05);
+
+    return base * clumps * stri * bhStarDensity;
+}
+
+// Envelope emission colour: warm just outside the core, plunging to a deep
+// Balmer-break red at the rim (the deepest such break ever observed).
+vec3 bhStarColorAt(vec3 pos, vec3 bhPos) {
+    vec3  rel = pos - bhPos;
+    float r  = length(rel);
+    float t  = clamp((r - bhStarCoreRadius) /
+                     max(bhStarEnvelopeRadius - bhStarCoreRadius, 1e-3), 0.0, 1.0);
+    vec3 col = mix(bhStarColorInner, bhStarColorOuter, pow(t, 0.55));
+   
+    col = mix(col, vec3(0.40, 0.028, 0.02), smoothstep(0.55, 1.0, t) * 0.55);
+    return col;
+}
+
 // ============================================================================
 // RAY MARCHING WITH MULTI-CROSSING DISK ACCUMULATION
 // ============================================================================
@@ -1330,6 +1388,18 @@ void traceRay(
     float jetTau = 0.0;        // Jet optical depth (synchrotron self-absorption)
     vec3 blrAcc = vec3(0.0);
     float blrAlphaAcc = 0.0;
+
+    // Black hole star envelope accumulation (front:back ratio).
+    vec3  bhStarAcc   = vec3(0.0);
+    float bhStarAlpha = 0.0;
+    // Straight-ray closest approach to the BH: rays plunging toward the centre
+    // get their envelope suppressed so the dark core reads through.
+    float bhStarCoreDark = 1.0;
+    {
+        float tcaBHS  = max(dot(bhPos - ro, dir), 0.0);
+        float dperpBHS = length((ro + dir * tcaBHS) - bhPos);
+        bhStarCoreDark = smoothstep(bhStarCoreRadius * 0.80, bhStarCoreRadius * 1.05, dperpBHS);
+    }
     
     // Disk self-shadowing: accumulate optical depth near disk plane
     float diskShadowTau = 0.0;
@@ -1432,6 +1502,17 @@ void traceRay(
                     blrAcc += blrSample * stepLen * 0.3 * (1.0 - blrAlphaAcc);
                     blrAlphaAcc += blrStepAlpha * (1.0 - blrAlphaAcc);
                 }
+            }
+        }
+
+        // Accumulate the black hole star hydrogen envelope (emissivity AND/OR absorbing).
+        if (showBHStar != 0 && bhStarAlpha < 0.99) {
+            float densBHS = bhStarDensityAt(pos, bhPos);
+            if (densBHS > 0.0) {
+                vec3  ecolBHS = bhStarColorAt(pos, bhPos);
+                float aBHS = clamp(densBHS * stepLen * 0.28, 0.0, 1.0);
+                bhStarAcc   += ecolBHS * 1.6 * aBHS * (1.0 - bhStarAlpha);
+                bhStarAlpha += aBHS * (1.0 - bhStarAlpha);
             }
         }
         
@@ -1600,9 +1681,16 @@ void traceRay(
 
     // Add jets on top (additive)
     result += jetAcc;
-    
+
+    // Composite the black hole star envelope over everything (it wraps the BH,
+    // darkened toward the centre so the horizon shadow reads as a dark core).
+    float bhStarAlphaOut = bhStarAlpha * bhStarCoreDark;
+    if (showBHStar != 0 && bhStarAlphaOut > 0.0) {
+        result = result * (1.0 - bhStarAlphaOut) + bhStarAcc * bhStarCoreDark;
+    }
+
     outColor = result;
-    outAlpha = max(accumulatedAlpha, blrAlphaAcc);
+    outAlpha = max(max(accumulatedAlpha, blrAlphaAcc), bhStarAlphaOut);
 }
 
 /*----------------------Main function-----------------------*/

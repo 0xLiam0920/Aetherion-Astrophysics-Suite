@@ -41,7 +41,7 @@ uniform float blrStrength;       // [0,1] cloud opacity scaler per black hole
 uniform int   maxStepsOverride;  // Runtime step limit [ADDED 2026-05-25: was previously dead]
 uniform int   showCorona;        // 1 = draw the X-ray corona haze over the inner disk
 
-// ── Orbiting bodies [ADDED 2026: ported from the photoreal shader so the ──
+// ===============Orbiting bodies [ADDED 2026: ported from the photoreal shader so the ──
 //    low-quality path shows orbiting stars/clouds, tidal-disruption victims
 //    and the inspiralling secondary black hole during a merger.
 const int MAX_ORB_BODIES = 10;
@@ -51,6 +51,16 @@ uniform vec3  orbBodyColor[MAX_ORB_BODIES];  // base colours
 uniform int   orbBodyType[MAX_ORB_BODIES];   // BODY_* archetype
 uniform int   numOrbBodies;                  // active count (<= MAX_ORB_BODIES)
 uniform int   showOrbBody;                   // master toggle
+
+// ===============Black hole star (quasi-star) hydrogen envelope ==================
+// Dense red pseudo-photosphere cloaking the horizon with a dark core; replaces
+// the disk visually for black-hole-star profiles (MoM-BH*-1 etc.).
+uniform int   showBHStar;              // 1 = this is enabled (MoM-BH*-1 etc.)
+uniform float bhStarEnvelopeRadius;    // Outer envelope radius [Rs]
+uniform float bhStarCoreRadius;        // the inner cavity radius [Rs] parameter
+uniform vec3  bhStarColorInner;       
+uniform vec3  bhStarColorOuter;        
+uniform float bhStarDensity;           
 
 // Inspiralling secondary black hole's own look (accretion disk / spin / jets)
 // so a merger companion matches its standalone profile. The disk and jet sizes
@@ -197,7 +207,7 @@ vec4 sampleDiskRGBA(vec3 pos, vec3 bhPos) {
                     smoothstep(diskInnerRadius, diskInnerRadius * 1.10, r);
     d.a *= radFade;
 
-    // ── Magnetic instability / MRI turbulence knots ────────────────────────
+    // ===============Magnetic instability / MRI turbulence knots ────────────────────────
     // The magnetorotational instability (MRI) creates clumpy density structures
     // in the disk. Model them as animated fBm noise co-rotating with the disk.
     // Noise is evaluated in a frame that rotates with the local Keplerian speed
@@ -328,7 +338,7 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
     if (ay < diskHalfThickness) return vec3(0.0);
     if (ay > jetLength)         return vec3(0.0);
 
-    // ── Relativistic Doppler beaming ──────────────────────────────────────
+    // ===============Relativistic Doppler beaming ==================────────────
     // Use D^2 (brightness modulation) rather than D^3 (specific intensity)
     // because in this ray-marcher each step already accumulates depth; D^3
     // per-step would compound and blow out entirely when the jet faces us.
@@ -343,7 +353,7 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
     float effectiveLength = jetLength * clamp(D * 0.5 + 0.5, 0.2, 2.0);
     if (ay > effectiveLength) return vec3(0.0);
 
-    // ── Episodic accretion bursts ─────────────────────────────────────────
+    // ===============Episodic accretion bursts ==================───────────────
     // Accretion onto a SMBH like TON 618 is wildly variable, the disk is
     // magnetically unstable and dumps clumps of material onto the jet base
     // on timescales of minutes to hours (compressed here for visibility).
@@ -353,7 +363,7 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
     // Map [0,1] → [0.25, 1.8] so dim troughs are still visible but peaks blaze
     float burstPulse = 0.25 + 1.55 * burstNoise;
 
-    // ── Kelvin-Helmholtz helical wobble ───────────────────────────────────
+    // ===============Kelvin-Helmholtz helical wobble ==================─────────
     // Shear between the jet and surrounding gas drives KHI, which manifests
     // as a slow helical/sinusoidal oscillation of the jet spine.
     // Amplitude grows with distance from the BH (jets widen and destabilise).
@@ -371,7 +381,7 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
     float core  = exp(-radial * radial / max(jetRadius * jetRadius * 0.25, EPSILON));
     float along = smoothstep(jetLength, jetLength * 0.2, ay);
 
-    // ── Shock knots: advected outward at β ~ 0.9c ────────────────────────
+    // ===============Shock knots: advected outward at β ~ 0.9c ────────────────────────
     const float BETA_KNOT = 0.90;
     float travelOffset    = uTime * BETA_KNOT;
 
@@ -411,13 +421,13 @@ vec3 jetEmission(vec3 pos, vec3 bhPos, vec3 viewDir) {
                          jetColor * vec3(0.8, 0.92, 1.5),
                          shockIntensity * 0.8);
 
-    // ── Bright collimated spine ───────────────────────────────────────────
+    // ===============Bright collimated spine ==================─────────────────
     // A narrow hot channel down the jet axis keeps the beam reading as a
     // focused, relativistic ejection rather than a diffuse cone.
     float spine    = exp(-radial * radial / max(jetRadius * jetRadius * 0.06, EPSILON));
     vec3  spineCol = mix(knotColor, vec3(0.85, 0.95, 1.45), 0.6);   // hot blue-white core
 
-    // ── Launch / collimation glow at the jet base ─────────────────────────
+    // ===============Launch / collimation glow at the jet base ─────────────────────────
     // Material is brightest where it is accelerated and collimated just above
     // the disc; this anchors the jet visually to the black hole.
     float baseFall = exp(-ay / max(jetLength * 0.16, EPSILON));
@@ -770,6 +780,76 @@ vec3 bodyEmissionSimple(int idx, vec3 ro, vec3 rd) {
     return coronaCol * halo * bright;
 }
 
+// ============================================================================
+// BLACK HOLE STAR ENVELOPE  (quasi-star red pseudo-photosphere)
+// ============================================================================
+// Straight-ray volumetric march producing a dense red envelope with a dark
+// core. Lensing is ignored (negligible at envelope scale); the fast-shader
+// analogue of the photoreal envelope.
+float bhStarDensitySimple(vec3 pos, vec3 bhPos) {
+    if (showBHStar == 0) return 0.0;
+    vec3  rel = pos - bhPos;
+    float r   = length(rel);
+    if (r <= bhStarCoreRadius * 0.85 || r >= bhStarEnvelopeRadius * 1.18) return 0.0;
+    vec3 dir = rel / max(r, 1e-4);
+    // Billowing, amorphous core/envelope boundaries.
+    float envR  = bhStarEnvelopeRadius * (0.80 + 0.34 * fbm(dir * 2.3 + vec3(0.0, uTime * 0.02, 0.0)));
+    float coreR = bhStarCoreRadius     * (0.90 + 0.20 * fbm(dir * 3.3 + 7.0));
+    if (r <= coreR || r >= envR) return 0.0;
+    float inner = smoothstep(coreR, coreR * 1.25, r);
+    float outer = 1.0 - smoothstep(envR * 0.5, envR, r);
+    float base  = inner * outer;
+    // Domain-warped turbulence and filaments and knots and whatnot.
+    vec3  q    = pos * 0.30 + vec3(0.0, uTime * 0.025, 0.0);
+    vec3  warp = vec3(fbm(q), fbm(q + 13.7), fbm(q + 27.1)) - 0.5;
+    float n    = pow(clamp(fbm(q + warp * 2.0), 0.0, 1.0), 1.35);
+    float clumps = mix(0.30, 1.65, n);
+    float stri = 0.86 + 0.14 * sin(atan(rel.z, rel.x) * 8.0 + r * 0.8 + uTime * 0.05);
+    return base * clumps * stri * bhStarDensity;
+}
+
+vec3 bhStarEnvelope(vec3 ro, vec3 rd, vec3 bhPos, out float outAlpha) {
+    outAlpha = 0.0;
+    if (showBHStar == 0) return vec3(0.0);
+    // Ray-sphere intersection with the (inflated) envelope radius so the wavy
+    // boundary is fully captured by the march.
+    float Rmax = bhStarEnvelopeRadius * 1.18;
+    vec3  oc = ro - bhPos;
+    float b  = dot(oc, rd);
+    float c  = dot(oc, oc) - Rmax * Rmax;
+    float disc = b * b - c;
+    if (disc < 0.0) return vec3(0.0);
+    float s  = sqrt(disc);
+    float t0 = max(-b - s, 0.0);
+    float t1 = -b + s;
+    if (t1 <= t0) return vec3(0.0);
+    // Core darkening from straight-ray closest approach -> clean dark core.
+    float tca   = max(-b, 0.0);
+    float dperp = length((ro + rd * tca) - bhPos);
+    float coreDark = smoothstep(bhStarCoreRadius * 0.80, bhStarCoreRadius * 1.05, dperp);
+    const int NS = 64;
+    float dt = (t1 - t0) / float(NS);
+    vec3  acc = vec3(0.0);
+    float alpha = 0.0;
+    for (int i = 0; i < NS; ++i) {
+        float t = t0 + (float(i) + 0.5) * dt;
+        vec3 pos = ro + rd * t;
+        float dens = bhStarDensitySimple(pos, bhPos);
+        if (dens <= 0.0) continue;
+        float rr = length(pos - bhPos);
+        float tr = clamp((rr - bhStarCoreRadius) /
+                         max(bhStarEnvelopeRadius - bhStarCoreRadius, 1e-3), 0.0, 1.0);
+        vec3 col = mix(bhStarColorInner, bhStarColorOuter, pow(tr, 0.55));
+        col = mix(col, vec3(0.40, 0.028, 0.02), smoothstep(0.55, 1.0, tr) * 0.55);
+        float a = clamp(dens * dt * 0.28, 0.0, 1.0);
+        acc   += col * 1.6 * a * (1.0 - alpha);
+        alpha += a * (1.0 - alpha);
+        if (alpha > 0.99) break;
+    }
+    outAlpha = alpha * coreDark;
+    return acc * coreDark;
+}
+
 void main() {
     // Get ray direction from camera through this pixel. pixelJitter nudges the
     // ray by a sub-pixel amount so the still-camera accumulator (and the
@@ -779,7 +859,7 @@ void main() {
     vec3 rayDir = getRayDir(juv, cameraPos, cameraDir, cameraUp, fov);
     vec3 rayOrigin = cameraPos;
 
-    // ── Orbiting bodies (straight-ray approximation) ──────────────────────
+    // ===============Orbiting bodies (straight-ray approximation) ──────────────────────
     // Bodies are tested against the un-bent ray: lensing of the bodies
     // themselves is a second-order effect at their orbital distance, and the
     // straight ray fixes their screen-space position. Track the nearest
@@ -818,7 +898,7 @@ void main() {
     vec3 blrAcc;
     traceBentRay(rayOrigin, rayDir, blackHolePos, blackHoleRadius, bentPos, bentDir, absorbed, jetAcc, diskHit, blrAcc);
 
-    // ── Base scene colour + its depth along the ray ───────────────────────
+    // ===============Base scene colour + its depth along the ray ───────────────────────
     vec3  color;
     float sceneDist;
     if (absorbed) {
@@ -848,12 +928,12 @@ void main() {
         }
     }
 
-    // ── Opaque orbiting body occludes the scene when it is nearer ─────────
+    // ===============Opaque orbiting body occludes the scene when it is nearer ─────────
     if (orbBodyDist > 0.0 && orbBodyDist < sceneDist) {
         color = orbBodyHitColor;
     }
 
-    // ── Emissive layers on top (jets, BLR, body coronae / photon rings) ───
+    // ===============Emissive layers on top (jets, BLR, body coronae / photon rings) ───
     color += jetAcc + blrAcc + coronaAcc;
 
     // X-ray corona: hot Comptonizing haze hugging the inner disk / shadow rim.
@@ -869,6 +949,13 @@ void main() {
         float glow = exp(-d2 / (cr * cr)) * step(0.0, tca);
         float rimHole = smoothstep(0.7 * blackHoleRadius, 1.4 * blackHoleRadius, sqrt(max(d2, 0.0)));
         color += vec3(0.72, 0.86, 1.05) * glow * rimHole * 0.30;
+    }
+
+    // =============== Black hole star envelope ===============
+    if (showBHStar != 0) {
+        float envA;
+        vec3  envCol = bhStarEnvelope(rayOrigin, rayDir, blackHolePos, envA);
+        if (envA > 0.0) color = color * (1.0 - envA) + envCol;
     }
 
     FragColor = vec4(color, 1.0);

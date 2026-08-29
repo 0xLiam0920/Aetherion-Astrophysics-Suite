@@ -38,6 +38,7 @@ int main(int argc, char* argv[]) {
             else if (id == "3c273")    profileIdx = 2;
             else if (id == "j0529")    profileIdx = 3;
             else if (id == "phoenixa") profileIdx = 12;
+            else if (id == "mombhstar") profileIdx = 14;  // MoM-BH*-1 BHSTR
             else std::cerr << "Unknown preset: " << id << ", using default.\n";
             break;
         }

@@ -90,6 +90,21 @@ struct OrbitalConfig {
     int       bodyType = 0;
 };
 
+/*--------- Black hole star (quasi-star) envelope ---------*/
+// A "black hole star" (e.g. the JWST little red dot MoM-BH*-1) is a nascent
+// black hole cloaked in a dense, solar-system-sized hydrogen pseudo-photosphere.
+// Instead of a thin accretion disk it radiates as a huge, red shell
+// with a BH core where the EH shadow reads through. 
+struct BHStarConfig {
+    bool      enabled        = false;  // Master toggle (
+    float     envelopeRadius = 18.0f;  // Outer radius of the hydrogen envelope [Rs]
+    float     coreRadius     = 2.4f;   // Dark inner cavity radius [Rs] (BH shadow shows through)
+    // Warm inner (deep orange-red) fading to a Balmer-break deep red edge.
+    glm::vec3 colorInner     = glm::vec3(0.92f, 0.24f, 0.09f);
+    glm::vec3 colorOuter     = glm::vec3(0.34f, 0.025f, 0.015f);
+    float     density        = 1.40f;  // overall opacity scale (use with caution; >1 can be very opaque)
+};
+
 /*--------- Bloom / post-processing ---------*/
 struct BloomConfig {
     float threshold     = 1.2f;
@@ -108,6 +123,7 @@ struct SimConfig {
     BLRConfig      blr;
     OrbitalConfig  orbital;
     BloomConfig    bloom;
+    BHStarConfig   bhStar;
 };
 
 // Cinematic bloom: lower threshold, richer glow, warmer, higher exposure. 

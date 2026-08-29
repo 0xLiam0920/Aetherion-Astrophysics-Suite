@@ -67,8 +67,7 @@ inline void applyOrbital(const json& j, cfg::OrbitalConfig& c) {
     if (j.contains("bodyColor")) c.bodyColor = vec3Of(j["bodyColor"], c.bodyColor);
 }
 
-inline void applyBloom(const json& j, cfg::BloomConfig& c) {
-    c.threshold = j.value("threshold", c.threshold);
+inline void applyBloom(const json& j, cfg::BloomConfig& c) {    c.threshold = j.value("threshold", c.threshold);
     c.softKnee  = j.value("softKnee",  c.softKnee);
     c.intensity = j.value("intensity", c.intensity);
     c.exposure  = j.value("exposure",  c.exposure);
@@ -83,6 +82,15 @@ inline void applyCamera(const json& j, cfg::CameraConfig& c) {
     c.initialYaw   = j.value("initialYaw",   c.initialYaw);
     c.initialPitch = j.value("initialPitch", c.initialPitch);
     c.fov          = j.value("fov",          c.fov);
+}
+
+inline void applyBHStar(const json& j, cfg::BHStarConfig& c) { // added to support future object s(i.e, MoM BH*1 and throne-zyow)
+    c.enabled        = j.value("enabled",        c.enabled);
+    c.envelopeRadius = j.value("envelopeRadius", c.envelopeRadius);
+    c.coreRadius     = j.value("coreRadius",     c.coreRadius);
+    c.density        = j.value("density",        c.density);
+    if (j.contains("colorInner")) c.colorInner = vec3Of(j["colorInner"], c.colorInner);
+    if (j.contains("colorOuter")) c.colorOuter = vec3Of(j["colorOuter"], c.colorOuter);
 }
 
 inline BlackHoleProfile toProfile(const catalog::Entry& e) {
@@ -100,6 +108,7 @@ inline BlackHoleProfile toProfile(const catalog::Entry& e) {
     if (v.contains("orbital")) applyOrbital(v["orbital"], p.config.orbital);
     if (v.contains("bloom"))   applyBloom  (v["bloom"],   p.config.bloom);
     if (v.contains("camera"))  applyCamera (v["camera"],  p.config.camera);
+    if (v.contains("bhStar"))  applyBHStar (v["bhStar"],  p.config.bhStar);
 
     const json d = v.value("defaults", json::object());
     p.defaultJets       = d.value("jets",       false);

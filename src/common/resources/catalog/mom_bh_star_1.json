@@ -1,0 +1,68 @@
+{
+  "description": "Black hole star: ~100,000 Msun core  in a solar-system-sized hydrogen shell (z~6, JWST little red dot)",
+  "isGalacticCenter": false,
+  "learnMoreUrl": "https://en.wikipedia.org/wiki/Quasi-star",
+  "massSolar": 100000.0,
+  "name": "MoM-BH*-1",
+  "schema": 1,
+  "sortKey": 140,
+  "spin": 0.3,
+  "visual3d": {
+    "bhStar": {
+      "colorInner": [
+        0.92,
+        0.24,
+        0.09
+      ],
+      "colorOuter": [
+        0.34,
+        0.025,
+        0.015
+      ],
+      "coreRadius": 2.4,
+      "density": 1.4,
+      "enabled": true,
+      "envelopeRadius": 18.0
+    },
+    "bloom": {
+      "exposure": 1.0,
+      "intensity": 0.5,
+      "threshold": 1.1
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        6.0,
+        42.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": false
+    },
+    "disk": {
+      "displayTempInner": 1000.0,
+      "displayTempOuter": 1000.0,
+      "halfThickness": 0.0,
+      "innerRadius": 3.0,
+      "outerRadius": 0.0,
+      "peakTemp": 1000.0,
+      "saturationBoostInner": 0.0,
+      "saturationBoostOuter": 0.0
+    },
+    "jet": {
+      "color": [
+        0.1,
+        0.3,
+        0.6
+      ],
+      "length": 4.0,
+      "radius": 0.08
+    }
+  }
+}

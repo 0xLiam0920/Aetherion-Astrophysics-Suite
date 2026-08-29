@@ -75,6 +75,14 @@ struct PhysicsSnapshot {
     bool labEnabled;        // Lyman-alpha Blob overlay
     bool cgmEnabled;        // circumgalactic medium (diffuse gas halo around the galaxy)
 
+    /*--------- Black hole star envelope (quasi-star pseudo-photosphere) ---------*/
+    bool      bhStarEnabled        = false;
+    float     bhStarEnvelopeRadius = 18.0f;
+    float     bhStarCoreRadius     = 2.4f;
+    glm::vec3 bhStarColorInner     = glm::vec3(0.92f, 0.24f, 0.09f);
+    glm::vec3 bhStarColorOuter     = glm::vec3(0.34f, 0.025f, 0.015f);
+    float     bhStarDensity        = 1.40f;
+
     /*--------- Render settings (more steps = higher quality, slower) ---------*/
     int maxSteps;
 
