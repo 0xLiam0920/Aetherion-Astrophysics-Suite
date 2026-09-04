@@ -25,6 +25,7 @@ inline GalaxyBody3DType bodyType(const std::string& s) {
     if (s == "NeutronStar")    return GalaxyBody3DType::NeutronStar;
     if (s == "WhiteDwarf")     return GalaxyBody3DType::WhiteDwarf;
     if (s == "CompanionStar")  return GalaxyBody3DType::CompanionStar;
+    if (s == "BlackHole")      return GalaxyBody3DType::BlackHole; // This totally wasn't just made for oj 287. 
     return GalaxyBody3DType::Star;
 }
 
@@ -95,6 +96,14 @@ inline void applyBHStar(const json& j, cfg::BHStarConfig& c) { // added to suppo
     if (j.contains("coreColor"))  c.coreColor  = vec3Of(j["coreColor"],  c.coreColor);
 }
 
+// Permanent secondary black hole for real binaries like OJ 287. Reuses disk/jet/spin sub-appliers so the JSON
+// shape matches the primary's own parameters.
+inline void applySecondary(const json& j, cfg::SimConfig& sc) {
+    sc.blackHole.spinParameter = j.value("spin", sc.blackHole.spinParameter);
+    if (j.contains("disk")) applyDisk(j["disk"], sc.disk);
+    if (j.contains("jet"))  applyJet (j["jet"],  sc.jet);
+}
+
 inline BlackHoleProfile toProfile(const catalog::Entry& e) {
     BlackHoleProfile p;
     p.name        = e.name;
@@ -111,6 +120,10 @@ inline BlackHoleProfile toProfile(const catalog::Entry& e) {
     if (v.contains("bloom"))   applyBloom  (v["bloom"],   p.config.bloom);
     if (v.contains("camera"))  applyCamera (v["camera"],  p.config.camera);
     if (v.contains("bhStar"))  applyBHStar (v["bhStar"],  p.config.bhStar);
+    if (v.contains("secondary")) {
+        p.hasSecondaryBH = v["secondary"].value("enabled", false);
+        applySecondary(v["secondary"], p.secondaryConfig);
+    }
 
     const json d = v.value("defaults", json::object());
     p.defaultJets       = d.value("jets",       false);

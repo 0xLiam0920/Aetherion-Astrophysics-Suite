@@ -19,7 +19,8 @@ enum class GalaxyBody3DType {
     DwarfGalaxy,    // Dwarf-galaxy / satellite remnant
     NeutronStar,    // Compact remnant
     WhiteDwarf,     // Compact remnant
-    CompanionStar   // Stellar binary companion
+    CompanionStar,  // Stellar binary companion
+    BlackHole       // A second, permanently-orbiting black hole f
 };
 
 // A single orbiting member, in 3D-shader units (Rs).
@@ -56,6 +57,9 @@ struct BlackHoleProfile {
     // discovered through IS the BH's displacement from the barycenter.
     bool   isBinaryWithBarycenter = false;
     double companionMassSolar     = 0.0;   // companion mass [Msun] for mass-ratio calc
+
+    bool           hasSecondaryBH = false;
+    cfg::SimConfig secondaryConfig;
 };
 
 // ============================================================
@@ -172,6 +176,10 @@ inline cfg::OrbitalConfig makeOrbitalBody(const GalaxyBody3D& b) {
         case GalaxyBody3DType::WhiteDwarf:
             oc.bodyRadius = 0.50f;
             oc.bodyColor  = glm::vec3(1.00f, 1.00f, 0.95f);  // Pale white
+            break;
+        case GalaxyBody3DType::BlackHole:
+            oc.bodyRadius = 1.8f;
+            oc.bodyColor  = glm::vec3(0.0f);  // Shaded via the BODY_BLACKHOLE path, not this colour
             break;
     }
     return oc;
@@ -1148,16 +1156,29 @@ inline BlackHoleProfile ngc1277() {
 // disk every ~12 years, triggering UV/optical flares.
 // Blazar-class: jet pointed near line of sight → Doppler-boosted bright jet.
 // kelvinToRGB(11000) → distinctly icy-blue-white; hottest and brightest of the set.
+// MASS/SPIN NOTE: primary mass measured at
+// 1.835e10 Msun; primary spin calculated at 38% of the maximum allowed Kerr
+// rotation (a* ≈ 0.38), which is somehow noticeably LOWER than the earlier values
+// which have been corrected below. Secondary mass ≈1.5e8 Msun (Valtonen);
+// Kuznetsov et al. 2024 are a higher X-ray estimate of
+// ~2e8 Msun via bulk-motion Comptonization. While both are equally  plausible, Valtonen's is
+// used here as the more widely cited figure. Orbital period is roughly 12 yr,
+// eccentricity ≈0.65. Real perinigricon/aponigricon separations are ~3250 AU
+// / ~17,500 AU, which are orders of magnitude
+// too large to depict at proper scale, so (as with other tradeoffs made in this repo) the 14 Rs semi-major axis below is a
+// compressed-for-visualization placeholder.
+// secondary's orbit is decaying via gravitational-wave emission and is
+// expected to merge with the primary within roughly the next ~10,000 years.
 inline BlackHoleProfile oj287() {
     BlackHoleProfile p;
     p.name        = "OJ 287";
-    p.description = "SMBH binary system (~1.8e10 Msun primary), blazar, optical outbursts";
-    p.massSolar   = 1.8e10;
+    p.description = "SMBH binary system (~1.835e10 Msun primary), blazar, optical outbursts";
+    p.massSolar   = 1.835e10;
 
     cfg::SimConfig c;
-    c.blackHole.spinParameter = 0.82f;
+    c.blackHole.spinParameter = 0.38f;   // Wikipedia: ~38% of max Kerr rotation
     c.blackHole.radius        = 1.0f;
-    c.disk.innerRadius   = 1.75f;   // Very close ISCO at a*=0.82
+    c.disk.innerRadius   = 3.2f;    // ISCO recedes with the corrected, lower spin
     c.disk.outerRadius   = 26.0f;
     c.disk.halfThickness = 0.011f;  // Extremely thin Shakura-Sunyaev disk
     // kelvinToRGB(11000) → icy blue-white, immediately distinguishable from all others.
@@ -1190,13 +1211,27 @@ inline BlackHoleProfile oj287() {
     p.defaultLAB         = true;
     p.defaultCGM         = false;
     // OJ 287 binary system (mirrors 2D OJ287_BODIES)
-    // Secondary SMBH represented as a bright star, the famous ~12yr periodic
-    // disk-piercing companion that triggers optical outbursts.
+    // Secondary SMBH is now rendered as a genuine black hole (own tilted
+    // accretion disk + spin-derived photon ring) it really does punch through the primary's disk every orbit,
+    // which is what triggers the famous ~12yr optical outbursts.
     p.galaxyBodies = {
-        {GalaxyBody3DType::Star,     15.0f, 0.66f, -0.20f},  // Secondary SMBH (~1.5e8 Msun)
-        {GalaxyBody3DType::GasCloud, 22.0f, 0.30f,  0.05f},  // Accretion blob
-        {GalaxyBody3DType::GasCloud, 40.0f, 0.20f,  0.30f}   // Outer gas cloud
+        {GalaxyBody3DType::BlackHole, 15.0f, 0.65f, -0.20f, "Secondary SMBH"},  // ~1.5e8 Msun
+        {GalaxyBody3DType::GasCloud,  22.0f, 0.30f,  0.05f},  // Accretion blob
+        {GalaxyBody3DType::GasCloud,  40.0f, 0.20f,  0.30f}   // Outer gas cloud
     };
+    // Secondary's own accretion disk: a distinct golden/ember palette (vs. the
+    // primary's icy blue-white/yellow) so the two disks read as separate
+    // objects. Secondary spin is unconstrained observationally @ 0.5, which is an
+    // illustrative average, not an actual measurement. No evidence for any jets, which makes sense given the consistent tug of war for matter
+    p.hasSecondaryBH = true;
+    p.secondaryConfig.blackHole.radius        = 1.0f;
+    p.secondaryConfig.blackHole.spinParameter = 0.5f;
+    p.secondaryConfig.disk.innerRadius        = 2.2f;
+    p.secondaryConfig.disk.outerRadius        = 9.0f;
+    p.secondaryConfig.disk.displayTempInner   = 7000.0f;   // Golden-white
+    p.secondaryConfig.disk.displayTempOuter   = 2600.0f;   // Deep ember red
+    p.secondaryConfig.disk.saturationBoostInner = 1.6f;
+    p.secondaryConfig.disk.saturationBoostOuter = 2.4f;
     return p;
 }
 

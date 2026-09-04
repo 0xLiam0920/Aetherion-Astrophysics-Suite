@@ -201,6 +201,7 @@ inline std::string defaultLabelForType(int bodyTypeEnum) {
         case GalaxyBody3DType::NeutronStar:    return "Neutron Star";
         case GalaxyBody3DType::WhiteDwarf:     return "White Dwarf";
         case GalaxyBody3DType::CompanionStar:  return "Companion Star";
+        case GalaxyBody3DType::BlackHole:      return "Black Hole";
     }
     return "Body";
 }

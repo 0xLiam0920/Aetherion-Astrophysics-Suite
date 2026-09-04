@@ -1725,6 +1725,9 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
         // Apply BH offset
         snap.bhPosition = s.config.blackHole.position + bhOffset;
 
+        // Index of a permanent secondary black hole body (OJ 287-style real
+        // binaries), if this profile has one; returns -1 otherwise
+        int secondaryBodyIdx = -1;
         for (size_t i = 0; i < s.orbBodies.size(); ++i) {
             const auto& body = s.orbBodies[i];
             // Bodies tidally disrupted / swallowed by a merger secondary have
@@ -1736,6 +1739,8 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
             snap.orbBodyRadii.push_back(body.bodyRadius());
             snap.orbBodyColors.push_back(body.bodyColor());
             snap.orbBodyTypes.push_back(body.bodyType());
+            if (body.bodyType() == static_cast<int>(GalaxyBody3DType::BlackHole))
+                secondaryBodyIdx = (int)i;
             std::string lbl;
             if (i < curProf.galaxyBodies.size() && !curProf.galaxyBodies[i].label.empty()) {
                 lbl = curProf.galaxyBodies[i].label;
@@ -1794,6 +1799,33 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
             snap.secBHJetColor     = v.jetColor;
             snap.secBHJetRadius    = v.jetRadiusRatio;
             snap.secBHJetLength    = v.jetLengthRatio;
+        } else if (curProf.hasSecondaryBH && secondaryBodyIdx >= 0) {
+            // ── Permanent secondary black hole (e.g. OJ 287) ────────────────
+            // Reuse of the merger system, but this is a genuine standing SMBH binary. We assign the
+            // secondary its own tilted accretion disk and mathemtatically derived
+            // ring, using the same secBH* shader path a merging secondary
+            // uses, so it's actually gonna look like a bh
+            const auto& sc = curProf.secondaryConfig;
+            float pR0  = std::max(0.05f, sc.blackHole.radius);
+            float incl = (secondaryBodyIdx < (int)curProf.galaxyBodies.size())
+                       ? curProf.galaxyBodies[secondaryBodyIdx].inclination : 0.0f;
+            float ci = std::cos(incl), si = std::sin(incl);
+            auto boost = [](glm::vec3 col, float sat) {
+                float lum = glm::dot(col, glm::vec3(0.2126f, 0.7152f, 0.0722f)); // luminance calculation based on Rec. 709 coefficients
+                return glm::max(glm::mix(glm::vec3(lum), col, sat), glm::vec3(0.0f));
+            };
+            snap.secBHActive       = true;
+            snap.secBHDiskNormal   = glm::normalize(glm::vec3(0.18f, ci, si * 0.85f));
+            snap.secBHSpin         = sc.blackHole.spinParameter;
+            snap.secBHDiskInner    = std::clamp(sc.disk.innerRadius / pR0, 1.4f, 4.0f);
+            snap.secBHDiskOuter    = std::clamp(sc.disk.outerRadius / pR0, 6.0f, 26.0f);
+            snap.secBHDiskStrength = 1.0f;
+            snap.secBHColorInner   = boost(bh3dKelvinToRGB(sc.disk.displayTempInner), sc.disk.saturationBoostInner);
+            snap.secBHColorOuter   = boost(bh3dKelvinToRGB(sc.disk.displayTempOuter), sc.disk.saturationBoostOuter);
+            snap.secBHShowJets     = false;
+            snap.secBHJetColor     = sc.jet.color;
+            snap.secBHJetRadius    = std::clamp(sc.jet.radius / pR0, 0.05f, 0.6f);
+            snap.secBHJetLength    = std::clamp(sc.jet.length / pR0, 4.0f, 22.0f);
         } else {
             snap.secBHActive = false;
         }

@@ -42,6 +42,7 @@ int main(int argc, char* argv[]) {
             else if (id == "quarkstar") profileIdx = 21; // Quark Star
             else if (id == "nakedSingularity") profileIdx = 22; // Naked Singularity
             else if (id == "cygnusx1") profileIdx = 11; // Cygnus X-1
+            else if (id == "oj287")    profileIdx = 13; // OJ 287 binary SMBH
             else if (id == "phoenixa") profileIdx = 14; // Fixed: was stale after Cygnus X-1 shifted every index after it by one
             else if (id == "mombhstar") profileIdx = 15; // MoM-BH*-1 BHSTR (fixed: same off-by-one)
             else if (id == "hv2112" || id == "thorne") profileIdx = 16; // HV 2112 / Thorne-Zytkow object

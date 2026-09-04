@@ -1,11 +1,12 @@
 {
-  "description": "SMBH binary system (~1.8e10 Msun primary), blazar, optical outbursts",
+  "description": "SMBH binary system (~1.835e10 Msun primary), blazar, optical outbursts",
   "galaxyBodies": [
     {
-      "ecc": 0.66,
+      "ecc": 0.65,
       "inclination": -0.2,
+      "label": "Secondary SMBH",
       "semiMajorRs": 15.0,
-      "type": "Star"
+      "type": "BlackHole"
     },
     {
       "ecc": 0.3,
@@ -21,11 +22,11 @@
     }
   ],
   "isGalacticCenter": true,
-  "massSolar": 18000000000.0,
+  "massSolar": 18350000000.0,
   "name": "OJ 287",
   "schema": 1,
   "sortKey": 120,
-  "spin": 0.82,
+  "spin": 0.38,
   "visual3d": {
     "bloom": {
       "exposure": 1.15,
@@ -59,7 +60,7 @@
       "displayTempInner": 11000.0,
       "displayTempOuter": 4200.0,
       "halfThickness": 0.011,
-      "innerRadius": 1.75,
+      "innerRadius": 3.2,
       "outerRadius": 26.0,
       "peakTemp": 38000.0,
       "saturationBoostInner": 1.4,
@@ -77,6 +78,18 @@
     "orbital": {
       "bodyRadius": 2.2,
       "semiMajor": 14.0
+    },
+    "secondary": {
+      "enabled": true,
+      "spin": 0.5,
+      "disk": {
+        "displayTempInner": 7000.0,
+        "displayTempOuter": 2600.0,
+        "innerRadius": 2.2,
+        "outerRadius": 9.0,
+        "saturationBoostInner": 1.6,
+        "saturationBoostOuter": 2.4
+      }
     }
   }
 }
