@@ -126,6 +126,8 @@ uniform float bhStarCoreRadius;        // Dark inner cavity radius [Rs]
 uniform vec3  bhStarColorInner;        // Warm inner glow colour
 uniform vec3  bhStarColorOuter;        // Balmer-break deep red edge colour
 uniform float bhStarDensity;           // Overall opacity / emission scaler
+uniform int   bhStarNeutronCore;        // Cheap fix for TZ object to work
+uniform vec3  bhStarCoreColor;          // Hot NS photosphere colour
 
 // Inspiralling secondary black hole's own look (accretion disk / spin / jets)
 // so a merger companion matches how it renders as a standalone primary. The
@@ -1321,12 +1323,14 @@ void traceRay(
     in float bhRadius,
     out vec3 outColor,
     out float outAlpha,
-    out bool absorbed)
+    out bool absorbed,
+    out vec3 outAbsorbPos)
 {
     vec3 pos = ro;
     vec3 dir = normalize(rd);
     
     absorbed = false;
+    outAbsorbPos = bhPos;
     outColor = vec3(0.0);
     outAlpha = 0.0;
     
@@ -1430,6 +1434,7 @@ void traceRay(
         // Check absorption
         if (rBH < bhRadius * 1.01) {
             absorbed = true;
+            outAbsorbPos = pos;
             break;
         }
         
@@ -1705,19 +1710,21 @@ void main() { // note, we chose void here since we're returning early on absorpt
     vec3 color; // Nothing beats a jet 2 holiday - I mean the color of a ray after tracing through the scene
     float alpha;
     bool absorbed; // Whether the ray is to be absorbed/terminated by the event horizon (for the tangential rays that skim the photon sphere, we still want to accumulate the disk emission before absorption)
+    vec3 absorbPos;
     
-    traceRay(rayOrigin, rayDir, blackHolePos, blackHoleRadius, color, alpha, absorbed);
+    traceRay(rayOrigin, rayDir, blackHolePos, blackHoleRadius, color, alpha, absorbed, absorbPos);
     
     // ================================================================
     // PHOTON RING, thin bright ring at the black hole shadow boundary.
     // The shadow edge corresponds to the critical impact parameter:
     //   b_crit = 3√3/2 × Rs ≈ 2.598 Rs  (Schwarzschild)
     // Light at this impact parameter orbits the BH multiple times,
-    // creating a bright thin ring of stacked disk images.
-    // This MUST apply to both absorbed and non-absorbed rays since
-    // the ring straddles the shadow boundary.
+    // creating a bright thin ring of stacked disk images. A buried neutron
+    // star doesn't produce this: skip it entirely for bhStarNeutronCore.
+    // This MUST apply to both absorbed and non-absorbed rays since the ring
+    // straddles the shadow boundary.
     // ================================================================
-    {
+    if (bhStarNeutronCore == 0) {
         // Project BH center to screen-space for proper ring placement
         vec3 toBH = blackHolePos - cameraPos;
         vec3 camRight = normalize(cross(cameraDir, cameraUp));
@@ -1782,13 +1789,21 @@ void main() { // note, we chose void here since we're returning early on absorpt
     }
     
     if (absorbed) { 
-        // If the ray is absorbed by the black hole, we can skip all further processing and just return black 
-        //(or a very dark relative) since nothing escapes the event horizon (law of physics and some shi)
-        // This optimization allows us to terminate rays early and save computation on rays that would contribute no visible light
-        vec3 bgColor = vec3(0.0);  // Black behind the horizon
-        vec3 result = bgColor; 
-        // The traceRay composites everything, so just use the output
-        FragColor = vec4(color, 1.0);
+        // A buried neutron star (Thorne-Zytkow style core) shades as a hot
+        // limb-darkened surface, reusing the orbiting NeutronStar body technique.
+        // Regular black holes keep the original behaviour untouched: the
+        // traceRay/ring compositing already produced the correct result in
+        // `color`, so just output it as-is (nothing escapes the horizon, but
+        // the ring/corona glow right at the boundary is part of that output).
+        vec3 result = color;
+        if (bhStarNeutronCore != 0) {
+            vec3 n  = normalize(absorbPos - blackHolePos);
+            vec3 vw = normalize(cameraPos - absorbPos);
+            float mu = max(dot(n, vw), 0.0);
+            vec3 hot = mix(bhStarCoreColor, vec3(1.0), pow(mu, 2.0) * 0.6);
+            result = hot * (0.5 + 0.5 * mu) * 2.4;
+        }
+        FragColor = vec4(result, 1.0);
         return;
     }
     

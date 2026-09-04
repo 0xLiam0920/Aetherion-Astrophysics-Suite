@@ -61,6 +61,10 @@ uniform float bhStarCoreRadius;        // the inner cavity radius [Rs] parameter
 uniform vec3  bhStarColorInner;       
 uniform vec3  bhStarColorOuter;        
 uniform float bhStarDensity;           
+// When true the core is a real neutron star (e.g. a Thorne-Zytkow object): shade
+// it as a hot limb-darkened surface instead of a black event-horizon silhouette.
+uniform int   bhStarNeutronCore;
+uniform vec3  bhStarCoreColor;
 
 // Inspiralling secondary black hole's own look (accretion disk / spin / jets)
 // so a merger companion matches its standalone profile. The disk and jet sizes
@@ -902,9 +906,20 @@ void main() {
     vec3  color;
     float sceneDist;
     if (absorbed) {
-        // Ray fell through the event horizon: black silhouette. Depth is the
-        // straight-ray distance to the horizon so a body in front still wins.
-        color = vec3(0.0);
+        // A buried neutron star (Thorne-Zytkow style core) shades as a hot
+        // limb-darkened surface, reusing the orbiting NeutronStar body technique,
+        // instead of a flat black event-horizon silhouette.
+        if (bhStarNeutronCore != 0) {
+            vec3 n  = normalize(bentPos - blackHolePos);
+            vec3 vw = normalize(cameraPos - bentPos);
+            float mu = max(dot(n, vw), 0.0);
+            vec3 hot = mix(bhStarCoreColor, vec3(1.0), pow(mu, 2.0) * 0.6);
+            color = hot * (0.5 + 0.5 * mu) * 2.4;
+        } else {
+            // Ray fell through the event horizon: black silhouette.
+            color = vec3(0.0);
+        }
+        // Depth is the straight-ray distance to the horizon so a body in front still wins.
         float eh = intersectSphereT(rayOrigin, rayDir, blackHolePos, blackHoleRadius);
         sceneDist = eh > 0.0 ? eh : length(bentPos - rayOrigin);
     } else {

@@ -1,0 +1,61 @@
+{
+  "description": "Strange/quark star candidate. It's isolated, extremely hot, and compact for a stellar remnant (Teff~7e5 K)",
+  "isGalacticCenter": false,
+  "learnMoreUrl": "https://en.wikipedia.org/wiki/RX_J1856.5%E2%88%923754",
+  "massSolar": 1.4,
+  "name": "RX J1856.5-3754",
+  "schema": 1,
+  "sortKey": 170,
+  "spin": 0.0,
+  "visual3d": {
+    "bhStar": {
+      "coreColor": [
+        0.7,
+        0.82,
+        1.0
+      ],
+      "enabled": false,
+      "neutronStarCore": true
+    },
+    "bloom": {
+      "exposure": 1.0,
+      "intensity": 0.55,
+      "threshold": 0.9
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        2.0,
+        8.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": false
+    },
+    "disk": {
+      "displayTempInner": 1000.0,
+      "displayTempOuter": 1000.0,
+      "halfThickness": 0.0,
+      "innerRadius": 3.0,
+      "outerRadius": 0.0,
+      "peakTemp": 1000.0,
+      "saturationBoostInner": 0.0,
+      "saturationBoostOuter": 0.0
+    },
+    "jet": {
+      "color": [
+        0.1,
+        0.3,
+        0.6
+      ],
+      "length": 4.0,
+      "radius": 0.08
+    }
+  }
+}

@@ -44,6 +44,7 @@ struct BlackHoleProfile {
     bool              defaultHostGalaxy; // Whether host galaxy is visible by default
     bool              defaultLAB;    // Whether Lyman-alpha Blob is visible by default
     bool              defaultCGM;    // Whether Circumgalactic Medium is visible by default
+    bool              IsHypothetical; // Whether this is a hypothetical object (Observation still pending)
 
     // Orbiting bodies (stars / clouds / clusters / companions). When non-empty,
     // these REPLACE the legacy single config.orbital body for this profile.
@@ -107,9 +108,10 @@ inline constexpr MergerSecondary3DPreset MERGER_SECONDARY_3D_PRESETS[] = {
     { "V404 Cygni",       MergerSecondaryKind3D::BlackHole,   9.0,     "X-ray nova microquasar, ~9 M\u2609, plunges to the horizon.", "V404 Cygni" },
     { "Gaia BH2",         MergerSecondaryKind3D::BlackHole,   8.94,    "Dormant BH with red-giant companion, ~8.9 M\u2609.", "Gaia BH2" },
     { "Gaia BH1",         MergerSecondaryKind3D::BlackHole,   9.62,    "Nearest dormant BH, ~9.6 M\u2609, spirals into the primary.", "Gaia BH1" },
-    { "Cygnus X-1",       MergerSecondaryKind3D::BlackHole,   21.2,    "Famous HMXB stellar black hole, ~21 M\u2609." },
+    { "Cygnus X-1",       MergerSecondaryKind3D::BlackHole,   21.2,    "Famous HMXB stellar black hole, ~21 M\u2609.", "Cygnus X-1" },
     { "Gaia BH3",         MergerSecondaryKind3D::BlackHole,   32.7,    "Most massive nearby dormant BH, ~33 M\u2609.", "Gaia BH3" },
     { "LIGO GW150914",    MergerSecondaryKind3D::BlackHole,   62.0,    "First detected merger remnant, ~62 M\u2609, coalesces again." },
+    { "GW170817",         MergerSecondaryKind3D::NeutronStar, 2.74,    "First neutron-star merger seen in gravitational waves AND light: ~2.74 M\u2609 combined, kilonova counterpart AT2017gfo (unlike GW150914's dark BH-BH merger)." },
 
     // -- Exotic / intermediate-mass --
     { "Primordial BH",    MergerSecondaryKind3D::BlackHole,   1.0e-5,  "A tiny ~10^-5 M\u2609 primordial black hole grazes the horizon." },
@@ -124,6 +126,7 @@ inline constexpr MergerSecondary3DPreset MERGER_SECONDARY_3D_PRESETS[] = {
     { "NGC 1277",         MergerSecondaryKind3D::BlackHole,   1.7e10,  "Overmassive SMBH in a compact elliptical, ~1.7\u00d710^10 M\u2609.", "NGC 1277" },
     { "OJ 287",           MergerSecondaryKind3D::BlackHole,   1.8e10,  "SMBH binary system with orbital outbursts, ~1.8\u00d710^10 M\u2609.", "OJ 287" },
     { "TON 618 SMBH",     MergerSecondaryKind3D::BlackHole,   6.6e10,  "The 6.6\u00d710^10 M\u2609 ultramassive quasar, a titanic merger.", "TON 618" },
+    { "Phoenix A",        MergerSecondaryKind3D::BlackHole,   1.0e11,  "By far the largest known BH, ~1.0\u00d710^11 M\u2609, dwarfs every other merger.", "Phoenix A" },
 };
 inline constexpr int NUM_MERGER_SECONDARY_3D_PRESETS =
     (int)(sizeof(MERGER_SECONDARY_3D_PRESETS) / sizeof(MERGER_SECONDARY_3D_PRESETS[0]));
@@ -276,9 +279,323 @@ inline BlackHoleProfile sgrAstar() {
         // Compact, fast-spinning recycled neutron star; emits a coherent
         // radio/X-ray beam every 8.19 ms (~122 Hz). Coloured magenta in-sim
         // purely as a visual identifier against the surrounding S-cluster.
-        {GalaxyBody3DType::NeutronStar,  6.5f, 0.72f, -0.55f, "BLPSR"}
+        {GalaxyBody3DType::NeutronStar,  6.5f, 0.72f, -0.55f, "BLPSR"},
+        // Fun fact: This body was ejected by SGR *A from it' orbit, 
+        // and is now the fastest known unbound star, now ~29 kpc away and
+        // effectively escaping the Galaxy.
+        {GalaxyBody3DType::Star,      140.0f, 0.97f,  0.65f, "S5-HVS1"}
     };
     return p;
+}
+/*--------- MoM-BH*-1, the first "black hole star" (quasi-star) ---------*/
+// A JWST "little red dot" (LRD) at z ~ 6 (≈660 Myr after the Big Bang), interpreted
+// by Naidu et al. (2026, Nature) as a ~100,000 M☉ black hole enshrouded in a
+// dense, solar-system-sized hydrogen shell. It's basically a huge red
+// pseudo-photosphere rather than a standard black hole; so no jets, no
+// BLR, very much metal-free (H + He only), with a Balmer
+// break effect giving it its extremely red colour. 
+inline BlackHoleProfile momBHStar1() {
+    BlackHoleProfile p;
+    p.name        = "MoM-BH*-1";
+    p.description = "Black hole star: ~100,000 Msun core  in a solar-system-sized hydrogen shell (z~6, JWST little red dot)";
+    p.massSolar   = 1.0e5;
+
+    cfg::SimConfig c;
+    // NOTE: Spin is unconstrained; Naidu et al. (2026) only report a mass estimate.
+    c.blackHole.spinParameter = 0.3f;
+    c.blackHole.radius        = 1.0f;
+
+    // No visible accretion disk: the accretion flow is buried inside the
+    // envelope. outerRadius = 0 makes the shader disk condition always false,
+    // exactly as the dormant Gaia profiles do.
+    c.disk.innerRadius   = 3.0f;
+    c.disk.outerRadius   = 0.0f;
+    c.disk.halfThickness = 0.0f;
+    c.disk.peakTemp             = 1000.0f;
+    c.disk.displayTempInner     = 1000.0f;
+    c.disk.displayTempOuter     = 1000.0f;
+    c.disk.saturationBoostInner = 0.0f;
+    c.disk.saturationBoostOuter = 0.0f;
+
+    c.jet.radius = 0.08f; c.jet.length = 4.0f;
+    c.jet.color  = glm::vec3(0.1f, 0.3f, 0.6f);
+
+    // The red hydrogen-based shell.
+    c.bhStar.enabled        = true;
+    c.bhStar.envelopeRadius = 18.0f;
+    c.bhStar.coreRadius     = 2.4f;
+c.bhStar.colorInner     = glm::vec3(0.92f, 0.24f, 0.09f);
+    c.bhStar.colorOuter     = glm::vec3(0.34f, 0.025f, 0.015f);
+    c.bhStar.density        = 1.40f;
+
+    // Pull the camera back so the whole envelope fits in frame.
+    c.camera.initialPos = glm::vec3(0.0f, 6.0f, 42.0f);
+
+    // Soft red bloom: enough to make the cocoon glow without blowing out.
+    c.bloom.threshold = 1.1f;
+    c.bloom.intensity = 0.5f;
+    c.bloom.exposure  = 1.0f;
+
+    p.config = c;
+    p.defaultJets       = false;
+    p.defaultBLR        = false;
+    p.defaultOrbBody    = false;  // one  hole star
+    p.defaultDoppler    = true;
+    p.defaultHostGalaxy = false;  // isolated little red dot (LRD)
+    p.defaultLAB        = false;
+    p.defaultCGM        = false;
+    return p;
+}
+
+/*--------- HV 2112, Thorne-Zytkow object candidate ---------*/
+// A red supergiant in the Small Magellanic Cloud (SMC) whose surface properties
+// (high Rb, Li, Ca; Levesque et al. 2014) match Cannon's (1993) prediction
+// for a Thorne-Zytkow class object: essentially, it's a a neutron star engulfed by / at the heart of
+// of, a red supergiant-like shell, with unusual nuclear fusion burning at
+// the surface subbing in for the core of an ordinary star.
+// As of 2026, the existence of such an object is still heavily classified; (Beasor et al. 2018 argue for a normal
+// RSG), so this profile represents the leading hypothesis and match for HV 2112, not a
+// confirmed match. Do not use for anything concrete.
+inline BlackHoleProfile thorneZytkowHV2112() {
+    BlackHoleProfile p;
+    p.name        = "HV 2112";
+    p.description = "Thorne-Zytkow CANDIDATE OBJECT: a neutron star at the heart of a red supergiant's convective envelope (SMC)";
+    p.massSolar   = 1.4;  // Averaged neutron-star mass, only counting the core/actual NS at the center, not the supergiant envelope
+
+    cfg::SimConfig c;
+    // There is no meaningful spin for this one.
+    // Kerr lensing artifacts leak out from under the envelope.
+    c.blackHole.spinParameter = 0.0f;
+    c.blackHole.radius        = 1.0f;
+
+    // No visible accretion disk: any NS-surface burning is buried far too
+    // deep inside the envelope to render as a disk. Same trick as MoM-BH*-1.
+    c.disk.innerRadius   = 3.0f;
+    c.disk.outerRadius   = 0.0f;
+    c.disk.halfThickness = 0.0f;
+    c.disk.peakTemp             = 1000.0f;
+    c.disk.displayTempInner     = 1000.0f;
+    c.disk.displayTempOuter     = 1000.0f;
+    c.disk.saturationBoostInner = 0.0f;
+    c.disk.saturationBoostOuter = 0.0f;
+
+    c.jet.radius = 0.08f; c.jet.length = 4.0f;
+    c.jet.color  = glm::vec3(0.1f, 0.3f, 0.6f);
+
+    // Cool convective red-supergiant photosphere (Teff ~3200-3400 K), warm
+    // orange-ember rather than MoM-BH*-1's saturated hydrogen red.
+    c.bhStar.enabled        = true;
+    c.bhStar.envelopeRadius = 16.0f;
+    c.bhStar.coreRadius     = 1.6f;   // Small: the neutron star is deeply hidden
+    c.bhStar.colorInner     = glm::vec3(1.00f, 0.42f, 0.15f);
+    c.bhStar.colorOuter     = glm::vec3(0.55f, 0.12f, 0.03f);
+    c.bhStar.density        = 1.70f;  // Denser: reads as a solid stellar surface, not a wispy nebula
+    c.bhStar.neutronStarCore = true;
+    c.bhStar.coreColor       = glm::vec3(0.85f, 0.92f, 1.00f);
+
+    c.camera.initialPos = glm::vec3(0.0f, 5.0f, 38.0f);
+
+    // Warm ember bloom
+    c.bloom.threshold = 1.15f;
+    c.bloom.intensity = 0.42f;
+    c.bloom.exposure  = 0.98f;
+
+    p.config = c;
+    p.defaultJets       = false;
+    p.defaultBLR        = false;
+    p.defaultOrbBody    = false;  // no known active companion
+    p.defaultDoppler    = true;
+    p.defaultHostGalaxy = false;
+    p.defaultLAB        = false;
+    p.defaultCGM        = false;
+    return p;
+}
+
+/*--------- UHZ1, direct-collapse black hole (DCBH) seed candidate ---------*/
+// A JWST NIRSpec + Chandra X-ray source at z~10.1 (~440 Myr after the Big
+// Bang) in the lensed field of Abell 2744 (Bogdan et al. 2023). Its (inferred)
+// mass (~10^7-10^8 Msun) rivals or exceeds its entire host galaxies stellar mass, ironically
+// too massive to have grown from an ordinary ~100 Msun Population III
+// stellar-remnant seed via Eddington-limited accretion this early. The
+// leading explanation is a "heavy seed": a massive pristine gas cloud
+// collapsing directly into a black hole, skipping the stellar phase.
+// Unlike MoM-BH*-1/HV 2112, UHZ1 IS actively, visibly accreting (an obscured,
+// Compton-thick AGN), so it keeps a real disk instead of a shrouding envelope.
+inline BlackHoleProfile uhz1() {
+    BlackHoleProfile p;
+    p.name        = "UHZ1";
+    p.description = "Direct-collapse BH seed candidate (~5e7 Msun, z~10.1), overmassive for its host galaxy";
+    p.massSolar   = 5.0e7;
+
+    cfg::SimConfig c;
+    // A single collapse event, not built up by mergers: no reason to expect
+    // a high net spin this early.
+    c.blackHole.spinParameter = 0.2f;
+    c.blackHole.radius        = 1.0f;
+
+    // Obscured, Compton-thick accretion: faint, compact disk.
+    c.disk.innerRadius   = 4.5f;
+    c.disk.outerRadius   = 14.0f;
+    c.disk.halfThickness = 0.045f;  // Puffy, radiatively inefficient-looking
+    c.disk.peakTemp             = 16000.0f;
+    c.disk.displayTempInner     = 4600.0f;   // Obscured warm glow, not blazing
+    c.disk.displayTempOuter     = 2000.0f;
+    c.disk.saturationBoostInner = 2.0f;
+    c.disk.saturationBoostOuter = 1.6f;
+
+    c.jet.radius = 0.10f; c.jet.length = 6.0f;  // No confirmed jet
+    c.jet.color  = glm::vec3(0.15f, 0.4f, 0.7f);
+
+    // Faint BLR: buried too deep in obscuring gas for a strong broad-line signature.
+    c.blr.innerRadius = 9.0f;
+    c.blr.outerRadius = 18.0f;
+    c.blr.thickness   = 3.0f;
+    c.blr.strength    = 0.15f;
+
+    c.orbital.semiMajor  = 40.0f;
+    c.orbital.bodyRadius = 1.3f;
+    c.camera.initialPos  = glm::vec3(0.0f, 5.0f, 22.0f);
+
+    c.bloom.threshold = 1.3f;
+    c.bloom.intensity = 0.42f;
+    c.bloom.exposure  = 0.95f;
+
+    p.config = c;
+    p.defaultJets       = false;
+    p.defaultBLR        = false;   // Obscured; off by default
+    p.defaultOrbBody    = false;   // No resolved companions this early/this far away
+    p.defaultDoppler    = true;
+    p.defaultHostGalaxy = true;    // Its (comparatively tiny) host galaxy is part of the story
+    p.defaultLAB        = true;    // Forming inside a gas-rich primordial halo
+    p.defaultCGM        = true;    // Dense pristine circumgalactic gas at this epoch
+    return p;
+}
+
+/*--------- RX J1856.5-3754, strange (quark) star candidate ---------*/
+// Description: This is an isolated neutron star (Walter & Matthews 1997), one of the
+// nearest and hottest thermally-emitting compact objects known to man as of 2026 (Teff ~ 7e5 K,
+// radiating almost entirely in  UV/X-ray spectrum). Its measured radius has
+// come out smaller than most stellar remnants, let alone neutron stars. Even for its
+// mass, proposals says it could be a quark star
+// (deconfined up/down/strange quark matter) rather than an ordinary neutron
+// star, though this remains very much unconfirmed.
+// Status of object: mostly implemented, but still under active development.
+inline BlackHoleProfile rxJ1856() {
+    BlackHoleProfile p;
+    p.name        = "RX J1856.5-3754";
+    p.description = "Strange/quark star candidate: isolated, extremely hot compact star (Teff~7e5 K)";
+    p.massSolar   = 1.4;  // Canonical NS-like mass; poorly constrained for an exotic quark-matter EOS
+
+    cfg::SimConfig c;
+    c.blackHole.spinParameter = 0.0f;
+    c.blackHole.radius        = 1.0f;
+
+    // No accretion: isolated cooling compact star.
+    c.disk.innerRadius   = 3.0f;
+    c.disk.outerRadius   = 0.0f;
+    c.disk.halfThickness = 0.0f;
+    c.disk.peakTemp             = 1000.0f;
+    c.disk.displayTempInner     = 1000.0f;
+    c.disk.displayTempOuter     = 1000.0f;
+    c.disk.saturationBoostInner = 0.0f;
+    c.disk.saturationBoostOuter = 0.0f;
+
+    c.jet.radius = 0.08f; c.jet.length = 4.0f;
+    c.jet.color  = glm::vec3(0.1f, 0.3f, 0.6f);
+
+    // Bare exposed surface, no shrouding envelope: only the neutron-star
+    // core-shading kicks in (hot limb-darkened surface, no photon ring).
+    c.bhStar.enabled         = false;
+    c.bhStar.neutronStarCore = true;
+    c.bhStar.coreColor       = glm::vec3(0.70f, 0.82f, 1.00f);  // Extremely hot: icy blue-white
+
+    c.camera.initialPos = glm::vec3(0.0f, 2.0f, 8.0f);  // Close in: no envelope to fill the frame
+
+    c.bloom.threshold = 0.9f;
+    c.bloom.intensity = 0.55f;
+    c.bloom.exposure  = 1.0f;
+
+    p.config = c;
+    p.defaultJets       = false;
+    p.defaultBLR        = false;
+    p.defaultOrbBody    = false;  // No confirmed companion
+    p.defaultDoppler    = true;
+    p.defaultHostGalaxy = false;
+    p.defaultLAB        = false;
+    p.defaultCGM        = false;
+    return p;
+}
+
+/*--------- Gravastar, hypothetical alternative to the common blackhole theory ---------*/
+inline BlackHoleProfile gravastar() { // DISCLAIMER: As of 2026, there is no evidence or candidate for such an object. Simulation is interpreted.
+    BlackHoleProfile p;
+    p.isHypothetical = true;
+    p.name        = "Gravastar";
+    p.description = "Hypothetical alternative to the common blackhole theory. No observational evidence as of 2026.";
+    p.massSolar   = 1.4; // Typical compact object mass
+
+    cfg::SimConfig c;
+    c.blackHole.spinParameter = 0.0f;
+    c.blackHole.radius        = 1.0f;
+
+    p.config = c;
+    p.defaultJets    = false;
+    p.defaultBLR     = false;
+    p.defaultOrbBody = false;
+    p.defaultDoppler = true;
+    p.defaultHostGalaxy = false;
+    p.defaultLAB = false;
+    p.defaultCGM = false;
+
+    return p; 
+}
+
+/*---------- Boson Star, hypothetical compact object made of bosons, invisible to the naked eye ---------- */
+inline BlackHoleProfile bosonStar() { // DISCLAIMER: As of 2026, there is no evidence or candidate for such an object. Simulation is interpreted.
+    BlackHoleProfile p;
+    p.name        = "Boson Star";
+    p.isHypothetical = true;
+    p.description = "Hypothetical compact object made of bosons, invisible to the naked eye. No observational evidence as of 2026.";
+    p.massSolar   = 1.4; // Typical compact object mass
+
+    cfg::SimConfig c;
+    c.blackHole.spinParameter = 0.0f;
+    c.blackHole.radius        = 1.0f;
+
+    p.config = c;
+    p.defaultJets    = false;
+    p.defaultBLR     = false;
+    p.defaultOrbBody = false;
+    p.defaultDoppler = true;
+    p.defaultHostGalaxy = false;
+    p.defaultLAB = false;
+    p.defaultCGM = false;
+
+    return p; 
+}
+
+/*--------- Naked Singularity; hypothetical black-hole like object without an event horizon ---------*/
+inline BlackHoleProfile nakedSingularity() { 
+    BlackHoleProfile p;
+    p.name        = "Naked Singularity";
+    p.isHypothetical = true;
+    p.description = "Hypothetical black-hole like object without an event horizon. No observational evidence as of 2026.";
+    p.massSolar   = 1.4; // Typical compact object mass
+
+    cfg::SimConfig c;
+    c.blackHole.spinParameter = 1.0f; // Extreme spin, potentially exposing the singularity
+    c.blackHole.radius        = 1.0f;
+
+    p.config = c;
+    p.defaultJets    = false;
+    p.defaultBLR     = false;
+    p.defaultOrbBody = false;
+    p.defaultDoppler = true;
+    p.defaultHostGalaxy = false;
+    p.defaultLAB = false;
+    p.defaultCGM = false;
+
+    return p; 
 }
 
 /*--------- 3C 273, First identified quasar ---------*/
@@ -705,6 +1022,59 @@ inline BlackHoleProfile groJ165540() {
     return p;
 }
 
+/*--------- Cygnus X-1 entry (added Sep 01, 2026), first dynamically confirmed stellar/star mass BH ---------*/
+// Description: A ~21.2 Msun BH (Miller-Jones et al. 2021) kept fed by its O9.7 Iab
+// supergiant companion, HDE 226868 in a roughly 5.6-day orbit. Orbital separation estimated at 
+// ~0.2 AU, essentially circular (e ~ 0.018); the semi-major axis below keeps
+// the same compressed simulation-unit convention as every other companion in
+// this catalog
+// Continuum-fitting and other studies favour a near-maximal spin, a
+// small, largely consistent radio-jet has been confirmed
+// (Stirling et al. 2001), fainter and steadier than an object like GRO J1655-40's
+// superluminal ejections.
+inline BlackHoleProfile cygnusX1() {
+    BlackHoleProfile p;
+    p.name        = "Cygnus X-1";
+    p.description = "First confirmed stellar BH (~21.2 Msun), wind-fed HMXB with O-supergiant donor. NOTE: This was initially separately written in May as a prototype, finally embedded/introduced in September";
+    p.massSolar   = 21.2;
+
+    cfg::SimConfig c;
+    c.blackHole.spinParameter = 0.97f;  // Continuum-fitting/Fe-line estimates favour near-maximal spin
+    c.blackHole.radius        = 1.0f;
+    c.disk.innerRadius   = 1.3f;    // VALUE of the ISCO: Pretty small and at near extremal spin
+    c.disk.outerRadius   = 11.0f;
+    c.disk.halfThickness = 0.02f;   // Thin,but compact disk.
+    // kelvinToRGB(10000) → would be icy white inside, matching most black holes anyways.
+    // kelvinToRGB(4000) → warm yellow-orange outer bounds.
+    c.disk.peakTemp             = 34000.0f;
+    c.disk.displayTempInner     = 10000.0f;
+    c.disk.displayTempOuter     = 4000.0f;
+    c.disk.saturationBoostInner = 1.6f;
+    c.disk.saturationBoostOuter = 2.4f;
+    c.jet.radius = 0.18f;
+    c.jet.length = 10.0f;
+    c.jet.color  = glm::vec3(0.25f, 0.75f, 1.4f);
+    c.orbital.semiMajor  = 25.0f;
+    c.orbital.bodyRadius = 1.4f;
+    c.camera.initialPos  = glm::vec3(0.0f, 3.5f, 16.0f);
+    c.bloom.threshold    = 1.2f;
+    c.bloom.intensity    = 0.48f;
+    c.bloom.exposure     = 1.0f;
+    p.config = c;
+    p.defaultJets        = true;   // Mostly uniform radio jet
+    p.defaultBLR         = false;
+    p.defaultOrbBody     = true;
+    p.defaultDoppler     = true;
+    p.defaultHostGalaxy  = false;
+    p.defaultLAB         = false;
+    p.defaultCGM         = false;
+    // HDE 226868, O9.7 Iab blue supergiant donor ( a ~0.2 AU, e ~0.018).
+    p.galaxyBodies = {
+        {GalaxyBody3DType::CompanionStar, 25.0f, 0.018f, 0.05f, "HDE 226868"}
+    };
+    return p;
+}
+
 /*--------- NGC 1277, Overmassive SMBH in compact elliptical ---------*/
 // ~14% of host-galaxy bulge mass, 10× above the M-σ relation.
 // AGN-class accretion; should visually resemble a compact 3C 273 but with
@@ -978,75 +1348,16 @@ inline BlackHoleProfile m87() {
     return p;
 }
 
-/*--------- MoM-BH*-1, the first "black hole star" (quasi-star) ---------*/
-// A JWST "little red dot" (LRD) at z ~ 6 (≈660 Myr after the Big Bang), interpreted
-// by Naidu et al. (2026, Nature) as a ~100,000 M☉ black hole enshrouded in a
-// dense, solar-system-sized hydrogen shell. It's basically a huge red
-// pseudo-photosphere rather than a standard black hole; so no jets, no
-// BLR, very much metal-free (H + He only), with a Balmer
-// break effect giving it its extremely red colour. 
-inline BlackHoleProfile momBHStar1() {
-    BlackHoleProfile p;
-    p.name        = "MoM-BH*-1";
-    p.description = "Black hole star: ~100,000 Msun core cloaked in a solar-system-sized hydrogen envelope (z~6, JWST little red dot)";
-    p.massSolar   = 1.0e5;
-
-    cfg::SimConfig c;
-    // NOTE: Spin is unconstrained; Naidu et al. (2026) only report a mass estimate.
-    c.blackHole.spinParameter = 0.3f;
-    c.blackHole.radius        = 1.0f;
-
-    // No visible accretion disk: the accretion flow is buried inside the
-    // envelope. outerRadius = 0 makes the shader disk condition always false,
-    // exactly as the dormant Gaia profiles do.
-    c.disk.innerRadius   = 3.0f;
-    c.disk.outerRadius   = 0.0f;
-    c.disk.halfThickness = 0.0f;
-    c.disk.peakTemp             = 1000.0f;
-    c.disk.displayTempInner     = 1000.0f;
-    c.disk.displayTempOuter     = 1000.0f;
-    c.disk.saturationBoostInner = 0.0f;
-    c.disk.saturationBoostOuter = 0.0f;
-
-    c.jet.radius = 0.08f; c.jet.length = 4.0f;
-    c.jet.color  = glm::vec3(0.1f, 0.3f, 0.6f);
-
-    // The red hydrogen-based shell.
-    c.bhStar.enabled        = true;
-    c.bhStar.envelopeRadius = 18.0f;
-    c.bhStar.coreRadius     = 2.4f;
-c.bhStar.colorInner     = glm::vec3(0.92f, 0.24f, 0.09f);
-    c.bhStar.colorOuter     = glm::vec3(0.34f, 0.025f, 0.015f);
-    c.bhStar.density        = 1.40f;
-
-    // Pull the camera back so the whole envelope fits in frame.
-    c.camera.initialPos = glm::vec3(0.0f, 6.0f, 42.0f);
-
-    // Soft red bloom: enough to make the cocoon glow without blowing out.
-    c.bloom.threshold = 1.1f;
-    c.bloom.intensity = 0.5f;
-    c.bloom.exposure  = 1.0f;
-
-    p.config = c;
-    p.defaultJets       = false;
-    p.defaultBLR        = false;
-    p.defaultOrbBody    = false;  // one  hole star
-    p.defaultDoppler    = true;
-    p.defaultHostGalaxy = false;  // isolated little red dot (LRD)
-    p.defaultLAB        = false;
-    p.defaultCGM        = false;
-    return p;
-}
-
 /*--------- All profiles in order ---------*/
-inline std::array<BlackHoleProfile, 15> allProfiles() {
+inline std::array<BlackHoleProfile, 22> allProfiles() {
     return { ton618(), sgrAstar(), m87(), qso3c273(), j0529(),
              gaiaBH1(), gaiaBH2(), gaiaBH3(),
-             v404Cyg(), a062000(), groJ165540(),
-             ngc1277(), oj287(), phoenixA(), momBHStar1() };
+             v404Cyg(), a062000(), groJ165540(), cygnusX1(), // Fixes to patch in cyngus as a relevant object. Do this for most objects in future
+             ngc1277(), oj287(), phoenixA(), momBHStar1(), thorneZytkowHV2112(),
+             uhz1(), rxJ1856() };
 }
 
-constexpr int NUM_PROFILES = 15;
+constexpr int NUM_PROFILES = 22; // Note to self: I REALLY need to find a better way to implement profile head count. Using an array is just very, very archaic. 
 
 } // namespace profiles
 
@@ -1076,6 +1387,10 @@ const inline BlackHolePreset BH_PRESETS[] = {
     {"GRO J1655-40",      6.3,    "Microquasar with relativistic jets (~6.3 Msun)"},
     {"NGC 1277",          1.7e10, "Overmassive SMBH in compact elliptical (~1.7e10 Msun)"},
     {"OJ 287",            1.8e10, "SMBH binary, optical outburst source (~1.8e10 Msun)"},
-    {"Phoenix A",         1.0e11, "Largest known BH, Phoenix Cluster BCG (~1.0e11 Msun)"}
+    {"Phoenix A",         1.0e11, "Largest known BH, Phoenix Cluster BCG (~1.0e11 Msun)"},
+    {"Thorne-Żytkow Object HV 2112", 15.0, "Hypothetical Thorne-Żytkow object (~15 Msun)"},
+    {"Gravastar",         1.0e5,  "Hypothetical exotic compact object (~1e5 Msun)"},
+    {"Boson Star",         1.0e3,  "Hypothetical boson star (~1e3 Msun)"}, // TODO: replace these values with estimated ones. Read the papers!
+    {"Quark star",         1.0e3,  "Hypothetical quark star (~1e3 Msun)"}
 };
 constexpr int NUM_BH_PRESETS = sizeof(BH_PRESETS) / sizeof(BH_PRESETS[0]);

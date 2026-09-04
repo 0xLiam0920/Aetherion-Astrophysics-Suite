@@ -84,7 +84,7 @@ inline std::string upperCopy(std::string s) {
 }
 
 inline const char* keyToString(sf::Keyboard::Key k) {
-    switch (k) {
+    switch (k) { // FIXME: this really needs a more efficient redesign later. Doing a linear search through all keys is not ideal.
         case sf::Keyboard::Key::A: return "A"; case sf::Keyboard::Key::B: return "B";
         case sf::Keyboard::Key::C: return "C"; case sf::Keyboard::Key::D: return "D";
         case sf::Keyboard::Key::E: return "E"; case sf::Keyboard::Key::F: return "F";
@@ -113,8 +113,8 @@ inline const char* keyToString(sf::Keyboard::Key k) {
     }
 }
 
-inline bool keyFromString(const std::string& raw, sf::Keyboard::Key& out) {
-    const std::string s = upperCopy(trimCopy(raw));
+inline bool keyFromString(const std::string& raw, sf::Keyboard::Key& out) { // also FIXME: Yikes, this is a very inefficient way to map strings to keys. 
+    const std::string s = upperCopy(trimCopy(raw));                         // A hash map or perfect hash would be much better, but the issue is each system varies. Need to look into a potential library for this.
     if (s.empty()) return false;
     if (s=="A"){out=sf::Keyboard::Key::A;return true;} if (s=="B"){out=sf::Keyboard::Key::B;return true;}
     if (s=="C"){out=sf::Keyboard::Key::C;return true;} if (s=="D"){out=sf::Keyboard::Key::D;return true;}
@@ -338,6 +338,7 @@ struct SceneUniforms {
     GLint showCGM, cgmRadius, cgmColor;
     GLint showBHStar, bhStarEnvelopeRadius, bhStarCoreRadius;
     GLint bhStarColorInner, bhStarColorOuter, bhStarDensity;
+    GLint bhStarNeutronCore, bhStarCoreColor;
     GLint maxStepsOverride;
     GLint diskPeakTemp, diskDisplayTempInner, diskDisplayTempOuter;
     GLint diskSatBoostInner, diskSatBoostOuter;
@@ -404,6 +405,8 @@ struct SceneUniforms {
         u.bhStarColorInner     = prog.uniform("bhStarColorInner");
         u.bhStarColorOuter     = prog.uniform("bhStarColorOuter");
         u.bhStarDensity        = prog.uniform("bhStarDensity");
+        u.bhStarNeutronCore    = prog.uniform("bhStarNeutronCore");
+        u.bhStarCoreColor      = prog.uniform("bhStarCoreColor");
         u.maxStepsOverride     = prog.uniform("maxStepsOverride");
         u.diskPeakTemp         = prog.uniform("diskPeakTemp");
         u.diskDisplayTempInner = prog.uniform("diskDisplayTempInner");
@@ -508,6 +511,8 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glUniform3f(u.bhStarColorInner,     snap.bhStarColorInner.x, snap.bhStarColorInner.y, snap.bhStarColorInner.z);
     glUniform3f(u.bhStarColorOuter,     snap.bhStarColorOuter.x, snap.bhStarColorOuter.y, snap.bhStarColorOuter.z);
     glUniform1f(u.bhStarDensity,        snap.bhStarDensity);
+    glUniform1i(u.bhStarNeutronCore,    snap.bhStarNeutronCore ? 1 : 0);
+    glUniform3f(u.bhStarCoreColor,      snap.bhStarCoreColor.x, snap.bhStarCoreColor.y, snap.bhStarCoreColor.z);
     glUniform1i(u.maxStepsOverride, snap.maxSteps);
 }
 
@@ -1850,6 +1855,8 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.bhStarColorInner     = s.config.bhStar.colorInner;
     snap.bhStarColorOuter     = s.config.bhStar.colorOuter;
     snap.bhStarDensity        = s.config.bhStar.density;
+    snap.bhStarNeutronCore    = s.config.bhStar.neutronStarCore;
+    snap.bhStarCoreColor      = s.config.bhStar.coreColor;
     snap.maxSteps          = std::clamp(s.adaptiveMaxSteps, (s.cinematicMode ? 300 : 200) / 2, s.cinematicMode ? 300 : 200);
     snap.profileName       = s.profilesArr[s.profileIdx].name;
     snap.massSolar         = s.profilesArr[s.profileIdx].massSolar;

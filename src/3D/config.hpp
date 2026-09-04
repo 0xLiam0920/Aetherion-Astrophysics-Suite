@@ -18,20 +18,20 @@ constexpr unsigned int DEFAULT_HEIGHT = 720;
 
 /*--------- Camera ---------*/
 struct CameraConfig {
-    glm::vec3 initialPos     = glm::vec3(0.0f, 6.0f, 25.0f);
-    float     initialYaw     = 0.0f;
-    float     initialPitch   = -0.235f;
-    float     orbitPitch0    = 0.245f;
-    float     orbitPitchMax  = 1.35f;
-    float     minOrbitRadius = 1.6f;
-    float     moveSpeed      = 10.0f;
-    float     fastMultiplier = 3.0f;     // Shift multiplier
-    float     rotateSpeed    = 0.9f;
-    float     zoomSpeed      = 10.0f;
-    float     mouseSensitivity = 0.0025f;
-    float     freelookPitchLimit = 1.5607f;  // Nearly π/2
-    float     fov            = 60.0f;
-};
+    glm::vec3 initialPos     = glm::vec3(0.0f, 6.0f, 25.0f);    /*  ⡴⠒⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⠉⠳⡆⠀  */
+    float     initialYaw     = 0.0f;                            /*  ⣇⠰⠉⢙⡄⠀⠀⣴⠖⢦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣆⠁⠙⡆   */
+    float     initialPitch   = -0.235f;                         /* ⠘⡇⢠⠞⠉⠙⣾⠃⢀⡼⠀⠀⠀⠀⠀⠀⠀⢀⣼⡀⠄⢷⣄⣀⠀⠀⠀⠀⠀⠀⠀⠰⠒⠲⡄⠀⣏⣆⣀⡍  */
+    float     orbitPitch0    = 0.245f;                          /*⠀ ⢠⡏⠀⡤⠒⠃⠀⡜⠀⠀⠀⠀⠀⢀⣴⠾⠛⡁⠀⠀⢀⣈⡉⠙⠳⣤⡀⠀⠀⠀⠘⣆⠀⣇⡼⢋⠀⠀⢱   */
+    float     orbitPitchMax  = 1.35f;                           /* ⠀⠘⣇⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⡴⢋⡣⠊⡩⠋⠀⠀⠀⠣⡉⠲⣄⠀⠙⢆⠀⠀⠀⣸⠀⢉⠀⢀⠿⠀⢸   */       ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀             ⠀⠀⠀⠀⠀⠀⠀⠀⠀
+    float     minOrbitRadius = 1.6f;                            /*⠀⠀ ⠸⡄⠀⠈⢳⣄⡇⠀⠀⢀⡞⠀⠈⠀⢀⣴⣾⣿⣿⣿⣿⣦⡀⠀⠀⠀⠈⢧⠀⠀⢳⣰⠁⠀⠀⠀⣠⠃   */
+    float     moveSpeed      = 10.0f;                           /*     ⠘⢄⣀⣸⠃⠀⠀⠀⡸⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠀⠀⠈⣇⠀⠀⠙⢄⣀⠤⠚⠁⠀  */
+    float     fastMultiplier = 3.0f;     // Shift multiplier    /* ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⠀⠀⢹⠀⠀⠀         */
+    float     rotateSpeed    = 0.9f;                            /*             ⡀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠀⠀⢘⠀⠀           */
+    float     zoomSpeed      = 10.0f;                           /* ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⢰⣿⣿⣿⡿⠛⠁⠀⠉⠛⢿⣿⣿⣿⣧⠀⠀⣼⠀⠀⠀⠀⠀       */
+    float     mouseSensitivity = 0.0025f;                       /* ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⡀⣸⣿⣿⠟⠀⠀⠀⠀⠀⠀⠀⢻⣿⣿⣿⡀⢀⠇⠀⠀⠀⠀⠀       */
+    float     freelookPitchLimit = 1.5607f;  // Nearly π/2      /* ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡇⠹⠿⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢿⡿⠁⡏⠀⠀⠀⠀⠀        */        
+    float     fov            = 60.0f;                           /*               ⠻⣤⣞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢢⣀⣠⠇⠀⠀⠀⠀         */
+};                                                              /*                  ⠙⠲⢤⣀⣀⠀⢀⣀⣀⠤⠒⠉⠀.               */
 
 /*--------- Accretion disk ---------*/
 struct DiskConfig {
@@ -103,6 +103,12 @@ struct BHStarConfig {
     glm::vec3 colorInner     = glm::vec3(0.92f, 0.24f, 0.09f);
     glm::vec3 colorOuter     = glm::vec3(0.34f, 0.025f, 0.015f);
     float     density        = 1.40f;  // overall opacity scale (use with caution; >1 can be very opaque)
+    // When true, the core renders as a neutron star surface
+    // (same technique as the orbiting NeutronStar body archetype) instead of
+    // a black hole.
+    // This is mainly a cheap fix for the TZ object, where the buried core is a neutron star.
+    bool      neutronStarCore = false;
+    glm::vec3 coreColor       = glm::vec3(0.85f, 0.92f, 1.00f);  // Hot near-white NS photosphere
 };
 
 /*--------- Bloom / post-processing ---------*/
@@ -140,37 +146,8 @@ inline BloomConfig cinematicBloom() {
     return bc; // Returned by value, relying on NRVO to elide the copy. It's only a
                // handful of floats, so the cost is negligible either way.
 }
-
 // Default configuration (TON 618 scenario)
 inline SimConfig defaultConfig() { return SimConfig{}; }
 
 } // namespace cfg
 
-/*
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⢃⠸⠛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣛⣛⣛⠺⣿⣿⣶⣜⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⢨⣸⢰⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢾⣿⣿⣿⣿⣶⣜⢿⣿⣷⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⢋⢡⣷⢿⢸⢰⡿⢩⣶⣶⣿⣷⣶⣜⢻⣿⣾⣶⣶⣬⣙⠻⣿⣾⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⢸⡇⣿⣺⢸⡇⣰⢿⣿⣶⣶⣌⢻⣿⣧⢉⣴⣶⣶⣶⣶⣿⣿⣿⣿⣿⣶⣶⣬⣙⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⡞⣿⣸⣺⣼⡅⣿⢺⣿⣿⣿⡟⣸⣿⢻⡎⣿⣿⣿⣿⣿⡇⠀⢉⠉⠝⠛⠛⢻⣿⣿⣿⣷⡙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⢹⣿⣷⣿⢁⢻⡸⢿⣿⣿⣼⣿⢃⣿⣿⢸⣿⣿⣿⣿⣿⣶⣶⣶⣤⣐⢀⣾⣿⣿⣿⣿⠿⣷⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⡗⣿⣿⣿⣇⡷⡸⢷⢸⣿⡟⣭⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⢐⡂⢻⣇⢙⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣧⢿⣿⣿⣇⡀⣹⣎⢳⣿⢱⣿⣿⢹⣿⡟⣸⣿⣿⣿⣿⢋⣴⣾⣶⣮⡍⠁⠀⠅⣠⣘⠻⣿⣌⠈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣹⣿⣿⣿⡿⢸⣿⢸⣿⣿⡿⣿⣇⣿⢃⣿⣿⣿⣿⡏⣼⣿⣄⣀⣿⣿⡌⣶⠀⢸⣿⣿⡎⣿⣿⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣗⣿⣿⣿⣷⢺⣿⣇⢻⣿⣷⣶⣾⡟⣸⣿⣿⣿⣿⣿⣘⠻⣿⣿⣿⡟⣸⣿⣿⣿⣿⡟⣸⣿⣿⢰⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣧⢻⣿⣿⣿⣸⣿⣿⣇⢈⣛⣛⣡⣾⣿⣿⣿⣿⣿⣿⣿⣿⠶⢒⣠⣴⣶⣄⡈⣥⣾⣿⣿⣿⣿⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣸⣿⣿⣿⢿⣿⣿⣿⡌⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡐⣮⣟⣛⠿⣿⣿⣿⣿⣶⣙⢿⡿⢠⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣞⢿⡿⣸⣿⣿⣿⣿⣿⣌⢻⣿⣿⣿⣿⣿⡿⣫⣴⣾⣿⡘⢿⣿⣿⣿⣶⣮⣍⣛⠿⢿⠶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣷⣾⣿⣿⣿⣿⣿⣿⣿⣶⡘⢿⣿⡿⣰⣿⣿⣿⣿⣿⣿⣌⣟⣩⣭⣭⣭⣭⣭⠍⣱⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣌⣓⠻⠿⣿⣿⣿⣿⣿⣿⠿⠿⠿⣛⣩⣥⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-
-*/

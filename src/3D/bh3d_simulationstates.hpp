@@ -71,7 +71,7 @@ struct PhysicsSnapshot {
     bool                   orbBodyEnabled;
 
     /*--------- Large-scale structures ---------*/
-    bool hostGalaxyEnabled; // the host galaxy itself
+    bool hostGalaxyEnabled; // the brightness/light of the host galaxy itself
     bool labEnabled;        // Lyman-alpha Blob overlay
     bool cgmEnabled;        // circumgalactic medium (diffuse gas halo around the galaxy)
 
@@ -82,6 +82,8 @@ struct PhysicsSnapshot {
     glm::vec3 bhStarColorInner     = glm::vec3(0.92f, 0.24f, 0.09f);
     glm::vec3 bhStarColorOuter     = glm::vec3(0.34f, 0.025f, 0.015f);
     float     bhStarDensity        = 1.40f;
+    bool      bhStarNeutronCore    = false; // temp patch condition for Thorne-Zytkow object (TZ)
+    glm::vec3 bhStarCoreColor      = glm::vec3(0.85f, 0.92f, 1.00f);
 
     /*--------- Render settings (more steps = higher quality, slower) ---------*/
     int maxSteps;

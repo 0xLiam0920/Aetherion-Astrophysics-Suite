@@ -37,8 +37,16 @@ int main(int argc, char* argv[]) {
             else if (id == "sgra")     profileIdx = 1;
             else if (id == "3c273")    profileIdx = 2;
             else if (id == "j0529")    profileIdx = 3;
-            else if (id == "phoenixa") profileIdx = 12;
-            else if (id == "mombhstar") profileIdx = 14;  // MoM-BH*-1 BHSTR
+            else if (id == "gravastar") profileIdx = 19; // Gravastar
+            else if (id == "bosonstar") profileIdx = 20; // Boson Star
+            else if (id == "quarkstar") profileIdx = 21; // Quark Star
+            else if (id == "nakedSingularity") profileIdx = 22; // Naked Singularity
+            else if (id == "cygnusx1") profileIdx = 11; // Cygnus X-1
+            else if (id == "phoenixa") profileIdx = 14; // Fixed: was stale after Cygnus X-1 shifted every index after it by one
+            else if (id == "mombhstar") profileIdx = 15; // MoM-BH*-1 BHSTR (fixed: same off-by-one)
+            else if (id == "hv2112" || id == "thorne") profileIdx = 16; // HV 2112 / Thorne-Zytkow object
+            else if (id == "uhz1")     profileIdx = 17; // UHZ1 direct-collapse BH seed candidate
+            else if (id == "rxj1856" || id == "quarkstar") profileIdx = 18; // RX J1856.5-3754 strange/quark star candidate
             else std::cerr << "Unknown preset: " << id << ", using default.\n";
             break;
         }

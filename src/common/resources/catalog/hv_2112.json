@@ -1,0 +1,74 @@
+{
+  "description": "Thorne-Zytkow CANDIDATE OBJECT: a neutron star at the heart of a red supergiant's convective envelope (SMC)",
+  "isGalacticCenter": false,
+  "learnMoreUrl": "https://en.wikipedia.org/wiki/Thorne%E2%80%93%C5%BBytkow_object",
+  "massSolar": 1.4,
+  "name": "HV 2112",
+  "schema": 1,
+  "sortKey": 150,
+  "spin": 0.0,
+  "visual3d": {
+    "bhStar": {
+      "colorInner": [
+        1.0,
+        0.42,
+        0.15
+      ],
+      "colorOuter": [
+        0.55,
+        0.12,
+        0.03
+      ],
+      "coreColor": [
+        0.85,
+        0.92,
+        1.0
+      ],
+      "coreRadius": 1.6,
+      "density": 1.7,
+      "enabled": true,
+      "envelopeRadius": 16.0,
+      "neutronStarCore": true
+    },
+    "bloom": {
+      "exposure": 0.98,
+      "intensity": 0.42,
+      "threshold": 1.15
+    },
+    "camera": {
+      "initialPos": [
+        0.0,
+        5.0,
+        38.0
+      ]
+    },
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": false
+    },
+    "disk": {
+      "displayTempInner": 1000.0,
+      "displayTempOuter": 1000.0,
+      "halfThickness": 0.0,
+      "innerRadius": 3.0,
+      "outerRadius": 0.0,
+      "peakTemp": 1000.0,
+      "saturationBoostInner": 0.0,
+      "saturationBoostOuter": 0.0
+    },
+    "jet": {
+      "color": [
+        0.1,
+        0.3,
+        0.6
+      ],
+      "length": 4.0,
+      "radius": 0.08
+    }
+  }
+}

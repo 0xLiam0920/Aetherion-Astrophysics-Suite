@@ -89,8 +89,10 @@ inline void applyBHStar(const json& j, cfg::BHStarConfig& c) { // added to suppo
     c.envelopeRadius = j.value("envelopeRadius", c.envelopeRadius);
     c.coreRadius     = j.value("coreRadius",     c.coreRadius);
     c.density        = j.value("density",        c.density);
+    c.neutronStarCore = j.value("neutronStarCore", c.neutronStarCore);
     if (j.contains("colorInner")) c.colorInner = vec3Of(j["colorInner"], c.colorInner);
     if (j.contains("colorOuter")) c.colorOuter = vec3Of(j["colorOuter"], c.colorOuter);
+    if (j.contains("coreColor"))  c.coreColor  = vec3Of(j["coreColor"],  c.coreColor);
 }
 
 inline BlackHoleProfile toProfile(const catalog::Entry& e) {

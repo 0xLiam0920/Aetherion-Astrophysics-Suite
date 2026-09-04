@@ -42,6 +42,13 @@
       "label": "BLPSR",
       "semiMajorRs": 6.5,
       "type": "NeutronStar"
+    },
+    {
+      "ecc": 0.97,
+      "inclination": 0.65,
+      "label": "S5-HVS1",
+      "semiMajorRs": 140.0,
+      "type": "Star"
     }
   ],
   "isGalacticCenter": true,

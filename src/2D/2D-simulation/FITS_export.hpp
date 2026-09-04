@@ -73,9 +73,7 @@ static std::string keyVal(const std::string& key, int val, const std::string& co
         snprintf(buf, 81, "%-8s= %20d", key.c_str(), val);
     else
         snprintf(buf, 81, "%-8s= %20d / %s", key.c_str(), val, comment.c_str());
-
-    // bug found - turns out writing 81 null terminators for FITS headers causes... problems. Who would have thought? 
-    // So we need to overwrite that null terminator (and any chars after it) back to spaces to ensure the entire 80-char card is valid.
+    // Ensure the result is exactly 80 characters, replacing any null terminator with spaces.
     std::string result(buf, 80);
     for (size_t i = result.find('\0'); i < 80; ++i) {
         result[i] = ' ';
