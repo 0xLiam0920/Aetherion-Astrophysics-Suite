@@ -53,6 +53,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -83,68 +84,68 @@ inline std::string upperCopy(std::string s) {
     return s;
 }
 
+// This is not great, but it should work. TODO: Look into SFML 3x key name utilities.
+inline constexpr std::pair<sf::Keyboard::Key, const char*> kKeyNames[] = {
+    {sf::Keyboard::Key::A, "A"}, {sf::Keyboard::Key::B, "B"}, {sf::Keyboard::Key::C, "C"},
+    {sf::Keyboard::Key::D, "D"}, {sf::Keyboard::Key::E, "E"}, {sf::Keyboard::Key::F, "F"},
+    {sf::Keyboard::Key::G, "G"}, {sf::Keyboard::Key::H, "H"}, {sf::Keyboard::Key::I, "I"},
+    {sf::Keyboard::Key::J, "J"}, {sf::Keyboard::Key::K, "K"}, {sf::Keyboard::Key::L, "L"},
+    {sf::Keyboard::Key::M, "M"}, {sf::Keyboard::Key::N, "N"}, {sf::Keyboard::Key::O, "O"},
+    {sf::Keyboard::Key::P, "P"}, {sf::Keyboard::Key::Q, "Q"}, {sf::Keyboard::Key::R, "R"},
+    {sf::Keyboard::Key::S, "S"}, {sf::Keyboard::Key::T, "T"}, {sf::Keyboard::Key::U, "U"},
+    {sf::Keyboard::Key::V, "V"}, {sf::Keyboard::Key::W, "W"}, {sf::Keyboard::Key::X, "X"},
+    {sf::Keyboard::Key::Y, "Y"}, {sf::Keyboard::Key::Z, "Z"},
+    {sf::Keyboard::Key::Num0, "NUM0"}, {sf::Keyboard::Key::Num1, "NUM1"},
+    {sf::Keyboard::Key::Num2, "NUM2"}, {sf::Keyboard::Key::Num3, "NUM3"},
+    {sf::Keyboard::Key::Num4, "NUM4"}, {sf::Keyboard::Key::Num5, "NUM5"},
+    {sf::Keyboard::Key::Num6, "NUM6"}, {sf::Keyboard::Key::Num7, "NUM7"},
+    {sf::Keyboard::Key::Num8, "NUM8"}, {sf::Keyboard::Key::Num9, "NUM9"},
+    {sf::Keyboard::Key::Space, "SPACE"}, {sf::Keyboard::Key::LControl, "LCTRL"},
+    {sf::Keyboard::Key::LShift, "LSHIFT"}, {sf::Keyboard::Key::Escape, "ESCAPE"},
+    {sf::Keyboard::Key::Equal, "="}, {sf::Keyboard::Key::Hyphen, "-"},
+};
+
+// Accepted aliases per key (superset of kKeyNames) for parsing user/config input.
+inline constexpr std::pair<std::string_view, sf::Keyboard::Key> kKeyAliases[] = {
+    {"A", sf::Keyboard::Key::A}, {"B", sf::Keyboard::Key::B}, {"C", sf::Keyboard::Key::C},
+    {"D", sf::Keyboard::Key::D}, {"E", sf::Keyboard::Key::E}, {"F", sf::Keyboard::Key::F},
+    {"G", sf::Keyboard::Key::G}, {"H", sf::Keyboard::Key::H}, {"I", sf::Keyboard::Key::I},
+    {"J", sf::Keyboard::Key::J}, {"K", sf::Keyboard::Key::K}, {"L", sf::Keyboard::Key::L},
+    {"M", sf::Keyboard::Key::M}, {"N", sf::Keyboard::Key::N}, {"O", sf::Keyboard::Key::O},
+    {"P", sf::Keyboard::Key::P}, {"Q", sf::Keyboard::Key::Q}, {"R", sf::Keyboard::Key::R},
+    {"S", sf::Keyboard::Key::S}, {"T", sf::Keyboard::Key::T}, {"U", sf::Keyboard::Key::U},
+    {"V", sf::Keyboard::Key::V}, {"W", sf::Keyboard::Key::W}, {"X", sf::Keyboard::Key::X},
+    {"Y", sf::Keyboard::Key::Y}, {"Z", sf::Keyboard::Key::Z},
+    {"NUM0", sf::Keyboard::Key::Num0}, {"0", sf::Keyboard::Key::Num0},
+    {"NUM1", sf::Keyboard::Key::Num1}, {"1", sf::Keyboard::Key::Num1},
+    {"NUM2", sf::Keyboard::Key::Num2}, {"2", sf::Keyboard::Key::Num2},
+    {"NUM3", sf::Keyboard::Key::Num3}, {"3", sf::Keyboard::Key::Num3},
+    {"NUM4", sf::Keyboard::Key::Num4}, {"4", sf::Keyboard::Key::Num4},
+    {"NUM5", sf::Keyboard::Key::Num5}, {"5", sf::Keyboard::Key::Num5},
+    {"NUM6", sf::Keyboard::Key::Num6}, {"6", sf::Keyboard::Key::Num6},
+    {"NUM7", sf::Keyboard::Key::Num7}, {"7", sf::Keyboard::Key::Num7},
+    {"NUM8", sf::Keyboard::Key::Num8}, {"8", sf::Keyboard::Key::Num8},
+    {"NUM9", sf::Keyboard::Key::Num9}, {"9", sf::Keyboard::Key::Num9},
+    {"SPACE", sf::Keyboard::Key::Space},
+    {"LCTRL", sf::Keyboard::Key::LControl}, {"LCONTROL", sf::Keyboard::Key::LControl}, {"CTRL", sf::Keyboard::Key::LControl},
+    {"LSHIFT", sf::Keyboard::Key::LShift}, {"SHIFT", sf::Keyboard::Key::LShift},
+    {"ESC", sf::Keyboard::Key::Escape}, {"ESCAPE", sf::Keyboard::Key::Escape},
+    {"=", sf::Keyboard::Key::Equal}, {"EQUAL", sf::Keyboard::Key::Equal}, {"PLUS", sf::Keyboard::Key::Equal}, {"+", sf::Keyboard::Key::Equal},
+    {"-", sf::Keyboard::Key::Hyphen}, {"HYPHEN", sf::Keyboard::Key::Hyphen}, {"MINUS", sf::Keyboard::Key::Hyphen},
+};
+
 inline const char* keyToString(sf::Keyboard::Key k) {
-    switch (k) { // FIXME: this really needs a more efficient redesign later. Doing a linear search through all keys is not ideal.
-        case sf::Keyboard::Key::A: return "A"; case sf::Keyboard::Key::B: return "B";
-        case sf::Keyboard::Key::C: return "C"; case sf::Keyboard::Key::D: return "D";
-        case sf::Keyboard::Key::E: return "E"; case sf::Keyboard::Key::F: return "F";
-        case sf::Keyboard::Key::G: return "G"; case sf::Keyboard::Key::H: return "H";
-        case sf::Keyboard::Key::I: return "I"; case sf::Keyboard::Key::J: return "J";
-        case sf::Keyboard::Key::K: return "K"; case sf::Keyboard::Key::L: return "L";
-        case sf::Keyboard::Key::M: return "M"; case sf::Keyboard::Key::N: return "N";
-        case sf::Keyboard::Key::O: return "O"; case sf::Keyboard::Key::P: return "P";
-        case sf::Keyboard::Key::Q: return "Q"; case sf::Keyboard::Key::R: return "R";
-        case sf::Keyboard::Key::S: return "S"; case sf::Keyboard::Key::T: return "T";
-        case sf::Keyboard::Key::U: return "U"; case sf::Keyboard::Key::V: return "V";
-        case sf::Keyboard::Key::W: return "W"; case sf::Keyboard::Key::X: return "X";
-        case sf::Keyboard::Key::Y: return "Y"; case sf::Keyboard::Key::Z: return "Z";
-        case sf::Keyboard::Key::Num0: return "NUM0"; case sf::Keyboard::Key::Num1: return "NUM1";
-        case sf::Keyboard::Key::Num2: return "NUM2"; case sf::Keyboard::Key::Num3: return "NUM3";
-        case sf::Keyboard::Key::Num4: return "NUM4"; case sf::Keyboard::Key::Num5: return "NUM5";
-        case sf::Keyboard::Key::Num6: return "NUM6"; case sf::Keyboard::Key::Num7: return "NUM7";
-        case sf::Keyboard::Key::Num8: return "NUM8"; case sf::Keyboard::Key::Num9: return "NUM9";
-        case sf::Keyboard::Key::Space:    return "SPACE";
-        case sf::Keyboard::Key::LControl: return "LCTRL";
-        case sf::Keyboard::Key::LShift:   return "LSHIFT";
-        case sf::Keyboard::Key::Escape:   return "ESCAPE";
-        case sf::Keyboard::Key::Equal:    return "=";
-        case sf::Keyboard::Key::Hyphen:   return "-";
-        default: return "UNKNOWN";
-    }
+    for (const auto& [key, name] : kKeyNames)
+        if (key == k) return name;
+    return "UNKNOWN";
 }
 
-inline bool keyFromString(const std::string& raw, sf::Keyboard::Key& out) { // also FIXME: Yikes, this is a very inefficient way to map strings to keys. 
-    const std::string s = upperCopy(trimCopy(raw));                         // A hash map or perfect hash would be much better, but the issue is each system varies. Need to look into a potential library for this.
+inline bool keyFromString(const std::string& raw, sf::Keyboard::Key& out) {
+    const std::string s = upperCopy(trimCopy(raw));
     if (s.empty()) return false;
-    if (s=="A"){out=sf::Keyboard::Key::A;return true;} if (s=="B"){out=sf::Keyboard::Key::B;return true;}
-    if (s=="C"){out=sf::Keyboard::Key::C;return true;} if (s=="D"){out=sf::Keyboard::Key::D;return true;}
-    if (s=="E"){out=sf::Keyboard::Key::E;return true;} if (s=="F"){out=sf::Keyboard::Key::F;return true;}
-    if (s=="G"){out=sf::Keyboard::Key::G;return true;} if (s=="H"){out=sf::Keyboard::Key::H;return true;}
-    if (s=="I"){out=sf::Keyboard::Key::I;return true;} if (s=="J"){out=sf::Keyboard::Key::J;return true;}
-    if (s=="K"){out=sf::Keyboard::Key::K;return true;} if (s=="L"){out=sf::Keyboard::Key::L;return true;}
-    if (s=="M"){out=sf::Keyboard::Key::M;return true;} if (s=="N"){out=sf::Keyboard::Key::N;return true;}
-    if (s=="O"){out=sf::Keyboard::Key::O;return true;} if (s=="P"){out=sf::Keyboard::Key::P;return true;}
-    if (s=="Q"){out=sf::Keyboard::Key::Q;return true;} if (s=="R"){out=sf::Keyboard::Key::R;return true;}
-    if (s=="S"){out=sf::Keyboard::Key::S;return true;} if (s=="T"){out=sf::Keyboard::Key::T;return true;}
-    if (s=="U"){out=sf::Keyboard::Key::U;return true;} if (s=="V"){out=sf::Keyboard::Key::V;return true;}
-    if (s=="W"){out=sf::Keyboard::Key::W;return true;} if (s=="X"){out=sf::Keyboard::Key::X;return true;}
-    if (s=="Y"){out=sf::Keyboard::Key::Y;return true;} if (s=="Z"){out=sf::Keyboard::Key::Z;return true;}
-    if (s=="NUM0"||s=="0"){out=sf::Keyboard::Key::Num0;return true;}
-    if (s=="NUM1"||s=="1"){out=sf::Keyboard::Key::Num1;return true;}
-    if (s=="NUM2"||s=="2"){out=sf::Keyboard::Key::Num2;return true;}
-    if (s=="NUM3"||s=="3"){out=sf::Keyboard::Key::Num3;return true;}
-    if (s=="NUM4"||s=="4"){out=sf::Keyboard::Key::Num4;return true;}
-    if (s=="NUM5"||s=="5"){out=sf::Keyboard::Key::Num5;return true;}
-    if (s=="NUM6"||s=="6"){out=sf::Keyboard::Key::Num6;return true;}
-    if (s=="NUM7"||s=="7"){out=sf::Keyboard::Key::Num7;return true;}
-    if (s=="NUM8"||s=="8"){out=sf::Keyboard::Key::Num8;return true;}
-    if (s=="NUM9"||s=="9"){out=sf::Keyboard::Key::Num9;return true;}
-    if (s=="SPACE"){out=sf::Keyboard::Key::Space;return true;}
-    if (s=="LCTRL"||s=="LCONTROL"||s=="CTRL"){out=sf::Keyboard::Key::LControl;return true;}
-    if (s=="LSHIFT"||s=="SHIFT"){out=sf::Keyboard::Key::LShift;return true;}
-    if (s=="ESC"||s=="ESCAPE"){out=sf::Keyboard::Key::Escape;return true;}
-    if (s=="="||s=="EQUAL"||s=="PLUS"||s=="+"){out=sf::Keyboard::Key::Equal;return true;}
-    if (s=="-"||s=="HYPHEN"||s=="MINUS"){out=sf::Keyboard::Key::Hyphen;return true;}
+    for (const auto& [alias, key] : kKeyAliases) {
+        if (s == alias) { out = key; return true; }
+    }
     return false;
 }
 

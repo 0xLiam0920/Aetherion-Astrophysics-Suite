@@ -1,0 +1,20 @@
+{
+  "description": "Hypothetical black-hole like object without an event horizon. No observational evidence as of 2026.",
+  "isGalacticCenter": false,
+  "massSolar": 1.4,
+  "name": "Naked Singularity",
+  "schema": 1,
+  "sortKey": 200,
+  "spin": 1.0,
+  "visual3d": {
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": false
+    }
+  }
+}

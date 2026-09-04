@@ -44,7 +44,7 @@ struct BlackHoleProfile {
     bool              defaultHostGalaxy; // Whether host galaxy is visible by default
     bool              defaultLAB;    // Whether Lyman-alpha Blob is visible by default
     bool              defaultCGM;    // Whether Circumgalactic Medium is visible by default
-    bool              IsHypothetical; // Whether this is a hypothetical object (Observation still pending)
+    bool              isHypothetical; // Whether this is a hypothetical object (Observation still pending)
 
     // Orbiting bodies (stars / clouds / clusters / companions). When non-empty,
     // these REPLACE the legacy single config.orbital body for this profile.
@@ -275,11 +275,15 @@ inline BlackHoleProfile sgrAstar() {
         {GalaxyBody3DType::Star,        40.0f, 0.30f,  0.05f, "IRS 16"},
         {GalaxyBody3DType::GasCloud,    60.0f, 0.15f,  0.25f, "Circumnuclear Gas"},
         {GalaxyBody3DType::Star,        30.0f, 0.50f,  0.45f, "S-cluster"},
-        // BLPSR, 8.19 ms pulsar in tight relativistic orbit around Sgr A*.
-        // Compact, fast-spinning recycled neutron star; emits a coherent
-        // radio/X-ray beam every 8.19 ms (~122 Hz). Coloured magenta in-sim
-        // purely as a visual identifier against the surrounding S-cluster.
-        {GalaxyBody3DType::NeutronStar,  6.5f, 0.72f, -0.55f, "BLPSR"},
+        // BLPSR: a (candidate) 8.19 ms pulsar found in a super tight orbit around
+        // Sgr A* (Perez et al. 2026, Breakthrough Listen). DISCLAIMER: this is a SINGLE,
+        // UNCONFIRMED detection that did not reappear in further observations in accordance with the cited paper;
+        // the discovery team explicitly states they "remain highly skeptical."
+        // No orbit has been measured, the paper only explores illustrative
+        // parameters under the assumption the candidate is real. The a=6.5 Rs,
+        // e=0.72 values below are therefore NOT sourced, but realistically 
+        // fabricated for visualization only. TODO: either create. a toggle for this object or just remove it entirely.
+        {GalaxyBody3DType::NeutronStar,  6.5f, 0.72f, -0.55f, "BLPSR (unconfirmed)"},
         // Fun fact: This body was ejected by SGR *A from it' orbit, 
         // and is now the fastest known unbound star, now ~29 kpc away and
         // effectively escaping the Galaxy.
@@ -424,7 +428,7 @@ inline BlackHoleProfile thorneZytkowHV2112() {
 inline BlackHoleProfile uhz1() {
     BlackHoleProfile p;
     p.name        = "UHZ1";
-    p.description = "Direct-collapse BH seed candidate (~5e7 Msun, z~10.1), overmassive for its host galaxy";
+    p.description = "Direct-collapse BH seed candidate of ~5e7 Msun, z~10.1, massive when compared to its' host galaxy";
     p.massSolar   = 5.0e7;
 
     cfg::SimConfig c;
@@ -483,7 +487,7 @@ inline BlackHoleProfile uhz1() {
 inline BlackHoleProfile rxJ1856() {
     BlackHoleProfile p;
     p.name        = "RX J1856.5-3754";
-    p.description = "Strange/quark star candidate: isolated, extremely hot compact star (Teff~7e5 K)";
+    p.description = "Strange/quark star candidate. It's isolated, extremely hot, and compact for a stellar remnant (Teff~7e5 K)";
     p.massSolar   = 1.4;  // Canonical NS-like mass; poorly constrained for an exotic quark-matter EOS
 
     cfg::SimConfig c;
@@ -603,7 +607,7 @@ inline BlackHoleProfile nakedSingularity() {
 inline BlackHoleProfile qso3c273() {
     BlackHoleProfile p;
     p.name        = "3C 273";
-    p.description = "First quasar identified (~8.9e8 Msun), bright jet";
+    p.description = "First quasar identified (~8.9e8 Msun), bright jet, technically a blazar";
     p.massSolar   = 8.86e8;
 
     cfg::SimConfig c;
@@ -918,9 +922,13 @@ inline BlackHoleProfile v404Cyg() {
     // Triple system:
     //   • Donor (K-giant, ~0.7 Msun) on the close 6.47-day orbit being stripped
     //     into the disk, modelled as the inner CompanionStar.
-    //   • V404 Cyg C, distant tertiary (~3500 AU, ~70 000-yr period, evolved
-    //     star / future red giant) discovered 2024. Compressed to a far orbit
-    //     in simulation units so it stays visible alongside the inner pair.
+    //   • V404 Cyg C, distant tertiary (real, Burdge et al. 2024, Nature)
+    //     discovered 2024. REAL separation is >=3500 AU with a ~70,000-year
+    //     period, tens of orders of magnitude farther out than the Rs scale
+    //     used here (Rs for this ~9 Msun BH is only tens of km). The 95 Rs
+    //     value below is a deliberate, scaled-for-visualization placement
+    //     (not the physical distance) chosen so it stays visible alongside
+    //     the inner pair; it is not a claim about the real orbital scale.
     p.galaxyBodies = {
         {GalaxyBody3DType::CompanionStar, 26.0f,  0.034f,  0.05f, "K-giant donor"},
         {GalaxyBody3DType::Star,          95.0f,  0.30f,  -0.18f, "V404 Cyg C"}
@@ -1080,11 +1088,15 @@ inline BlackHoleProfile cygnusX1() {
 // AGN-class accretion; should visually resemble a compact 3C 273 but with
 // a hotter, more saturated disk to distinguish it.
 // kelvinToRGB(6800) → warm-white with slight gold tinge.
+// MASS NOTE: van den Bosch et al. (2012) originally reported ~1.7e10 Msun; I later found out that
+// higher-resolution follow-ups walked this down hard, Walsh et al. (2016) get ~4.9e9 Msun, 
+// Graham et al. (2016) as low as ~1.2e9 Msun. Using the
+// Walsh (2016) value here rather than Bosch et al. (2012)'s og estimate. 
 inline BlackHoleProfile ngc1277() {
     BlackHoleProfile p;
     p.name        = "NGC 1277";
-    p.description = "Overmassive SMBH in compact elliptical (~1.7e10 Msun)";
-    p.massSolar   = 1.7e10;
+    p.description = "Overmassive SMBH in compact elliptical (~4.9e9 Msun, Walsh+2016; down from the original ~1.7e10 Msun 2012 estimate)";
+    p.massSolar   = 4.9e9;
 
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.65f;
@@ -1199,6 +1211,10 @@ inline BlackHoleProfile oj287() {
 // Jet cavities ~200 kpc across in the cluster ICM confirm past extreme jet activity.
 // Disk is slightly cooler than TON 618: T_inner ∝ M^{-1/4} at comparable Eddington
 // fraction → amber-gold (4800 K) vs TON 618's warm-white (5500 K).
+// MASS NOTE: 1.0e11 Msun (Brockamp et al.) is a theoretical/model dependant
+// UPPER limit, not a final measurement. Currently, most papers'
+// cite ~1.0-2.0e10 Msun for Phoenix A. Please treat this
+// number as an extrapolated ceiling rather than an observed mass.
 inline BlackHoleProfile phoenixA() {
     BlackHoleProfile p;
     p.name        = "Phoenix A";
@@ -1354,7 +1370,7 @@ inline std::array<BlackHoleProfile, 22> allProfiles() {
              gaiaBH1(), gaiaBH2(), gaiaBH3(),
              v404Cyg(), a062000(), groJ165540(), cygnusX1(), // Fixes to patch in cyngus as a relevant object. Do this for most objects in future
              ngc1277(), oj287(), phoenixA(), momBHStar1(), thorneZytkowHV2112(),
-             uhz1(), rxJ1856() };
+             uhz1(), rxJ1856(), gravastar(), bosonStar(), nakedSingularity() };
 }
 
 constexpr int NUM_PROFILES = 22; // Note to self: I REALLY need to find a better way to implement profile head count. Using an array is just very, very archaic. 

@@ -75,7 +75,7 @@ struct PhysicsSnapshot {
     bool labEnabled;        // Lyman-alpha Blob overlay
     bool cgmEnabled;        // circumgalactic medium (diffuse gas halo around the galaxy)
 
-    /*--------- Black hole star envelope (quasi-star pseudo-photosphere) ---------*/
+    /*--------- Black hole star envelope (quasi-star shell) ---------*/
     bool      bhStarEnabled        = false;
     float     bhStarEnvelopeRadius = 18.0f;
     float     bhStarCoreRadius     = 2.4f;
@@ -98,7 +98,7 @@ struct PhysicsSnapshot {
     // the educational point.
     bool trueScaleMode = false;
     // Per-body physical radius in Rs (populated when trueScaleMode is on).
-    std::vector<float> orbBodyPhysRadii;
+    std::vector<float> orbBodyPhysRadii; // FIXME: This also affects blackholes universally for some reason.
 
     /*--------- Barycentric binary mode (Gaia BH1/2/3) ---------*/
     // When true, bhPosition is offset from origin and the barycenter sits at

@@ -1,5 +1,5 @@
 {
-  "description": "Overmassive SMBH in compact elliptical (~1.7e10 Msun)",
+  "description": "Overmassive SMBH in compact elliptical (~4.9e9 Msun, Walsh+2016; down from the original ~1.7e10 Msun 2012 estimate)",
   "galaxyBodies": [
     {
       "ecc": 0.3,
@@ -27,7 +27,7 @@
     }
   ],
   "isGalacticCenter": true,
-  "massSolar": 17000000000.0,
+  "massSolar": 4900000000.0,
   "name": "NGC 1277",
   "schema": 1,
   "sortKey": 110,

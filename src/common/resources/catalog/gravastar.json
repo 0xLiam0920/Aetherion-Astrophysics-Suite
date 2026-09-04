@@ -1,0 +1,20 @@
+{
+  "description": "Hypothetical alternative to the common blackhole theory. No observational evidence as of 2026.",
+  "isGalacticCenter": false,
+  "massSolar": 1.4,
+  "name": "Gravastar",
+  "schema": 1,
+  "sortKey": 180,
+  "spin": 0.0,
+  "visual3d": {
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": false
+    }
+  }
+}

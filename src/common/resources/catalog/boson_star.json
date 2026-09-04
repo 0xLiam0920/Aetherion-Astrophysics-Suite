@@ -1,0 +1,20 @@
+{
+  "description": "Hypothetical compact object made of bosons, invisible to the naked eye. No observational evidence as of 2026.",
+  "isGalacticCenter": false,
+  "massSolar": 1.4,
+  "name": "Boson Star",
+  "schema": 1,
+  "sortKey": 190,
+  "spin": 0.0,
+  "visual3d": {
+    "defaults": {
+      "blr": false,
+      "cgm": false,
+      "doppler": true,
+      "hostGalaxy": false,
+      "jets": false,
+      "lab": false,
+      "orbBody": false
+    }
+  }
+}

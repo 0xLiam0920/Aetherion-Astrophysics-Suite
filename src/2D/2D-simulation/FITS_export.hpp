@@ -80,7 +80,6 @@ static std::string keyVal(const std::string& key, int val, const std::string& co
     }
     return result;
 }
-// Tested as of Wednesday, April 8, 2026 - this file functions mostly correctly.
 
 // Overload for string values (e.g. EXTNAME), which need to be quoted in FITS headers
 static std::string keyVal(const std::string& key, const std::string& val, const std::string& comment = "") {

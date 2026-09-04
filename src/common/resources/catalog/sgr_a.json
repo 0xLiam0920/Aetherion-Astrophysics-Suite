@@ -39,7 +39,7 @@
     {
       "ecc": 0.72,
       "inclination": -0.55,
-      "label": "BLPSR",
+      "label": "BLPSR (unconfirmed)",
       "semiMajorRs": 6.5,
       "type": "NeutronStar"
     },
