@@ -30,8 +30,7 @@
 #include <cmath>
 
 namespace bh3d { // Looking back, I honestly failed to understand so much of this. I'm just lucky it worked as well as it did. 
-namespace physics { // TODO August 18th: Better understand physics of blackbody and the CIE 1931 2° CMF. I think I understand the Planck function, but the rest is still a bit of a mystery.
-
+namespace physics { // Solved TODO: I finally understand this better. Leaving this here as a mark of a resolved TODO comment :)
 // CIE 1931 2° standard-observer colour-matching functions,
 // sampled 380–780 nm at 10 nm steps (41 samples).
 inline constexpr int kCMFSamples = 41;

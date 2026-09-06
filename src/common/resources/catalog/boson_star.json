@@ -7,6 +7,15 @@
   "sortKey": 190,
   "spin": 0.0,
   "visual3d": {
+    "bloom": {
+      "exposure": 0.85,
+      "intensity": 0.15,
+      "softKnee": 0.6,
+      "threshold": 1.6
+    },
+    "camera": {
+      "initialPos": [0.0, 2.5, 11.0]
+    },
     "defaults": {
       "blr": false,
       "cgm": false,
@@ -15,6 +24,16 @@
       "jets": false,
       "lab": false,
       "orbBody": false
+    },
+    "disk": {
+      "displayTempInner": 1000.0,
+      "displayTempOuter": 1000.0,
+      "halfThickness": 0.0,
+      "innerRadius": 3.0,
+      "outerRadius": 0.0,
+      "peakTemp": 1000.0,
+      "saturationBoostInner": 0.0,
+      "saturationBoostOuter": 0.0
     }
   }
 }

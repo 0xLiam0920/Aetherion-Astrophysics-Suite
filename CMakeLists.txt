@@ -173,7 +173,7 @@ target_link_libraries(blackhole-sim PRIVATE
 )
 
 # == Application version (must match the GitHub release tag, without 'v') ==
-set(AETHERION_VERSION "0.1.3")
+set(AETHERION_VERSION "0.2.3")
 target_compile_definitions(blackhole-sim PRIVATE
     AETHERION_VERSION="${AETHERION_VERSION}"
     AETHERION_QT_HOST

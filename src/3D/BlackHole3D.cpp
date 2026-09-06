@@ -39,8 +39,7 @@ int main(int argc, char* argv[]) {
             else if (id == "j0529")    profileIdx = 3;
             else if (id == "gravastar") profileIdx = 19; // Gravastar
             else if (id == "bosonstar") profileIdx = 20; // Boson Star
-            else if (id == "quarkstar") profileIdx = 21; // Quark Star
-            else if (id == "nakedSingularity") profileIdx = 22; // Naked Singularity
+            else if (id == "nakedSingularity" || id == "overspunkerr") profileIdx = 21; // Naked Singularity (was 22, out of bounds for a 22-element array)
             else if (id == "cygnusx1") profileIdx = 11; // Cygnus X-1
             else if (id == "oj287")    profileIdx = 13; // OJ 287 binary SMBH
             else if (id == "phoenixa") profileIdx = 14; // Fixed: was stale after Cygnus X-1 shifted every index after it by one

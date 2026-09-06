@@ -74,7 +74,9 @@ enum class MergerSecondaryKind3D {
     NeutronStar,     // compact magenta remnant
     Pulsar,          // neutron star with lighthouse beam
     Star,            // main-sequence star (tidal-disruption aftermath)
-    WhiteDwarf       // pale compact remnant
+    WhiteDwarf,      // pale compact star
+    Gravastar,       // bright but light absorbant shell
+    BosonStar        // dark star
 };
 
 // A selectable secondary preset shown in the merger menu.
@@ -106,7 +108,7 @@ inline constexpr MergerSecondary3DPreset MERGER_SECONDARY_3D_PRESETS[] = {
     { "Main-sequence Star", MergerSecondaryKind3D::Star,      1.0,     "A Sun-like star, shredded into a tidal stream." },
     { "White Dwarf",      MergerSecondaryKind3D::WhiteDwarf,  0.6,     "A 0.6 M\u2609 white dwarf, disrupted on final approach." },
 
-    // -─ Named stellar-mass black holes (ported  diectly from 2D) --
+    // -─ Named stellar-mass black holes (ported  directly from 2D) --
     { "GRO J1655-40",     MergerSecondaryKind3D::BlackHole,   6.3,     "Microquasar with relativistic jets, ~6.3 M\u2609, spirals in.", "GRO J1655-40" },
     { "A0620-00",         MergerSecondaryKind3D::BlackHole,   6.61,    "First confirmed stellar BH, quiescent ~6.6 M\u2609 binary.", "A0620-00" },
     { "V404 Cygni",       MergerSecondaryKind3D::BlackHole,   9.0,     "X-ray nova microquasar, ~9 M\u2609, plunges to the horizon.", "V404 Cygni" },
@@ -131,6 +133,11 @@ inline constexpr MergerSecondary3DPreset MERGER_SECONDARY_3D_PRESETS[] = {
     { "OJ 287",           MergerSecondaryKind3D::BlackHole,   1.8e10,  "SMBH binary system with orbital outbursts, ~1.8\u00d710^10 M\u2609.", "OJ 287" },
     { "TON 618 SMBH",     MergerSecondaryKind3D::BlackHole,   6.6e10,  "The 6.6\u00d710^10 M\u2609 ultramassive quasar, a titanic merger.", "TON 618" },
     { "Phoenix A",        MergerSecondaryKind3D::BlackHole,   1.0e11,  "By far the largest known BH, ~1.0\u00d710^11 M\u2609, dwarfs every other merger.", "Phoenix A" },
+
+    /* -- Hypothetical/Exotic space objects -- */
+    { "Naked Singularity", MergerSecondaryKind3D::BlackHole,  1.4,     "An extremal Kerr singularity, its horizon vanishingly thin, plunges in.", "Naked Singularity" },
+    { "Gravastar",         MergerSecondaryKind3D::Gravastar,  1.4,     "A horizonless gravastar's rigid shell collides with the primary." },
+    { "Boson Star",        MergerSecondaryKind3D::BosonStar,  1.4,     "A diffuse boson star, gravitationally captured, leaves barely a shadow." },
 };
 inline constexpr int NUM_MERGER_SECONDARY_3D_PRESETS =
     (int)(sizeof(MERGER_SECONDARY_3D_PRESETS) / sizeof(MERGER_SECONDARY_3D_PRESETS[0]));
@@ -539,6 +546,12 @@ inline BlackHoleProfile rxJ1856() {
 }
 
 /*--------- Gravastar, hypothetical alternative to the common blackhole theory ---------*/
+// This is the entry for our gravastar: a singularity (Mazur-Mottola model) with a thin shell of stiff (w=+1) exotic matter around
+// a de Sitter vacuum interior, with absolutely NO true event horizon or singularity.
+// The engine has no dedicated "hard reflective shell" shader path, so this
+// reuses the bhStar envelope's neutronStarCore trick (a solid bright surface
+// instead of a dark BH shadow) to depict a taut, glowing shell in place of
+// the usual event horizon.
 inline BlackHoleProfile gravastar() { // DISCLAIMER: As of 2026, there is no evidence or candidate for such an object. Simulation is interpreted.
     BlackHoleProfile p;
     p.isHypothetical = true;
@@ -549,6 +562,26 @@ inline BlackHoleProfile gravastar() { // DISCLAIMER: As of 2026, there is no evi
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.0f;
     c.blackHole.radius        = 1.0f;
+    c.disk.innerRadius   = 3.0f;
+    c.disk.outerRadius   = 0.0f;
+    c.disk.halfThickness = 0.0f;
+    c.disk.peakTemp             = 1000.0f;
+    c.disk.displayTempInner     = 1000.0f;
+    c.disk.displayTempOuter     = 1000.0f;
+    c.disk.saturationBoostInner = 0.0f;
+    c.disk.saturationBoostOuter = 0.0f;
+    c.bhStar.enabled         = true;
+    c.bhStar.envelopeRadius  = 2.4f;   // Thin shell just outside the nominal Rs
+    c.bhStar.coreRadius      = 1.05f;  // Barely larger than Rs, as theres no true horizon
+    c.bhStar.neutronStarCore = true;   // Solid bright surface
+    c.bhStar.coreColor       = glm::vec3(0.85f, 0.90f, 1.00f);  
+    c.bhStar.colorInner      = glm::vec3(0.55f, 0.65f, 0.95f); 
+    c.bhStar.colorOuter      = glm::vec3(0.10f, 0.12f, 0.30f);  
+    c.bhStar.density         = 0.9f;
+    c.camera.initialPos      = glm::vec3(0.0f, 2.0f, 8.0f);   
+    c.bloom.threshold        = 0.6f;
+    c.bloom.intensity        = 0.5f;
+    c.bloom.exposure         = 1.0f;
 
     p.config = c;
     p.defaultJets    = false;
@@ -563,6 +596,12 @@ inline BlackHoleProfile gravastar() { // DISCLAIMER: As of 2026, there is no evi
 }
 
 /*---------- Boson Star, hypothetical compact object made of bosons, invisible to the naked eye ---------- */
+// Description: A boson star is a star made of bosons with no hard surface at all,
+// interacts only gravitationally. Our pipeline renderer has no transparent, lensing
+// only body mode (that would need new shader work, may be implemented after v1.0.0), so it still draws a
+// plain compact sphere; kept as dark and featureless as the current
+// primitives allow (no disk/jets/BLR/bloom) so it reads as the least visually
+// "active" of the three exotic objects, closest to genuinely invisible.
 inline BlackHoleProfile bosonStar() { // DISCLAIMER: As of 2026, there is no evidence or candidate for such an object. Simulation is interpreted.
     BlackHoleProfile p;
     p.name        = "Boson Star";
@@ -573,6 +612,19 @@ inline BlackHoleProfile bosonStar() { // DISCLAIMER: As of 2026, there is no evi
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.0f;
     c.blackHole.radius        = 1.0f;
+    // No accretion disk obviously
+    c.disk.innerRadius   = 3.0f;
+    c.disk.outerRadius   = 0.0f;
+    c.disk.halfThickness = 0.0f;
+    c.disk.peakTemp             = 1000.0f;
+    c.disk.displayTempInner     = 1000.0f;
+    c.disk.displayTempOuter     = 1000.0f;
+    c.disk.saturationBoostInner = 0.0f;
+    c.disk.saturationBoostOuter = 0.0f;
+    c.camera.initialPos = glm::vec3(0.0f, 2.5f, 11.0f);  
+    c.bloom.threshold   = 1.6f;   
+    c.bloom.intensity   = 0.15f;
+    c.bloom.exposure    = 0.85f;
 
     p.config = c;
     p.defaultJets    = false;
@@ -587,6 +639,12 @@ inline BlackHoleProfile bosonStar() { // DISCLAIMER: As of 2026, there is no evi
 }
 
 /*--------- Naked Singularity; hypothetical black-hole like object without an event horizon ---------*/
+// Extremal (a*=1) Kerr: A model of an overspun kerr BH/naked singularity w/ the mathematical spin cap our pipeline allows. At true
+// extremality the ISCO and horizon both shrink to r=M (~0.5 Rs), exposing the
+// singularity. Effectively, this makes it the tightest, hottest disk and the most tightly collimated jet (Blandford-Znajek
+// jet power scales with spin^2, basically spinning akin to speeds of a pulsar's surface.
+// The shader still draws a nominal horizon-radius sphere,
+// regardless, since actually removing the EH needs new work (gee, I sure didn't design this with the hypothetical in mind, did I?)
 inline BlackHoleProfile nakedSingularity() { 
     BlackHoleProfile p;
     p.name        = "Naked Singularity";
@@ -595,11 +653,26 @@ inline BlackHoleProfile nakedSingularity() {
     p.massSolar   = 1.4; // Typical compact object mass
 
     cfg::SimConfig c;
-    c.blackHole.spinParameter = 1.0f; // Extreme spin, potentially exposing the singularity
+    c.blackHole.spinParameter = 1.0f; // Extremal Kerr cap, potentially exposing the singularity
     c.blackHole.radius        = 1.0f;
+    c.disk.innerRadius   = 1.05f;   
+    c.disk.outerRadius   = 6.0f;
+    c.disk.halfThickness = 0.01f;
+    c.disk.peakTemp             = 45000.0f;  // this is basically a shade of white (if that's what you even call it)
+    c.disk.displayTempInner     = 14000.0f;  
+    c.disk.displayTempOuter     = 5200.0f;
+    c.disk.saturationBoostInner = 1.3f;
+    c.disk.saturationBoostOuter = 2.0f;
+    c.jet.radius = 0.12f;   
+    c.jet.length = 20.0f;
+    c.jet.color  = glm::vec3(0.55f, 0.35f, 1.6f);
+    c.camera.initialPos = glm::vec3(0.0f, 3.0f, 10.0f);
+    c.bloom.threshold = 0.5f;
+    c.bloom.intensity = 0.85f;
+    c.bloom.exposure  = 1.3f;
 
     p.config = c;
-    p.defaultJets    = false;
+    p.defaultJets    = true;
     p.defaultBLR     = false;
     p.defaultOrbBody = false;
     p.defaultDoppler = true;

@@ -1044,6 +1044,10 @@ inline int mergerBodyShaderType(MergerSecondaryKind3D k) {
         case MergerSecondaryKind3D::Pulsar:      return static_cast<int>(GalaxyBody3DType::NeutronStar);
         case MergerSecondaryKind3D::Star:        return static_cast<int>(GalaxyBody3DType::Star);
         case MergerSecondaryKind3D::WhiteDwarf:  return static_cast<int>(GalaxyBody3DType::WhiteDwarf);
+        // Gravastar/Boson Star have no dedicated shading, rendered as a plain
+        // sphere for now. Further detailed can be added later, it's hard to be accurate when your inspiration is academic papers and space engine...
+        case MergerSecondaryKind3D::Gravastar:   return static_cast<int>(GalaxyBody3DType::WhiteDwarf);
+        case MergerSecondaryKind3D::BosonStar:   return static_cast<int>(GalaxyBody3DType::WhiteDwarf);
     }
     return 7;
 }
@@ -1055,6 +1059,8 @@ inline const char* mergerKindLabel(MergerSecondaryKind3D k) {
         case MergerSecondaryKind3D::Pulsar:      return "Pulsar";
         case MergerSecondaryKind3D::Star:        return "Star";
         case MergerSecondaryKind3D::WhiteDwarf:  return "White Dwarf";
+        case MergerSecondaryKind3D::Gravastar:   return "Gravastar";
+        case MergerSecondaryKind3D::BosonStar:   return "Boson Star";
     }
     return "Secondary";
 }
@@ -1066,6 +1072,8 @@ inline glm::vec3 mergerKindColor(MergerSecondaryKind3D k) {
         case MergerSecondaryKind3D::Pulsar:      return glm::vec3(0.70f, 0.85f, 1.00f);
         case MergerSecondaryKind3D::Star:        return glm::vec3(1.00f, 0.93f, 0.78f);
         case MergerSecondaryKind3D::WhiteDwarf:  return glm::vec3(1.00f, 1.00f, 0.95f);
+        case MergerSecondaryKind3D::Gravastar:   return glm::vec3(0.85f, 0.90f, 1.00f);  // Bright silver-white shell
+        case MergerSecondaryKind3D::BosonStar:   return glm::vec3(0.05f, 0.05f, 0.08f);  // Near-black, closest to invisible
     }
     return glm::vec3(1.0f);
 }
@@ -1133,6 +1141,8 @@ inline void startMerger3D(State& s, MergerSecondaryKind3D kind, double massSolar
         case MergerSecondaryKind3D::Pulsar:     m.secRadius = 0.42f * m.bhR0; break;
         case MergerSecondaryKind3D::WhiteDwarf: m.secRadius = 0.52f * m.bhR0; break;
         case MergerSecondaryKind3D::Star:       m.secRadius = 0.85f * m.bhR0; break;
+        case MergerSecondaryKind3D::Gravastar:  m.secRadius = 0.50f * m.bhR0; break; // Bright but light absorbant shell
+        case MergerSecondaryKind3D::BosonStar:  m.secRadius = 0.60f * m.bhR0; break; // Slightly puffier shell
     }
 
     // ── Secondary visual identity ────────────────────────────────────────

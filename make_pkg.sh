@@ -12,12 +12,13 @@
 #       install via xcode-select --install, most macOS devs should have this though...
 #
 # Output: build/Aetherion-Installer-v<VERSION>.pkg
+# This is the recommended way to install aetherion. Most of the time, the newest version of this pkg will be included with major releases (i.e, beta 2, 3, final, etc)
 # =============================================================
 set -euo pipefail
 
 APP_NAME="Aetherion"
 BUNDLE_ID="com.liamnayyar.aetherion"
-VERSION="1.0.0"
+VERSION="0.2.3"
 BUILD_DIR="build"
 
 # ── Code-signing configuration ────────────────────────────────
