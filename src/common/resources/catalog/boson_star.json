@@ -7,6 +7,7 @@
   "sortKey": 190,
   "spin": 0.0,
   "visual3d": {
+    "horizonless": true,
     "bloom": {
       "exposure": 0.85,
       "intensity": 0.15,

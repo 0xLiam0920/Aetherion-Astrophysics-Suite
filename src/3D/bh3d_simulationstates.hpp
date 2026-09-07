@@ -84,6 +84,7 @@ struct PhysicsSnapshot {
     float     bhStarDensity        = 1.40f;
     bool      bhStarNeutronCore    = false; // temp patch condition for Thorne-Zytkow object (TZ)
     glm::vec3 bhStarCoreColor      = glm::vec3(0.85f, 0.92f, 1.00f);
+    bool      horizonlessObject    = false;
 
     /*--------- Render settings (more steps = higher quality, slower) ---------*/
     int maxSteps;

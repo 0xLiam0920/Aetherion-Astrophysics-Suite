@@ -54,6 +54,7 @@ struct BlackHoleConfig {
     float radius         = 1.0f;   // Schwarzschild radius (simulation unit)
     float spinParameter  = 0.8f;   // Dimensionless Kerr spin: 0–1
     glm::vec3 position   = glm::vec3(0.0f);
+    bool  horizonless     = false; // Compact object has no event horizon
 };
 
 /*--------- Relativistic jets ---------*/

@@ -562,6 +562,7 @@ inline BlackHoleProfile gravastar() { // DISCLAIMER: As of 2026, there is no evi
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.0f;
     c.blackHole.radius        = 1.0f;
+    c.blackHole.horizonless   = true;
     c.disk.innerRadius   = 3.0f;
     c.disk.outerRadius   = 0.0f;
     c.disk.halfThickness = 0.0f;
@@ -573,7 +574,7 @@ inline BlackHoleProfile gravastar() { // DISCLAIMER: As of 2026, there is no evi
     c.bhStar.enabled         = true;
     c.bhStar.envelopeRadius  = 2.4f;   // Thin shell just outside the nominal Rs
     c.bhStar.coreRadius      = 1.05f;  // Barely larger than Rs, as theres no true horizon
-    c.bhStar.neutronStarCore = true;   // Solid bright surface
+    c.bhStar.neutronStarCore = false;
     c.bhStar.coreColor       = glm::vec3(0.85f, 0.90f, 1.00f);  
     c.bhStar.colorInner      = glm::vec3(0.55f, 0.65f, 0.95f); 
     c.bhStar.colorOuter      = glm::vec3(0.10f, 0.12f, 0.30f);  
@@ -612,6 +613,7 @@ inline BlackHoleProfile bosonStar() { // DISCLAIMER: As of 2026, there is no evi
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.0f;
     c.blackHole.radius        = 1.0f;
+    c.blackHole.horizonless   = true;
     // No accretion disk obviously
     c.disk.innerRadius   = 3.0f;
     c.disk.outerRadius   = 0.0f;
@@ -822,7 +824,6 @@ inline BlackHoleProfile gaiaBH1() {
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.3f;
     c.blackHole.radius        = 1.0f;
-    // No accretion disk, dormant black hole, discovered by astrometry only.
     // outerRadius = 0 makes the shader condition (r < diskOuterRadius) always
     // false, suppressing all disk rendering passes.
     c.disk.innerRadius   = 3.0f;

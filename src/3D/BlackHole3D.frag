@@ -17,6 +17,7 @@ uniform vec3 cameraDir;          // Camera forward direction
 uniform vec3 cameraUp;           // Camera up vector
 uniform float fov;               // Field of view in degrees
 uniform float blackHoleRadius;   // Schwarzschild radius (event horizon)
+uniform int   horizonlessObject;
 uniform vec3 blackHolePos;       // Black hole position in world space
 
 uniform float diskInnerRadius;   // world units
@@ -494,7 +495,7 @@ void traceBentRay(
         //  near-grazing rays when stepLen ≥ bhRadius (the step would skip over the horizon),
         //  producing the bright seam / 'hole' at the shadow edge. Sphere intersection is exact
         //  regardless of step size, so there is no need to change stepLen near the BH.]
-        {
+        if (horizonlessObject == 0) {
             float tca = dot(toBH, dir);     // signed distance to closest approach
             float d2  = dot(toBH, toBH) - tca * tca;  // squared miss distance
             if (d2 < bhRadius * bhRadius) {

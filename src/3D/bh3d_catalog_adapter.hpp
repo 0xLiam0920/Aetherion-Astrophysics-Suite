@@ -113,6 +113,7 @@ inline BlackHoleProfile toProfile(const catalog::Entry& e) {
     p.config.blackHole.spinParameter = (float)e.spin;
 
     const json& v = e.visual3d;
+    p.config.blackHole.horizonless = v.value("horizonless", false);
     if (v.contains("disk"))    applyDisk   (v["disk"],    p.config.disk);
     if (v.contains("jet"))     applyJet    (v["jet"],     p.config.jet);
     if (v.contains("blr"))     applyBLR    (v["blr"],     p.config.blr);

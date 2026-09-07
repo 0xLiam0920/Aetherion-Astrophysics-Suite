@@ -322,6 +322,7 @@ struct SceneUniforms {
     GLint resolution, cameraPos, cameraDir, cameraUp, fov;
     GLint pixelJitter;
     GLint blackHoleRadius, blackHolePos, backgroundTex, diskTex;
+    GLint horizonlessObject;
     GLint diskInnerRadius, diskOuterRadius, diskHalfThickness;
     GLint spinParameter;
     GLint jetRadius, jetLength, jetColor;
@@ -362,6 +363,7 @@ struct SceneUniforms {
         u.cameraUp             = prog.uniform("cameraUp");
         u.fov                  = prog.uniform("fov");
         u.blackHoleRadius      = prog.uniform("blackHoleRadius");
+        u.horizonlessObject    = prog.uniform("horizonlessObject");
         u.blackHolePos         = prog.uniform("blackHolePos");
         u.backgroundTex        = prog.uniform("backgroundTex");
         u.diskTex              = prog.uniform("diskTex");
@@ -446,6 +448,7 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glUniform3f(u.cameraUp,       snap.cameraUp.x,  snap.cameraUp.y,  snap.cameraUp.z);
     glUniform1f(u.fov,            snap.fov);
     glUniform1f(u.blackHoleRadius, snap.bhRadius);
+    glUniform1i(u.horizonlessObject, snap.horizonlessObject ? 1 : 0);
     glUniform3f(u.blackHolePos,   snap.bhPosition.x, snap.bhPosition.y, snap.bhPosition.z);
 
     glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, bgTexId);        glUniform1i(u.backgroundTex, 0);
@@ -942,6 +945,7 @@ inline void initProfiles(State& s, std::vector<BlackHoleProfile> loaded,
     s.labEnabled        = prof.defaultLAB;
     s.cgmEnabled        = prof.defaultCGM;
     s.bhStarEnabled     = prof.config.bhStar.enabled;
+    s.snap.horizonlessObject = prof.config.blackHole.horizonless;
 }
 
 // Look up a loaded profile by display name. Returns nullptr if no profile
@@ -1899,6 +1903,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.bhStarColorOuter     = s.config.bhStar.colorOuter;
     snap.bhStarDensity        = s.config.bhStar.density;
     snap.bhStarNeutronCore    = s.config.bhStar.neutronStarCore;
+    snap.horizonlessObject    = s.config.blackHole.horizonless;
     snap.bhStarCoreColor      = s.config.bhStar.coreColor;
     snap.maxSteps          = std::clamp(s.adaptiveMaxSteps, (s.cinematicMode ? 300 : 200) / 2, s.cinematicMode ? 300 : 200);
     snap.profileName       = s.profilesArr[s.profileIdx].name;
@@ -2297,6 +2302,7 @@ inline void switchToProfile(State& s, int newIdx) {
     s.labEnabled        = prof.defaultLAB;
     s.cgmEnabled        = prof.defaultCGM;
     s.bhStarEnabled     = prof.config.bhStar.enabled;
+    s.snap.horizonlessObject = prof.config.blackHole.horizonless;
     s.camera            = CameraController(prof.config.camera);
     rebuildOrbBodies(s.orbBodies, prof, s.config);
     s.orbBodyDisrupted.assign(s.orbBodies.size(), false);

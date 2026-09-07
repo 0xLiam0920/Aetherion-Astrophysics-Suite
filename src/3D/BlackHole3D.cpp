@@ -35,8 +35,8 @@ int main(int argc, char* argv[]) {
             std::string id = argv[i + 1];
             if      (id == "ton618")   profileIdx = 0;
             else if (id == "sgra")     profileIdx = 1;
-            else if (id == "3c273")    profileIdx = 2;
-            else if (id == "j0529")    profileIdx = 3;
+            else if (id == "3c273")    profileIdx = 3;
+            else if (id == "j0529")    profileIdx = 4;
             else if (id == "gravastar") profileIdx = 19; // Gravastar
             else if (id == "bosonstar") profileIdx = 20; // Boson Star
             else if (id == "nakedSingularity" || id == "overspunkerr") profileIdx = 21; // Naked Singularity (was 22, out of bounds for a 22-element array)

@@ -46,6 +46,7 @@ uniform vec3 cameraDir;
 uniform vec3 cameraUp;
 uniform float fov;
 uniform float blackHoleRadius;
+uniform int   horizonlessObject;
 uniform vec3 blackHolePos;
 
 uniform float diskInnerRadius;
@@ -1432,7 +1433,7 @@ void traceRay(
         float rBH = length(toBH);
         
         // Check absorption
-        if (rBH < bhRadius * 1.01) {
+        if (horizonlessObject == 0 && rBH < bhRadius * 1.01) {
             absorbed = true;
             outAbsorbPos = pos;
             break;
@@ -1724,7 +1725,7 @@ void main() { // note, we chose void here since we're returning early on absorpt
     // This MUST apply to both absorbed and non-absorbed rays since the ring
     // straddles the shadow boundary.
     // ================================================================
-    if (bhStarNeutronCore == 0) {
+    if (bhStarNeutronCore == 0 && horizonlessObject == 0) {
         // Project BH center to screen-space for proper ring placement
         vec3 toBH = blackHolePos - cameraPos;
         vec3 camRight = normalize(cross(cameraDir, cameraUp));
