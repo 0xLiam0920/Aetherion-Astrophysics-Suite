@@ -19,8 +19,9 @@
 //                    to XYZ then D65 sRGB, gamma-encoded to display sRGB in
 //                    [0,1]. This is precisely what createBlackbodyLUT() stores
 //                    (times 255) and the shader reads back via kelvinToRGBLUT().
-//   computeISCO(a)               Kerr prograde ISCO fit (mirrors shader).
-//   novikovThorneTemperature()   Normalised T(r) ∝ r^-3/4 profile (shader).
+//   computeISCO(a)               Exact Kerr prograde ISCO (Bardeen 1972).
+//   pageThorneFlux(r,a)          Relativistic Kerr disk flux (Page-Thorne 1974).
+//   novikovThorneTemperature()   Normalised spin-dependent T(r;a) (shader-matched).
 //   diskColorTemperature()       Visible-band colour anchor used by the
 //                                physical disk-colour path.
 // ============================================================================
@@ -29,8 +30,8 @@
 #include <array>
 #include <cmath>
 
-namespace bh3d { // Looking back, I honestly failed to understand so much of this. I'm just lucky it worked as well as it did. 
-namespace physics { // Solved TODO: I finally understand this better. Leaving this here as a mark of a resolved TODO comment :)
+namespace bh3d {
+namespace physics {
 // CIE 1931 2° standard-observer colour-matching functions,
 // sampled 380–780 nm at 10 nm steps (41 samples).
 inline constexpr int kCMFSamples = 41;
@@ -107,36 +108,104 @@ inline std::array<double, 3> blackbodyRGB(double kelvin) {
     return { srgbGamma(r), srgbGamma(g), srgbGamma(b) };
 }
 
-// Works out the Kerr prograde ISCO radius (in Rs) for a given spin a*.
-// It's a smooth fit: ISCO(0) = 3 (Schwarzschild), shrinking down to about 0.6
-// near extremal spin. Mirrors the same formula used in the shader.
+/*───────Novikov-Thorne / Page & Thorne 1974)───────*/
+
+// The three functions below are the standard relativistic Kerr 
+// temperature properties/profile, referenced by
+// BlackHole3D_PhotorealDisk.frag so the shader's disk colour is exactly what CI
+// checks here.
+//
+// Description: this is the
+// Novikov-Thorne disk.  That last part is the glaring assumption: real
+// inner disks can carry magnetic stress across the ISCO, which lifts the edge
+// temperature instead of pinning it to zero. We take the classical zero-torque
+// edge because that's what "Novikov-Thorne" means. We also ignore returning
+// radiation and self-irradiation. The profile is spin-dependent through both
+// the ISCO location and the relativistic flux correction — that spin term is
+// exactly what a plain Shakura-Sunyaev r^-3/4·[1-√(rISCO/r)]^1/4 profile drops,
+// and dropping it was the old (mislabelled) behaviour.
+
+inline constexpr double kPi = 3.14159265358979323846;
+
+// Exact Kerr prograde ISCO radius in units of Rs (Bardeen, Press & Teukolsky
+// 1972, ApJ 178, 347). a is the dimensionless spin a* in [0,1). Returns 3 Rs at
+// a=0 (Schwarzschild) and shrinks toward 0.5 Rs as a -> 1 (prograde extremal).
 inline double computeISCO(double a) {
-    return std::max(3.0 - 2.0 * a * (1.0 + 0.27 * a), 0.6);
+    a = std::clamp(a, 0.0, 0.9999);
+    const double a2 = a * a;
+    const double Z1 = 1.0 + std::cbrt(1.0 - a2) *
+                            (std::cbrt(1.0 + a) + std::cbrt(1.0 - a));
+    const double Z2 = std::sqrt(3.0 * a2 + Z1 * Z1);
+    const double rMsOverM = 3.0 + Z2 - std::sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
+    return 0.5 * rMsOverM;   // Rs = 2M, so r/Rs = (r/M)/2
 }
 
-// Normalised Novikov-Thorne thin-disk temperature profile.
-// T(r) ∝ r^-3/4 · [1 - sqrt(rISCO/r)]^1/4, normalised so the peak comes out to
-// 1.0 (that peak happens to land at r = (49/36)·rISCO). Comes out to 0 right
-// at or inside the ISCO, since that's the zero-torque inner boundary.
-inline double novikovThorneTemperature(double r, double rISCO) {
-    const double x = r / rISCO;
-    const double noTorque = std::max(1.0 - std::sqrt(1.0 / x), 0.0);
-    const double profile  = std::pow(1.0 / x, 0.75) * std::pow(noTorque, 0.25);
+// Unnormalised Page-Thorne radiative flux shape F(r) for an equatorial Kerr
+// disk (r in Rs, converted to M internally). This is the relativistic
+// generalisation of the Newtonian [1-√(rISCO/r)]/r^3 law: it adds the
+// spin-dependent correction that Shakura-Sunyaev omits. Valid for r > rISCO;
+// returns 0 at or inside the ISCO. Page & Thorne 1974, ApJ 191, 499 (eq. 15n).
+inline double pageThorneFlux(double rRs, double a) {
+    a = std::clamp(a, 0.0, 0.9999);
+    const double rIscoRs = computeISCO(a);
+    if (rRs <= rIscoRs) return 0.0;
 
-    const double xPeak   = 49.0 / 36.0;
-    const double peakVal = std::pow(1.0 / xPeak, 0.75) *
-                           std::pow(1.0 - std::sqrt(1.0 / xPeak), 0.25);
+    // Work in M-units 
+    // r_M = 2·r_Rs, x = √(r_M).
+    const double x  = std::sqrt(2.0 * rRs);
+    const double x0 = std::sqrt(2.0 * rIscoRs);
 
-    return profile / std::max(peakVal, 0.001);
+    // Roots of x^3 - 3x + 2a = 0.
+    const double ac = std::acos(a);
+    const double x1 =  2.0 * std::cos(ac / 3.0 - kPi / 3.0);
+    const double x2 =  2.0 * std::cos(ac / 3.0 + kPi / 3.0);
+    const double x3 = -2.0 * std::cos(ac / 3.0);
+
+    // The x2 coefficient is a 0/0 as a -> 0 (x2 -> 0); the limit is 0.
+    const double c1 = 3.0 * (x1 - a) * (x1 - a) / (x1 * (x1 - x2) * (x1 - x3));
+    const double c2 = (std::abs(x2) < 1e-9)
+                    ? 0.0
+                    : 3.0 * (x2 - a) * (x2 - a) / (x2 * (x2 - x1) * (x2 - x3));
+    const double c3 = 3.0 * (x3 - a) * (x3 - a) / (x3 * (x3 - x1) * (x3 - x2));
+
+    const double Q = x - x0 - 1.5 * a * std::log(x / x0)
+                   - c1 * std::log((x - x1) / (x0 - x1))
+                   - c2 * std::log((x - x2) / (x0 - x2))
+                   - c3 * std::log((x - x3) / (x0 - x3));
+
+    const double denom = x * x * x * x * (x * x * x - 3.0 * x + 2.0 * a);
+    const double F = Q / denom;
+    return F > 0.0 ? F : 0.0;
+}
+
+// Peak of the unnormalised flux shape at spin a (the hottest annulus sits
+// within ~1.5·rISCO, so a scan out to 3·rISCO comfortably brackets it).
+inline double ntPeakFlux(double a) {
+    const double rin = computeISCO(a);
+    double best = 1e-300;
+    for (int i = 0; i <= 256; ++i) {
+        const double r = rin * (1.0 + 2.0 * double(i) / 256.0);
+        best = std::max(best, pageThorneFlux(r, a));
+    }
+    return best;
+}
+
+// Normalised relativistic disk temperature in [0,1], peaking at 1.0 at the
+// hottest annulus. T ∝ F^(1/4) (Stefan-Boltzmann). a is the spin a*.
+inline double novikovThorneTemperature(double rRs, double a) {
+    const double F = pageThorneFlux(rRs, a);
+    if (F <= 0.0) return 0.0;
+    const double t = std::pow(F / ntPeakFlux(a), 0.25);
+    return std::clamp(t, 0.0, 1.0);
 }
 
 // Visible-band disk colour temperature at radius r, matching the physical
 // disk-colour path in BlackHole3D_PhotorealDisk.frag:
-//   T_colour(r) = displayTempInner times NT_profile(r)
+//   T_colour(r) = displayTempInner × NT_profile(r; a)
 // diskPeakTemp is left out on purpose here since that's the bolometric/UV
 // effective temperature and it drives luminosity, not hue.
-inline double diskColorTemperature(double displayTempInner, double r, double rISCO) {
-    return displayTempInner * novikovThorneTemperature(r, rISCO);
+inline double diskColorTemperature(double displayTempInner, double rRs, double a) {
+    return displayTempInner * novikovThorneTemperature(rRs, a);
 }
 
 }  // namespace physics

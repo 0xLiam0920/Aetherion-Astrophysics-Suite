@@ -99,7 +99,7 @@ struct PhysicsSnapshot {
     // the educational point.
     bool trueScaleMode = false;
     // Per-body physical radius in Rs (populated when trueScaleMode is on).
-    std::vector<float> orbBodyPhysRadii; // FIXME: This also affects blackholes universally for some reason.
+    std::vector<float> orbBodyPhysRadii; 
 
     /*--------- Barycentric binary mode (Gaia BH1/2/3) ---------*/
     // When true, bhPosition is offset from origin and the barycenter sits at

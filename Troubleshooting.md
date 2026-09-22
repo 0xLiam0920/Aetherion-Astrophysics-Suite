@@ -378,8 +378,8 @@ The 3D simulator includes presets for TON 618, Sgr A*, M87*, and others. Check t
 
 ### Does this work on Windows?
 
-Yes. Windows is now a supported platform alongside macOS and Linux. The cross-platform C++17 codebase builds with MSVC (recommended) or MinGW. You will need:
-- Visual Studio 2022 with the "Desktop development with C++" workload (or MinGW with C++17 support)
+Yes. Windows is now a supported platform alongside macOS and Linux. The cross-platform c++20 codebase builds with MSVC (recommended) or MinGW. You will need:
+- Visual Studio 2022 with the "Desktop development with C++" workload (or MinGW with c++20 support)
 - [vcpkg](https://vcpkg.io/) with: `vcpkg install qt6-base qt6-charts sfml glm glew --triplet x64-windows`
 - CMake ≥ 3.10
 - A GPU (dGPU ideally) with OpenGL 3.3 support

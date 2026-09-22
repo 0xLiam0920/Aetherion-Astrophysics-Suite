@@ -335,72 +335,88 @@ bool testBlackbodyReferencePoints() {
 
 bool testNovikovThorneProfile() {
     using bh3d::physics::novikovThorneTemperature;
-    const double rISCO = 2.0;
+    using bh3d::physics::computeISCO;
 
-    // The peak should land at r = (49/36) times rISCO, and the profile is
-    // normalised so it hits exactly 1.0 right there.
-    const double rPeak = (49.0 / 36.0) * rISCO;
-    const double peak = novikovThorneTemperature(rPeak, rISCO);
-    if (std::abs(peak - 1.0) > 1e-3) {
-        std::cerr << "[FAIL] NT profile peak should be 1.0 at r=" << rPeak
-                  << "; got " << peak << "\n";
-        return false;
-    }
+    // Check the relativistic profile across three spins spanning the range.
+    for (double a : {0.0, 0.5, 0.9}) {
+        const double rISCO = computeISCO(a);
 
-    // Since the ISCO is a zero-torque inner boundary, the temperature should
-    // basically vanish right there.
-    if (novikovThorneTemperature(rISCO, rISCO) > 1e-6) {
-        std::cerr << "[FAIL] NT profile should be ~0 at the ISCO; got "
-                  << novikovThorneTemperature(rISCO, rISCO) << "\n";
-        return false;
-    }
-
-    // Beyond the peak it should decrease monotonically outward, and stay
-    // bounded within [0,1] the whole way.
-    double prev = 2.0;
-    for (double r = rPeak; r <= 40.0; r += 0.5) {
-        const double t = novikovThorneTemperature(r, rISCO);
-        if (t < -1e-9 || t > 1.0 + 1e-6) {
-            std::cerr << "[FAIL] NT profile out of [0,1] at r=" << r << ": " << t << "\n";
+        // Zero-torque inner boundary: temperature vanishes at the ISCO.
+        if (novikovThorneTemperature(rISCO, a) > 1e-6) {
+            std::cerr << "[FAIL] NT profile should be ~0 at the ISCO (a=" << a
+                      << "); got " << novikovThorneTemperature(rISCO, a) << "\n";
             return false;
         }
-        if (t > prev + 1e-6) {
-            std::cerr << "[FAIL] NT profile not decreasing outward at r=" << r
-                      << " (" << t << " > " << prev << ")\n";
+
+        // Scan outward: locate the peak, confirm it normalises to ~1, and that
+        // the profile stays bounded within [0,1] the whole way.
+        double maxT = 0.0, rAtMax = rISCO;
+        for (double r = rISCO; r <= 40.0; r += 0.05) {
+            const double t = novikovThorneTemperature(r, a);
+            if (t < -1e-9 || t > 1.0 + 1e-6) {
+                std::cerr << "[FAIL] NT profile out of [0,1] at r=" << r
+                          << " (a=" << a << "): " << t << "\n";
+                return false;
+            }
+            if (t > maxT) { maxT = t; rAtMax = r; }
+        }
+        if (std::abs(maxT - 1.0) > 5e-3) {
+            std::cerr << "[FAIL] NT profile peak should normalise to 1.0 (a=" << a
+                      << "); got " << maxT << " at r=" << rAtMax << "\n";
             return false;
         }
-        prev = t;
+
+        // Beyond the peak it must decrease monotonically outward.
+        double prev = 2.0;
+        for (double r = rAtMax; r <= 40.0; r += 0.5) {
+            const double t = novikovThorneTemperature(r, a);
+            if (t > prev + 1e-6) {
+                std::cerr << "[FAIL] NT profile not decreasing outward at r=" << r
+                          << " (a=" << a << "): " << t << " > " << prev << "\n";
+                return false;
+            }
+            prev = t;
+        }
     }
 
-    std::cout << "[PASS] Novikov-Thorne profile: peak=1, zero at ISCO, monotone falloff\n";
+    std::cout << "[PASS] Novikov-Thorne profile (Page-Thorne): zero at ISCO, "
+                 "peak=1, monotone falloff across spins\n";
     return true;
 }
 
 bool testComputeISCO() {
     using bh3d::physics::computeISCO;
 
+    // Schwarzschild: exactly 3 Rs (r_ms = 6M).
     if (std::abs(computeISCO(0.0) - 3.0) > 1e-9) {
         std::cerr << "[FAIL] Schwarzschild ISCO should be 3 Rs; got "
                   << computeISCO(0.0) << "\n";
         return false;
     }
-    // The prograde ISCO should keep shrinking as spin increases.
+    // Concrete Kerr checkpoint: a*=0.9 prograde ISCO ≈ 1.161 Rs (r_ms ≈ 2.321 M).
+    if (std::abs(computeISCO(0.9) - 1.1605) > 2e-3) {
+        std::cerr << "[FAIL] Kerr ISCO at a=0.9 should be ~1.161 Rs; got "
+                  << computeISCO(0.9) << "\n";
+        return false;
+    }
+    // Prograde ISCO shrinks monotonically with spin toward the 0.5 Rs extremal
+    // limit, and never dips below it.
     double prev = 4.0;
-    for (double a = 0.0; a <= 0.99; a += 0.05) {
+    for (double a = 0.0; a <= 0.999; a += 0.02) {
         const double r = computeISCO(a);
         if (r > prev + 1e-9) {
             std::cerr << "[FAIL] ISCO should decrease with spin; a=" << a
                       << " gave " << r << " > " << prev << "\n";
             return false;
         }
-        if (r < 0.6 - 1e-9) {
-            std::cerr << "[FAIL] ISCO fell below physical floor at a=" << a
+        if (r < 0.5 - 1e-6) {
+            std::cerr << "[FAIL] ISCO fell below extremal 0.5 Rs at a=" << a
                       << ": " << r << "\n";
             return false;
         }
         prev = r;
     }
-    std::cout << "[PASS] ISCO(a*): 3 Rs at a=0, monotone shrink with spin\n";
+    std::cout << "[PASS] ISCO(a*): 3 Rs at a=0, 1.16 Rs at a=0.9, monotone to 0.5 Rs\n";
     return true;
 }
 
@@ -455,8 +471,8 @@ bool testDiskColourGradient() {
         const double rISCO = computeISCO(p.spin);
         const double rPeak = std::clamp((49.0 / 36.0) * rISCO, p.rIn, p.rOut);
 
-        const double tInner = diskColorTemperature(p.inner, rPeak, rISCO);
-        const double tOuter = diskColorTemperature(p.inner, p.rOut, rISCO);
+        const double tInner = diskColorTemperature(p.inner, rPeak, p.spin);
+        const double tOuter = diskColorTemperature(p.inner, p.rOut, p.spin);
 
         if (p.inner < 1000.0 || p.inner > 40000.0) {
             std::cerr << "[FAIL] " << p.name << " displayTempInner " << p.inner

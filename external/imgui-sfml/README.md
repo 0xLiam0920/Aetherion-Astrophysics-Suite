@@ -22,7 +22,7 @@ Dependencies
 Contributing
 -----
 
-* The code is written in C++17 (SFML 3 uses C++17, Dear ImGui has started using C++11 since 2022)
+* The code is written in c++20 (SFML 3 uses c++20, Dear ImGui has started using C++11 since 2022)
 * The code should be formatted via [ClangFormat](https://clang.llvm.org/docs/ClangFormat.html) using `.clang-format` provided in the root of this repository
 
 How-to

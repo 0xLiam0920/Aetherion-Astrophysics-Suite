@@ -2,7 +2,7 @@
 // ============================================================
 // orbital_body.hpp: Keplerian orbit with GR apsidal precession
 // ============================================================
-
+// developers note: This is an archaic document that is in need of an update for more advanced orbital logic. TODO for beta 3: fix this with the engine overhaul
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <cmath>

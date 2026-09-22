@@ -308,7 +308,7 @@ public:
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
-    bool ready() const { return ready_; } // is this even going to make sense? after all, the font is either ready or not, and if not, we shouldn't be trying to draw with it at all. Just keep it I guess..
+    bool ready() const { return ready_; }
     int lineHeight() const { return lineH_; }
 
     // Pixel width of a single-line string (stops at first newline).

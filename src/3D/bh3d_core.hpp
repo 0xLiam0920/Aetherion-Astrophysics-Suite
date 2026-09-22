@@ -583,7 +583,7 @@ struct ProgressiveRenderer {
 
     glm::vec2 currentJitter{0.0f};
 
-    // GL resources (lazily built on first use).
+    // GL resources (readily available)
     bool        glReady = false;
     Framebuffer resolve;    // final composited frame for the current sample
     Framebuffer accum;      // scratch target for the running average
@@ -736,7 +736,7 @@ struct State {
     bool labEnabled        = false;
     bool cgmEnabled        = false;
     bool bhStarEnabled     = false; // quasi-star hydrogen-based object (aka a black hole star)
-    bool coronaEnabled     = false; // X-ray corona (hot Comptonizing haze over the inner disk). For reference, the corona is like an outer shell in a way, but not really physical or anythingn.
+    bool coronaEnabled     = false; // X-ray corona: hot Comptonizing haze over the inner disk
     bool blueshiftEnabled  = true;
     bool showHUD           = true;
     bool showDebugHUD      = false;
@@ -1145,7 +1145,7 @@ inline void startMerger3D(State& s, MergerSecondaryKind3D kind, double massSolar
         case MergerSecondaryKind3D::Pulsar:     m.secRadius = 0.42f * m.bhR0; break;
         case MergerSecondaryKind3D::WhiteDwarf: m.secRadius = 0.52f * m.bhR0; break;
         case MergerSecondaryKind3D::Star:       m.secRadius = 0.85f * m.bhR0; break;
-        case MergerSecondaryKind3D::Gravastar:  m.secRadius = 0.50f * m.bhR0; break; // Bright but light absorbant shell
+        case MergerSecondaryKind3D::Gravastar:  m.secRadius = 0.50f * m.bhR0; break; // Bright but light-absorbent shell
         case MergerSecondaryKind3D::BosonStar:  m.secRadius = 0.60f * m.bhR0; break; // Slightly puffier shell
     }
 

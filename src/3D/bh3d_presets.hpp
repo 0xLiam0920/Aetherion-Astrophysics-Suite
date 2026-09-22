@@ -75,7 +75,7 @@ enum class MergerSecondaryKind3D {
     Pulsar,          // neutron star with lighthouse beam
     Star,            // main-sequence star (tidal-disruption aftermath)
     WhiteDwarf,      // pale compact star
-    Gravastar,       // bright but light absorbant shell
+sure    Gravastar,       // bright but light-absorbent shell
     BosonStar        // dark star
 };
 
@@ -297,7 +297,7 @@ inline BlackHoleProfile sgrAstar() {
         // No orbit has been measured, the paper only explores illustrative
         // parameters under the assumption the candidate is real. The a=6.5 Rs,
         // e=0.72 values below are therefore NOT sourced, but realistically 
-        // fabricated for visualization only. TODO: either create. a toggle for this object or just remove it entirely.
+        // fabricated for visualization only. 
         {GalaxyBody3DType::NeutronStar,  6.5f, 0.72f, -0.55f, "BLPSR (unconfirmed)"},
         // Fun fact: This body was ejected by SGR *A from it' orbit, 
         // and is now the fastest known unbound star, now ~29 kpc away and
@@ -1515,7 +1515,7 @@ const inline BlackHolePreset BH_PRESETS[] = {
     {"Phoenix A",         1.0e11, "Largest known BH, Phoenix Cluster BCG (~1.0e11 Msun)"},
     {"Thorne-Żytkow Object HV 2112", 15.0, "Hypothetical Thorne-Żytkow object (~15 Msun)"},
     {"Gravastar",         1.0e5,  "Hypothetical exotic compact object (~1e5 Msun)"},
-    {"Boson Star",         1.0e3,  "Hypothetical boson star (~1e3 Msun)"}, // TODO: replace these values with estimated ones. Read the papers!
+    {"Boson Star",         1.0e3,  "Hypothetical boson star (~1e3 Msun)"}, // TODO: replace these values with estimated ones.
     {"Quark star",         1.0e3,  "Hypothetical quark star (~1e3 Msun)"}
 };
 constexpr int NUM_BH_PRESETS = sizeof(BH_PRESETS) / sizeof(BH_PRESETS[0]);

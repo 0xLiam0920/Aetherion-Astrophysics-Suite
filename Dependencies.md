@@ -11,7 +11,7 @@ before opening an issue titled "build broken pls fix".
 | Dependency | Version | Purpose |
 |---|---|---|
 | **CMake** | ≥ 3.10 | Build system generator |
-| **C++17 compiler** | Clang / GCC / MSVC | Core language standard |
+| **C++20 compiler** | Clang / GCC / MSVC | Core language standard |
 | **Make** (or Ninja) | Any | Build backend (default: Unix Makefiles) |
 
 ---
@@ -149,7 +149,7 @@ brew install sfml glm cmake
 ## Version Summary
 
 ```
-C++ Standard:    C++17
+C++ Standard:    C++20
 CMake:           ≥ 3.10
 SFML:            3.x
 GLM:             Any

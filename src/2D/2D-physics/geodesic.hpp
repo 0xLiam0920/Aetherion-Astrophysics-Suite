@@ -3,14 +3,14 @@
 #include "integrator.hpp"
 
 /*--------- Null geodesic (Binet equation) ---------*/
-// The Binet substitution u = 1/r is genuinely clever, it turns the messy r(φ) ODE into a nice polynomial form.
-// d²u/dφ² + u = 3Mu²   (the Schwarzschild Binet equation for null geodesics)
-// the right-hand side 3Mu² is the GR correction; without it you get straight lines (Newtonian).
-// I did not derive this myself, in case that wasn't obvious.
+// The Binet substitution u = 1/r reduces the r(φ) ODE to polynomial form:
+// d²u/dφ² + u = 3Mu²   (the Schwarzschild Binet equation for null geodesics).
+// The right-hand side 3Mu² is the GR correction; without it the paths reduce
+// to straight lines (the Newtonian limit).
 // State for photon ray tracing: d²u/dφ² + u = 3Mu², u = 1/r
 
 /*--------- Timelike geodesic (proper time parameterization) ---------*/
-struct GeodesicState { // du du du du Max Verstappen
+struct GeodesicState {
     double u;        
     double du_dphi;  
 

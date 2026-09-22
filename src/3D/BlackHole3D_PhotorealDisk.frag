@@ -1,35 +1,18 @@
 // BlackHole3D_PhotorealDisk.frag
-// ============================================================================
-// TON 618, Physically-motivated black hole visualization
-// ============================================================================
-//
-// TON 618 is one of the most massive black holes known:
-//   Mass:               M = 6.6 × 10^10 M☉ (66 billion solar masses)
-//   Schwarzschild radius: Rs ≈ 1,300 AU ≈ 1.95 × 10^14 m
-//   Luminosity:          L ≈ 4 × 10^40 W (≈ 10^14 L☉, near-Eddington)
-//   Spin:                Unknown, assumed a* ≈ 0.8 (high spin quasar)
-//   Peak disk temp:      T_peak ≈ 30,000 K (UV-dominated, Shakura-Sunyaev)
-//   Photon sphere:       r_ph = 1.5 Rs
-//   ISCO (a*=0.8):      r_ISCO ≈ 2.0 Rs (prograde Kerr)
-//   Eddington rate:      Ṁ_Edd ≈ 150 M☉/yr
-//
-// All distances are in units of Rs (Schwarzschild radius).
-// blackHoleRadius = Rs = 1.0 in simulation units.
-//
 // Physics implemented:
-//   - Novikov-Thorne thin disk temperature: T(r) ∝ r^(-3/4) [1-√(rISCO/r)]^(1/4)
-//   - Novikov-Thorne flux: F(r) ∝ [1-√(rISCO/r)] / r³
+//   - Novikov-Thorne relativistic Kerr disk (Page & Thorne 1974): spin-dependent
+//     flux F(r,a*) with exact Bardeen ISCO; T(r) ∝ F(r,a*)^(1/4)
 //   - Keplerian orbital velocity: v/c = √(Rs/(2r))
 //   - Special relativistic Doppler factor: D = 1/(γ(1 - v·cosθ))
 //   - Doppler surface brightness: I ∝ D^3 (relativistic beaming, full strength)
 //   - Gravitational redshift: g = √(1 - Rs/r) applied as Planck temperature shift
 //   - Kerr geodesic deflection: velocity Verlet integrator, Schwarzschild 1/r²
 //     + Lense-Thirring frame-dragging a*(Rs²/r³)(ω̂×r̂)
-//   - Photon ring step refinement near r = 1.5 Rs
+//   - Photon ring step refinement near r
 //   - Disk self-shadowing via near-plane optical depth accumulation
 //   - Beer-Lambert volumetric absorption for BLR and jets
 //   - Synchrotron jet with spectral aging, expansion, and exponential fade
-//   - Relativistic jet with bulk Lorentz factor Γ ≈ 10
+//   - Relativistic jet with bulk Lorentz factor Γ
 // ============================================================================
 
 #version 330 core
@@ -739,46 +722,60 @@ vec3 kelvinToRGBLUT(float K) {
     return texture(blackbodyLUT, vec2(u, 0.5)).rgb;
 }
 
-// Novikov-Thorne thin disk temperature profile
-// T(r) = T_peak × f(r) where f(r) encodes the GR correction
-//
-// For TON 618 (M = 6.6×10¹⁰ M☉) at near-Eddington accretion:
-//   T_peak ≈ 2×10⁵ × (M/10⁸ M☉)^(-1/4) ≈ 30,000 K
-//   Peak emission is in the UV (Wien peak λ ≈ 97 nm)
-//   The visible-band contribution is the Rayleigh-Jeans tail
-float diskTemperature(float r, float rISCO) {
-    // Novikov-Thorne: T(r) ∝ r^(-3/4) × [1 - √(rISCO/r)]^(1/4)
-    // This peaks at r ≈ (49/36) × rISCO
-    // Normalized so max temperature = T_peak
-    float x = r / rISCO;
-    float noTorque = max(1.0 - sqrt(1.0 / x), 0.0);  // Zero-torque inner boundary
-    float profile = pow(1.0 / x, 0.75) * pow(noTorque, 0.25);
-    
-    // Peak of this profile occurs at x = 49/36 ≈ 1.361
-    // Normalize so the peak value = 1.0
-    float xPeak = 49.0 / 36.0;
-    float peakVal = pow(1.0 / xPeak, 0.75) * pow(1.0 - sqrt(1.0 / xPeak), 0.25);
-    
-    return profile / max(peakVal, 0.001);
-}
-
-// ISCO radius as function of spin parameter a*
-// Approximation of the Kerr ISCO formula for prograde orbits
+// Exact Kerr prograde ISCO radius in Rs (Bardeen, Press & Teukolsky 1972).
+// a is the dimensionless spin a*. 3 Rs at a=0, shrinking toward 0.5 Rs at the
+// prograde extremal limit.
 float computeISCO(float a) {
-    // Exact Kerr ISCO: complex formula involving Z1, Z2
-    // Good approximation for prograde orbits:
-    // r_ISCO/Rs ≈ 3 - 2.54*(a - 0.2)  for 0 ≤ a ≤ 0.95
-    // At a=0: 3Rs (Schwarzschild), a=1: ~0.5Rs (extremal Kerr prograde)
-    float rISCO = 3.0 - 2.0 * a * (1.0 + 0.27 * a);  // Smooth fit
-    return max(rISCO, 0.6);  // Physical minimum ~0.5Rs
+    a = clamp(a, 0.0, 0.9999);
+    float a2 = a * a;
+    float Z1 = 1.0 + pow(1.0 - a2, 1.0/3.0) *
+                     (pow(1.0 + a, 1.0/3.0) + pow(1.0 - a, 1.0/3.0));
+    float Z2 = sqrt(3.0 * a2 + Z1 * Z1);
+    float rMsOverM = 3.0 + Z2 - sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
+    return 0.5 * rMsOverM;   // Rs = 2M, so r/Rs = (r/M)/2
 }
 
-// Novikov-Thorne flux profile: F(r) ∝ [1 - √(rISCO/r)] / r³
-// This is T(r)^4 from diskTemperature(), extracted here for clarity
-float novikovThorneFlux(float r, float rISCO) {
-    if (r < rISCO) return 0.0;
-    float x = r / rISCO;
-    return max(1.0 - sqrt(1.0 / x), 0.0) / (x * x * x);
+// Unnormalised Page-Thorne flux shape at x=sqrt(r_M), given the precomputed
+// cubic roots (x1,x2,x3) of x^3-3x+2a and their log coefficients. Relativistic
+// Kerr generalisation of the Newtonian [1-sqrt(rISCO/r)]/r^3 (Page-Thorne 1974).
+float ptFluxShape(float x, float x0, float a,
+                  float x1, float x2, float x3,
+                  float c1, float c2, float c3) {
+    if (x <= x0) return 0.0;
+    float Q = x - x0 - 1.5 * a * log(x / x0)
+            - c1 * log((x - x1) / (x0 - x1))
+            - c2 * log((x - x2) / (x0 - x2))
+            - c3 * log((x - x3) / (x0 - x3));
+    float denom = x * x * x * x * (x * x * x - 3.0 * x + 2.0 * a);
+    return max(Q / denom, 0.0);
+}
+
+// Normalised relativistic Novikov-Thorne temperature in [0,1] (T proportional
+// to F^(1/4)), peaking at 1.0 at the hottest annulus. Mirrors the CPU reference
+// in bh3d_blackbody.hpp; the normalising peak is found with a short scan here
+// (coarser than the CPU) since the absolute disk scale is set per-preset.
+float novikovThorneProfile(float rRs, float a) {
+    a = clamp(a, 0.0, 0.9999);
+    float rin = computeISCO(a);
+    float x0  = sqrt(2.0 * rin);
+    float ac  = acos(a);
+    float x1  =  2.0 * cos(ac / 3.0 - 1.0471975512);  // -pi/3
+    float x2  =  2.0 * cos(ac / 3.0 + 1.0471975512);  // +pi/3
+    float x3  = -2.0 * cos(ac / 3.0);
+    // c2 is a 0/0 as a->0 (x2->0); the limit is 0.
+    float c1 = 3.0 * (x1 - a) * (x1 - a) / (x1 * (x1 - x2) * (x1 - x3));
+    float c2 = (abs(x2) < 1e-5) ? 0.0
+             : 3.0 * (x2 - a) * (x2 - a) / (x2 * (x2 - x1) * (x2 - x3));
+    float c3 = 3.0 * (x3 - a) * (x3 - a) / (x3 * (x3 - x1) * (x3 - x2));
+
+    // Hottest annulus sits within ~1.5*rISCO; scan [rISCO, 2.2*rISCO] to normalise.
+    float peak = 1e-20;
+    for (int i = 1; i <= 16; ++i) {
+        float rr = rin * (1.0 + 1.2 * float(i) / 16.0);
+        peak = max(peak, ptFluxShape(sqrt(2.0 * rr), x0, a, x1, x2, x3, c1, c2, c3));
+    }
+    float F = ptFluxShape(sqrt(2.0 * rRs), x0, a, x1, x2, x3, c1, c2, c3);
+    return clamp(pow(F / peak, 0.25), 0.0, 1.0);
 }
 
 // Disk emission with physically-motivated Doppler shift for TON 618
@@ -813,7 +810,7 @@ vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3
     //   Peak emission is UV (Wien λ_max ≈ 97 nm), NOT optical.
     //   Visible light comes from the Rayleigh-Jeans tail.
     float T_peak = diskPeakTemp;  // Per-preset Novikov-Thorne peak [K]
-    float Tprofile = diskTemperature(r, rISCO);
+    float Tprofile = novikovThorneProfile(r, spinParameter);
     
     // Floor temperature from X-ray irradiation and viscous dissipation
     // Outer disk reprocesses inner UV/X-ray emission → warm extended disk
@@ -970,7 +967,7 @@ modulates the existing structure rather than fighting it.
     
     float I = flux * innerFade * outerFade * spiralArm * streaks * filaments * waves * dopplerBright * innerBoost * pulse;
     I += hotspot * innerFade * dopplerBright;  // Orbiting hotspot adds on top
-    // I *= mri;   // FIXME/INVESTIGATE: When enabled, this MRI texture makes any other visual settings other than default fail. Why? I have zero idea, but disabling it during (uncommitted) testing worked.
+    // I *= mri;   // FIXME/INVESTIGATE: When enabled, this MRI texture makes any other visual settings other than default fail
     // Wobble slightly modulates brightness (surface normal tilts toward/away from viewer)
     I *= (1.0 + wobble);
     
@@ -1700,9 +1697,9 @@ void traceRay(
 }
 
 /*----------------------Main function-----------------------*/
-void main() { // note, we chose void here since we're returning early on absorption of each ray, but I guess you could just return black if you're lazy
-    vec2 juv = fragUV + pixelJitter / resolution; // sub-pixel jitter for still-frame / beauty-shot accumulation (0 while navigating, much better than before)
-    vec3 rayDir = getRayDir(juv, cameraPos, cameraDir, cameraUp, fov); // Compute initial ray direction from camera through pixel (janky ahh approach but it works)
+void main() {
+    vec2 juv = fragUV + pixelJitter / resolution; // sub-pixel jitter for still-frame / beauty-shot accumulation (0 while navigating)
+    vec3 rayDir = getRayDir(juv, cameraPos, cameraDir, cameraUp, fov); // Compute initial ray direction from camera through pixel
     vec3 rayOrigin = cameraPos;
     
     // No early sphere test here, the ray marcher handles absorption
