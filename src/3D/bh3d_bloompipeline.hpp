@@ -80,8 +80,7 @@ struct BloomPipeline {
         quad.drawQuad();
 
         /*--------- Pass 3: progressive downsample + separable blur ---------*/
-        // Four mip levels of blur. Four is a bit arbitrary, but it looks right,
-        // and in real-time graphics "it looks right" is usually the deciding factor.
+        // Four mip levels of blur. Four is a bit arbitrary, but it looks right. For developers: adjust as needed, do note that this can affect performance of course.
         blurProg.use();
         GLuint srcTex = thresholdFBO.colorTex;
         for (int mip = 0; mip < NUM_MIPS; ++mip) {

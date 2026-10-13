@@ -1,6 +1,6 @@
 # Aetherion: Astrophysics Simulation Suite
 
-[![Version](https://img.shields.io/badge/version-0.2.2--beta2-blue)]
+[![Version](https://img.shields.io/badge/version-0.2.3--beta2-blue)]
 [![Status](https://img.shields.io/badge/status-beta-orange)]
 [![License](https://img.shields.io/badge/license-MIT-green)]
 
@@ -8,7 +8,7 @@ Aetherion is an open source astrophysics simulation and analysis suite for exper
 
 DISCLAIMER!
                                                        
-As of 17 April 2026, Aetherion is in active beta. The core simulation, visualization,
+As of 13 October 2026, Aetherion is in active beta. The core simulation, visualization,
 analysis, and export workflows are implemented and continue to undergo testing and
 refinement. Features and interfaces may change between releases, hence the project
 is not ready to be considered production-grade.
