@@ -20,6 +20,7 @@
 #    include "src/common/catalog.hpp"
 #    include "src/3D/bh3d_presets.hpp"
 #    include "src/3D/bh3d_catalog_adapter.hpp"
+#    include "src/3D/orbital_body.hpp"
 #    include <vector>
 #  endif
 #endif
@@ -510,6 +511,273 @@ bool testDiskColourGradient() {
     return ok;
 }
 
+// ===========================================================================
+// Step 10: CPU reference geodesic integrator (GL-free, matches bh3d_physics.glsl)
+// ---------------------------------------------------------------------------
+// Units: Rs = 1, c = 1, GM = 0.5. A photon's path obeys
+//   d2x/dlambda2 = -1.5 * h2 * x / r^5,   h = |x cross v|  (conserved).
+// This mirrors geoAccel()/geoAdvance() in the shared shader so the shadow
+// edge, weak deflection and low-quality path are all checked in CI.
+// ===========================================================================
+struct GVec3 { double x, y, z; };
+inline GVec3 operator+(GVec3 a, GVec3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+inline GVec3 operator-(GVec3 a, GVec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+inline GVec3 operator*(GVec3 a, double s) { return {a.x * s, a.y * s, a.z * s}; }
+inline double gdot(GVec3 a, GVec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline GVec3 gcross(GVec3 a, GVec3 b) {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+inline double glength(GVec3 a) { return std::sqrt(gdot(a, a)); }
+inline GVec3 gnormalize(GVec3 a) { double l = glength(a); return l > 0.0 ? a * (1.0 / l) : a; }
+
+inline GVec3 geoAccel(GVec3 x, double h2) {
+    const double r2 = gdot(x, x);
+    return x * (-1.5 * h2 / (r2 * r2 * std::sqrt(r2)));
+}
+
+// RK4 advance (photoreal quality): 4 acceleration evals per step.
+inline void geoAdvanceRK4(GVec3& x, GVec3& v, double h2, double dt) {
+    const GVec3 k1x = v,                    k1v = geoAccel(x, h2);
+    const GVec3 k2x = v + k1v * (0.5 * dt), k2v = geoAccel(x + k1x * (0.5 * dt), h2);
+    const GVec3 k3x = v + k2v * (0.5 * dt), k3v = geoAccel(x + k2x * (0.5 * dt), h2);
+    const GVec3 k4x = v + k3v * dt,         k4v = geoAccel(x + k3x * dt, h2);
+    x = x + (k1x + k2x * 2.0 + k3x * 2.0 + k4x) * (dt / 6.0);
+    v = v + (k1v + k2v * 2.0 + k3v * 2.0 + k4v) * (dt / 6.0);
+}
+
+// Velocity Verlet advance (low quality): 1 acceleration eval per step,
+// carrying `a` between calls exactly as the QUALITY==0 shader path does.
+inline void geoAdvanceVerlet(GVec3& x, GVec3& v, GVec3& a, double h2, double dt) {
+    v = v + a * (0.5 * dt);
+    x = x + v * dt;
+    a = geoAccel(x, h2);
+    v = v + a * (0.5 * dt);
+}
+
+inline double gsmoothstep(double e0, double e1, double x) {
+    const double t = std::clamp((x - e0) / (e1 - e0), 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+// Low-quality step length proportional to r (shader QUALITY==0: FINE/COARSE).
+inline double geoStepLow(double r) {
+    const double FINE = 0.05, COARSE = 0.14;
+    return (FINE + (COARSE - FINE) * gsmoothstep(1.5, 6.0, r)) * r;
+}
+
+// Ray from (-D, b, 0) heading +X. Returns true if captured (r < 1);
+// on escape, *vOut is the final (normalised) direction.
+inline bool traceRK4(double b, double D, GVec3* vOut = nullptr) {
+    GVec3 x{-D, b, 0.0}, v{1.0, 0.0, 0.0};
+    const GVec3 h = gcross(x, v);
+    const double h2 = gdot(h, h);
+    for (int i = 0; i < 400000; ++i) {
+        const double r = glength(x);
+        if (r < 1.0) return true;
+        if (r > 2.0 * D && gdot(x, v) > 0.0) { if (vOut) *vOut = gnormalize(v); return false; }
+        geoAdvanceRK4(x, v, h2, std::min(0.01 * r, 5.0));
+    }
+    return false;
+}
+
+// Same trace, but using the low-quality Verlet integrator + geoStepLow.
+inline bool traceVerletLow(double b, double D, GVec3* vOut = nullptr) {
+    GVec3 x{-D, b, 0.0}, v{1.0, 0.0, 0.0};
+    const GVec3 h = gcross(x, v);
+    const double h2 = gdot(h, h);
+    GVec3 a = geoAccel(x, h2);
+    for (int i = 0; i < 400000; ++i) {
+        const double r = glength(x);
+        if (r < 1.0) return true;
+        if (r > 2.0 * D && gdot(x, v) > 0.0) { if (vOut) *vOut = gnormalize(v); return false; }
+        geoAdvanceVerlet(x, v, a, h2, geoStepLow(r));
+    }
+    return false;
+}
+
+// Bisect the capture/escape boundary (the shadow edge) in b.
+template <typename TraceFn>
+double shadowEdge(TraceFn trace, double D, int iters = 40) {
+    double lo = 2.0, hi = 3.5;   // captured below b_crit, escapes above
+    for (int i = 0; i < iters; ++i) {
+        const double mid = 0.5 * (lo + hi);
+        if (trace(mid, D)) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+bool testGeodesicShadowEdge() {
+    // The RK4 integrator's capture boundary must land on the analytic
+    // Schwarzschild critical impact parameter b_crit = 3*sqrt(3)/2 Rs.
+    const double bCrit = 3.0 * std::sqrt(3.0) / 2.0;   // 2.598076...
+    const double b = shadowEdge([](double bb, double D) { return traceRK4(bb, D); }, 1000.0);
+    if (std::abs(b - bCrit) > 0.005) {
+        std::cerr << "[FAIL] geodesic shadow edge: expected b_crit=" << bCrit
+                  << ", got " << b << " (err " << std::abs(b - bCrit) << ")\n";
+        return false;
+    }
+    std::cout << "[PASS] geodesic shadow edge: b_crit=" << b
+              << " (analytic " << bCrit << ")\n";
+    return true;
+}
+
+bool testGeodesicWeakDeflection() {
+    // Far from the hole the bending is the weak-field value alpha = 2 Rs / b
+    // (= 4GM/(c^2 b) with GM = 0.5). b = 200 => alpha = 0.0100 rad.
+    const double b = 200.0;
+    GVec3 vOut{1.0, 0.0, 0.0};
+    if (traceRK4(b, 1.0e4, &vOut)) {
+        std::cerr << "[FAIL] geodesic weak deflection: ray at b=200 was captured\n";
+        return false;
+    }
+    const double alpha = std::acos(std::clamp(vOut.x, -1.0, 1.0));
+    const double expected = 2.0 / b;   // 0.0100
+    if (std::abs(alpha - expected) > 0.03 * expected) {
+        std::cerr << "[FAIL] geodesic weak deflection: expected ~" << expected
+                  << " rad, got " << alpha << " rad\n";
+        return false;
+    }
+    std::cout << "[PASS] geodesic weak deflection: alpha=" << alpha
+              << " rad vs 2/b=" << expected << "\n";
+    return true;
+}
+
+bool testGeodesicMatches2D() {
+    // The 3D Cartesian RK4 integrator must reproduce the independent 2D
+    // angular integrator (Photon::computePath) for the same M = 0.5 hole.
+    Schwarzschild bh;
+    bh.M = 0.5;   // Rs = 2M = 1, matching the 3D units
+
+    bool ok = true;
+    for (double b : {5.0, 8.0, 12.0, 20.0}) {
+        Photon ph;
+        ph.impactParameter = b;
+        ph.computePath(bh, /*rMax=*/1.0e5, /*dphi=*/0.0005);
+        if (ph.captured) {
+            std::cerr << "[FAIL] geodesic-2D match: 2D ray captured at b=" << b << "\n";
+            ok = false;
+            continue;
+        }
+        const double d2d = std::abs(ph.deflectionDeg);
+
+        GVec3 vOut{1.0, 0.0, 0.0};
+        if (traceRK4(b, 1.0e4, &vOut)) {
+            std::cerr << "[FAIL] geodesic-2D match: 3D ray captured at b=" << b << "\n";
+            ok = false;
+            continue;
+        }
+        const double d3d = std::acos(std::clamp(vOut.x, -1.0, 1.0)) * 180.0 / M_PI;
+
+        // Two different integrators (angular vs Cartesian RK4); allow a small
+        // relative gap plus an absolute floor for the tiny-angle cases.
+        const double tol = std::max(0.03 * d2d, 0.05);
+        if (std::abs(d3d - d2d) > tol) {
+            std::cerr << "[FAIL] geodesic-2D match at b=" << b << ": 2D=" << d2d
+                      << " deg vs 3D=" << d3d << " deg (tol " << tol << ")\n";
+            ok = false;
+        }
+    }
+    if (ok)
+        std::cout << "[PASS] geodesic 3D RK4 matches 2D Photon::computePath across b\n";
+    return ok;
+}
+
+bool testLowQualityShadow() {
+    // The low-quality Verlet path (i3 GPUs) must still resolve the shadow edge
+    // to within 1% of the analytic b_crit, guarding the cheap integrator.
+    const double bCrit = 3.0 * std::sqrt(3.0) / 2.0;
+    const double b = shadowEdge([](double bb, double D) { return traceVerletLow(bb, D); }, 1000.0);
+    if (std::abs(b - bCrit) > 0.01 * bCrit) {
+        std::cerr << "[FAIL] low-quality shadow edge: expected ~" << bCrit
+                  << ", got " << b << " (err " << std::abs(b - bCrit) << ")\n";
+        return false;
+    }
+    std::cout << "[PASS] low-quality (Verlet) shadow edge: b=" << b
+              << " within 1% of " << bCrit << "\n";
+    return true;
+}
+
+bool testDiskRedshift() {
+    using bh3d::physics::diskRedshift;
+
+    // Face-on at the a=0 ISCO (r=3, Lz=0): pure gravitational + transverse
+    // shift g = sqrt(1/2) = 0.70711.
+    const double g0 = diskRedshift(3.0, 0.0, 0.0, /*doppler=*/true);
+    if (std::abs(g0 - 0.70711) > 1e-3) {
+        std::cerr << "[FAIL] disk redshift anchor: r=3,a=0,Lz=0 expected 0.70711, got "
+                  << g0 << "\n";
+        return false;
+    }
+
+    // Doppler asymmetry: the approaching side (Lz<0) is blueshifted (g>1) and
+    // the receding side (Lz>0) is redshifted (g<1).
+    const double gApproach = diskRedshift(3.0, 0.0, -5.0, true);
+    const double gRecede   = diskRedshift(3.0, 0.0,  5.0, true);
+    if (!(gApproach > 1.0)) {
+        std::cerr << "[FAIL] disk redshift: approaching side should be blue (g>1); got "
+                  << gApproach << "\n";
+        return false;
+    }
+    if (!(gRecede < 1.0)) {
+        std::cerr << "[FAIL] disk redshift: receding side should be red (g<1); got "
+                  << gRecede << "\n";
+        return false;
+    }
+    // g must fall monotonically as Lz increases.
+    if (!(gApproach > g0 && g0 > gRecede)) {
+        std::cerr << "[FAIL] disk redshift not monotone in Lz: " << gApproach << " / "
+                  << g0 << " / " << gRecede << "\n";
+        return false;
+    }
+
+    // Doppler off: Lz is ignored, so any Lz returns the gravitational anchor.
+    const double gOff = diskRedshift(3.0, 0.0, -5.0, /*doppler=*/false);
+    if (std::abs(gOff - g0) > 1e-9) {
+        std::cerr << "[FAIL] disk redshift: Doppler-off should ignore Lz; got "
+                  << gOff << " vs " << g0 << "\n";
+        return false;
+    }
+
+    std::cout << "[PASS] disk redshift: 0.7071 anchor, blue approach / red recede, "
+                 "Doppler-off gravitational only\n";
+    return true;
+}
+
+bool testBlackbodyLinearRadiance() {
+    using bh3d::physics::blackbodyLinear;
+    auto luminance = [](const std::array<double, 3>& c) {
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+
+    // Normalisation: luminance Y(6500 K) == 1.
+    const double y65 = luminance(blackbodyLinear(6500.0));
+    if (std::abs(y65 - 1.0) > 0.02) {
+        std::cerr << "[FAIL] blackbodyLinear: Y(6500 K) should be 1.0; got " << y65 << "\n";
+        return false;
+    }
+
+    // Unlike blackbodyRGB, this keeps absolute brightness: hotter is brighter.
+    const double y3k = luminance(blackbodyLinear(3000.0));
+    const double y10k = luminance(blackbodyLinear(10000.0));
+    if (!(y10k > y65 && y65 > y3k)) {
+        std::cerr << "[FAIL] blackbodyLinear: luminance should grow with T; got "
+                  << y3k << " / " << y65 << " / " << y10k << "\n";
+        return false;
+    }
+
+    // Hotter is bluer: the blue/red ratio must increase with temperature.
+    auto blueRedRatio = [](const std::array<double, 3>& c) {
+        return c[2] / std::max(c[0], 1e-12);
+    };
+    if (!(blueRedRatio(blackbodyLinear(10000.0)) > blueRedRatio(blackbodyLinear(3000.0)))) {
+        std::cerr << "[FAIL] blackbodyLinear: hotter should be bluer\n";
+        return false;
+    }
+
+    std::cout << "[PASS] blackbody linear radiance: Y(6500 K)=" << y65
+              << ", brightness grows with T, hotter is bluer\n";
+    return true;
+}
+
 #ifdef AETHERION_HAVE_CATALOG
 // Round-trip: the JSON catalog must reconstruct the compiled-in profiles
 // exactly. Keeps the two in lockstep until the C++ profiles are retired.
@@ -613,6 +881,99 @@ bool testCatalogRoundTrip() {
                   << " JSON profiles match built-in profiles field-for-field\n";
     return ok;
 }
+
+// Step 8: the OJ 287 orbit (a = 24.2 Rs, e = 0.65) must advance its periapsis
+// by ~38.6 deg per orbit through the built-in 1PN precession formula.
+bool testOrbitPrecession() {
+    cfg::OrbitalConfig oc;
+    oc.semiMajor    = 24.2f;
+    oc.eccentricity = 0.65f;
+    oc.inclination  = 0.0f;   // keep the orbit in the XZ plane
+
+    OrbitalBody body(oc);
+    body.setTimeScale(1.0f);  // one unit of sim-time per dt
+
+    // Period in these units (GM = 0.5): T = 2*pi*sqrt(2 a^3).
+    const double a = oc.semiMajor;
+    const double period = 2.0 * M_PI * std::sqrt(2.0 * a * a * a);
+
+    // Measure the periapsis direction at two successive periapsis passages. The
+    // azimuthal angle at periapsis equals the accumulated precession (true
+    // anomaly is 0 there), so the gap between consecutive periapses is exactly
+    // the precession per orbit -- robust to any period rounding, unlike reading
+    // the angle after a fixed number of steps (fragile at high eccentricity).
+    const int stepsPerOrbit = 50000;
+    const float dt = (float)(period / stepsPerOrbit);
+    const int totalSteps = stepsPerOrbit * 22 / 10;   // ~2.2 orbits
+
+    double rPrev = 1e300, rCur = 1e300, anglePrev = 0.0;
+    double peri1 = 1e300, peri2 = 1e300;
+    int found = 0;
+    for (int i = 0; i < totalSteps && found < 2; ++i) {
+        body.update(dt);
+        const glm::vec3 p = body.position();
+        const double r = std::sqrt((double)p.x * p.x + (double)p.z * p.z);
+        const double ang = std::atan2((double)p.z, (double)p.x);
+        // rPrev (i-2), rCur (i-1), r (i): a local minimum sits at i-1. Require
+        // rCur < a so only true periapses count -- apoapsis is nearly flat and
+        // float jitter there would otherwise register spurious minima.
+        if (i >= 2 && rCur < rPrev && rCur < r && rCur < (double)oc.semiMajor) {
+            if (found == 0) peri1 = anglePrev;
+            else            peri2 = anglePrev;
+            ++found;
+        }
+        rPrev = rCur; rCur = r; anglePrev = ang;
+    }
+
+    if (found < 2) {
+        std::cerr << "[FAIL] orbit precession: only found " << found
+                  << " periapsis passages in ~2.2 orbits\n";
+        return false;
+    }
+
+    double deltaDeg = (peri2 - peri1) * 180.0 / M_PI;
+    while (deltaDeg < 0.0)   deltaDeg += 360.0;
+    while (deltaDeg >= 360.0) deltaDeg -= 360.0;
+
+    if (std::abs(deltaDeg - 38.6) > 0.5) {
+        std::cerr << "[FAIL] orbit precession: expected ~38.6 deg/orbit at a=24.2, e=0.65; got "
+                  << deltaDeg << " deg\n";
+        return false;
+    }
+    std::cout << "[PASS] orbit precession: " << deltaDeg
+              << " deg/orbit at a=24.2, e=0.65 (target 38.6)\n";
+    return true;
+}
+
+// Step 5: loading oj_287.json must auto-resolve the disk inner radius to the
+// prograde Kerr ISCO for the primary spin (a*=0.38 -> ~2.344 Rs).
+bool testISCOAuto() {
+    const std::string dir = AETHERION_CATALOG_DIR;
+    auto lr = catalog::loadDir(dir);
+    if (!lr.ok()) {
+        std::cerr << "[FAIL] ISCO auto: no catalog entries loaded from " << dir << "\n";
+        return false;
+    }
+
+    const catalog::Entry* oj = nullptr;
+    for (const auto& e : lr.entries)
+        if (e.name == "OJ 287") { oj = &e; break; }
+    if (!oj) {
+        std::cerr << "[FAIL] ISCO auto: OJ 287 entry not found in catalog\n";
+        return false;
+    }
+
+    const BlackHoleProfile p = bh3d_catalog::toProfile(*oj);
+    const double expected = bh3d::physics::computeISCO(0.38);   // ~2.3431
+    if (std::abs(p.config.disk.innerRadius - expected) > 5e-3) {
+        std::cerr << "[FAIL] ISCO auto: OJ 287 inner radius expected ~" << expected
+                  << " Rs, got " << p.config.disk.innerRadius << "\n";
+        return false;
+    }
+    std::cout << "[PASS] ISCO auto: OJ 287 inner radius = " << p.config.disk.innerRadius
+              << " Rs (computeISCO(0.38))\n";
+    return true;
+}
 #endif  // AETHERION_HAVE_CATALOG
 
 }  // namespace
@@ -633,9 +994,20 @@ int main() {
     ok = testComputeISCO() && ok;
     ok = testDiskColourGradient() && ok;
 
+    // Beta 3 engine: exact geodesic integrator + disk physics (shared shader math).
+    ok = testGeodesicShadowEdge() && ok;
+    ok = testGeodesicWeakDeflection() && ok;
+    ok = testGeodesicMatches2D() && ok;
+    ok = testLowQualityShadow() && ok;
+    ok = testDiskRedshift() && ok;
+    ok = testBlackbodyLinearRadiance() && ok;
+
 #ifdef AETHERION_HAVE_CATALOG
     // JSON catalog must reconstruct the compiled-in profiles exactly.
     ok = testCatalogRoundTrip() && ok;
+    // Beta 3 engine: auto-ISCO inner radius and GR orbital precession.
+    ok = testISCOAuto() && ok;
+    ok = testOrbitPrecession() && ok;
 #endif
 
     if (!ok) {

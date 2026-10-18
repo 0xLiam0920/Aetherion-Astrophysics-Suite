@@ -13,6 +13,8 @@
 //
 // The module is header-only with `inline` storage to avoid touching CMake.
 // I might wanna split this into multiple files later, it's a bit monolithic.
+// Update 18-10-2026: I am working on an engine rewrite. Part of that may include reshuffling logic, though where I need to look at
+// The issue is, is that everything here is technically needed, so breaking this up will be hard. 
 // ============================================================
 #pragma once
 
@@ -1878,6 +1880,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
                 case 4: mEst = 1.4f;   break; // NeutronStar — 10 km ≈ 0.0014 Rs for 10M☉ BH
                 case 5: mEst = 0.6f;   break; // WhiteDwarf
                 case 6: mEst = 1.0f;   break; // CompanionStar
+                case 7: physRs = (float)(snap.orbBodyMasses[i] / snap.massSolar); break; // horizon scales with mass
                 default: mEst = 1.0f;  break;
             }
             // R_phys ≈ RSun · mEst^0.8  for main-sequence; clamped to reality

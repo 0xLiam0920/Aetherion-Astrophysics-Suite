@@ -9,6 +9,7 @@
 // ============================================================
 
 #include "../common/catalog.hpp"
+#include "bh3d_blackbody.hpp"   // bh3d::physics::computeISCO (Step 5 auto-ISCO)
 #include "bh3d_presets.hpp"     // BlackHoleProfile, GalaxyBody3D(Type) (global namespace)
 #include "config.hpp"
 #include "resource_manager.hpp"
@@ -36,7 +37,10 @@ inline glm::vec3 vec3Of(const json& j, glm::vec3 cur) {
 }
 
 inline void applyDisk(const json& j, cfg::DiskConfig& d) {
-    d.innerRadius          = j.value("innerRadius",          d.innerRadius);
+    // innerRadius may be the string "isco" (resolved later from spin in
+    // toProfile/applySecondary), so only read it here when it's numeric.
+    if (j.contains("innerRadius") && j["innerRadius"].is_number())
+        d.innerRadius = j["innerRadius"].get<float>();
     d.outerRadius          = j.value("outerRadius",          d.outerRadius);
     d.halfThickness        = j.value("halfThickness",        d.halfThickness);
     d.peakTemp             = j.value("peakTemp",             d.peakTemp);
@@ -125,7 +129,17 @@ inline BlackHoleProfile toProfile(const catalog::Entry& e) {
         p.hasSecondaryBH = v["secondary"].value("enabled", false);
         applySecondary(v["secondary"], p.secondaryConfig);
     }
-
+    // Step 5: auto-ISCO inner radius. When the JSON sets disk.innerRadius to
+    // the string "isco", derive it from the (already-applied) spin. A numeric
+    // value was already stored by applyDisk() above; an absent key keeps the
+    // compiled-in default, exactly like every other sparse override.
+    {
+        const json& dj = v.value("disk", json::object());
+        if (dj.contains("innerRadius") && dj["innerRadius"].is_string() &&
+            dj["innerRadius"] == "isco")
+            p.config.disk.innerRadius =
+                (float)bh3d::physics::computeISCO(p.config.blackHole.spinParameter);
+    }
     const json d = v.value("defaults", json::object());
     p.defaultJets       = d.value("jets",       false);
     p.defaultBLR        = d.value("blr",        false);

@@ -4,6 +4,7 @@
 // ============================================================
 
 #include "config.hpp"
+#include "bh3d_blackbody.hpp"   // bh3d::physics::computeISCO (auto-ISCO inner radius)
 #include <string>
 #include <array>
 #include <vector>
@@ -75,7 +76,7 @@ enum class MergerSecondaryKind3D {
     Pulsar,          // neutron star with lighthouse beam
     Star,            // main-sequence star (tidal-disruption aftermath)
     WhiteDwarf,      // pale compact star
-sure    Gravastar,       // bright but light-absorbent shell
+    Gravastar,       // bright but light-absorbent shell
     BosonStar        // dark star
 };
 
@@ -1252,7 +1253,7 @@ inline BlackHoleProfile oj287() {
     cfg::SimConfig c;
     c.blackHole.spinParameter = 0.38f;   // Wikipedia: ~38% of max Kerr rotation
     c.blackHole.radius        = 1.0f;
-    c.disk.innerRadius   = 3.2f;    // ISCO recedes with the corrected, lower spin
+    c.disk.innerRadius   = (float)bh3d::physics::computeISCO(c.blackHole.spinParameter); // auto-ISCO (a*=0.38 -> ~2.343 Rs)
     c.disk.outerRadius   = 26.0f;
     c.disk.halfThickness = 0.011f;  // Extremely thin Shakura-Sunyaev disk
     // kelvinToRGB(11000) → icy blue-white, immediately distinguishable from all others.
@@ -1269,7 +1270,7 @@ inline BlackHoleProfile oj287() {
     c.blr.outerRadius = 36.0f;
     c.blr.thickness   = 7.0f;
     c.blr.strength    = 0.65f;  // OJ 287: blazar-class BLR, variable
-    c.orbital.semiMajor  = 14.0f;    // Secondary SMBH in tight orbit
+    c.orbital.semiMajor  = 24.2f;    // Secondary SMBH orbit; 1PN precession -> ~38.6 deg/orbit at e=0.65
     c.orbital.bodyRadius = 2.2f;
     c.camera.initialPos  = glm::vec3(0.0f, 7.0f, 27.0f);
     c.bloom.threshold    = 0.88f;
@@ -1289,7 +1290,7 @@ inline BlackHoleProfile oj287() {
     // accretion disk + spin-derived photon ring) it really does punch through the primary's disk every orbit,
     // which is what triggers the famous ~12yr optical outbursts.
     p.galaxyBodies = {
-        {GalaxyBody3DType::BlackHole, 15.0f, 0.65f, -0.20f, "Secondary SMBH"},  // ~1.5e8 Msun
+        {GalaxyBody3DType::BlackHole, 24.2f, 0.65f, -0.20f, "Secondary SMBH"},  // ~1.5e8 Msun
         {GalaxyBody3DType::GasCloud,  22.0f, 0.30f,  0.05f},  // Accretion blob
         {GalaxyBody3DType::GasCloud,  40.0f, 0.20f,  0.30f}   // Outer gas cloud
     };

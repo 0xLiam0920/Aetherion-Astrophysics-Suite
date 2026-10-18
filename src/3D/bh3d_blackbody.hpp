@@ -108,6 +108,42 @@ inline std::array<double, 3> blackbodyRGB(double kelvin) {
     return { srgbGamma(r), srgbGamma(g), srgbGamma(b) };
 }
 
+// Linear sRGB-primary blackbody radiance: NOT gamma-encoded and NOT
+// chromaticity-normalised, so it carries absolute brightness as well as hue.
+// Scaled so the luminance Y(6500 K) == 1. This is the quantity the Step 3
+// "radiance" LUT stores (GL_RGB32F, log-spaced), and because the frequency
+// shift g on a blackbody maps B(T) -> B(gT) exactly (I_nu/nu^3 is invariant),
+// a single lookup at g*T gives colour, beaming and brightness together.
+inline std::array<double, 3> blackbodyLinear(double kelvin) {
+    auto cieXYZ = [](double T, double& X, double& Y, double& Z) {
+        X = Y = Z = 0.0;
+        for (int j = 0; j < kCMFSamples; ++j) {
+            const double lam = (380.0 + j * 10.0) * 1e-9;   // metres
+            const double e   = kHC_K / (lam * T);
+            const double B   = (e < 709.0)
+                             ? 1.0 / (std::pow(lam, 5.0) * std::expm1(e))
+                             : 0.0;
+            X += B * kCMF_x[j];
+            Y += B * kCMF_y[j];
+            Z += B * kCMF_z[j];
+        }
+    };
+    // Reference luminance at 6500 K, computed once.
+    static const double Yref = [&] {
+        double X, Y, Z;
+        cieXYZ(6500.0, X, Y, Z);
+        return Y;
+    }();
+
+    double X, Y, Z;
+    cieXYZ(std::max(kelvin, 1.0), X, Y, Z);
+    X /= Yref; Y /= Yref; Z /= Yref;
+
+    return { std::max(0.0,  3.2406 * X - 1.5372 * Y - 0.4986 * Z),
+             std::max(0.0, -0.9689 * X + 1.8758 * Y + 0.0415 * Z),
+             std::max(0.0,  0.0557 * X - 0.2040 * Y + 1.0570 * Z) };
+}
+
 /*───────Novikov-Thorne / Page & Thorne 1974)───────*/
 
 // The three functions below are the standard relativistic Kerr 
@@ -206,6 +242,26 @@ inline double novikovThorneTemperature(double rRs, double a) {
 // effective temperature and it drives luminosity, not hue.
 inline double diskColorTemperature(double displayTempInner, double rRs, double a) {
     return displayTempInner * novikovThorneTemperature(rRs, a);
+}
+
+// Exact frequency-shift factor g = nu_obs / nu_emit for gas on a prograde
+// circular Kerr orbit at radius r (Rs), as seen by a distant static observer.
+// This is the GL-free twin of diskRedshift() in the shader; keeping it here
+// means the shader's disk colour and the CI checks sample the same formula.
+//   a   : dimensionless spin a* (clamped to [0, 0.998]).
+//   Lz  : conserved photon L/E of the traced ray (0 => pure gravitational +
+//         transverse shift, i.e. the "Doppler off" case).
+//   doppler : when false, Lz is ignored (showDoppler == 0 in the shader).
+// Reference checkpoint: r=3, a=0, Lz=0 gives g = sqrt(1/2) = 0.70711.
+inline double diskRedshift(double rRs, double a, double Lz, bool doppler) {
+    a = std::clamp(a, 0.0, 0.998);
+    const double rM = 2.0 * rRs;              // Rs -> M units
+    const double s  = rM * std::sqrt(rM);     // rM^1.5
+    const double Om = 1.0 / (s + a);          // gas angular velocity (M units)
+    const double ut = (s + a) /
+        (std::sqrt(s) * std::sqrt(std::max(s - 3.0 * std::sqrt(rM) + 2.0 * a, 1e-5)));
+    const double LzM = doppler ? 2.0 * Lz : 0.0;
+    return 1.0 / (ut * (1.0 + Om * LzM));
 }
 
 }  // namespace physics

@@ -17,7 +17,7 @@ public:
         // Compute derived constants once
         const float a = cfg_.semiMajor;
         const float e = cfg_.eccentricity;
-        period_ = 2.0f * glm::pi<float>() * std::sqrt(a * a * a); // T = 2π√(a³/M), M≈1
+        period_ = 2.0f * glm::pi<float>() * std::sqrt(2.0f * a * a * a);
         precessionPerOrbit_ = 3.0f * glm::pi<float>() / (a * (1.0f - e * e));
         precessionRate_ = precessionPerOrbit_ / period_;
         meanMotion_ = 2.0f * glm::pi<float>() / period_;
