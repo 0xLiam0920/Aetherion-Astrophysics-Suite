@@ -50,6 +50,7 @@ struct PhysicsSnapshot {
     float diskSatBoostInner;
     float diskSatBoostOuter;
     bool  diskPhysicalColor;  // true = NT+Doppler+grav colour via CIE LUT
+    bool  scientificMode = false; // true = exact disk physics, artistic layers off
 
     /*--------- Jets ---------*/
     float     jetRadius;
@@ -67,6 +68,7 @@ struct PhysicsSnapshot {
     std::vector<float>     orbBodyRadii;
     std::vector<glm::vec3> orbBodyColors;
     std::vector<int>       orbBodyTypes;     // GalaxyBody3DType enum value per body
+    std::vector<double>    orbBodyMasses;    // Body mass [Msun] per body (0 = unspecified)
     std::vector<std::string> orbBodyLabels;  // Display name per body (label-view mode)
     bool                   orbBodyEnabled;
 

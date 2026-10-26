@@ -104,7 +104,15 @@ inline void applyBHStar(const json& j, cfg::BHStarConfig& c) { // added to suppo
 // shape matches the primary's own parameters.
 inline void applySecondary(const json& j, cfg::SimConfig& sc) {
     sc.blackHole.spinParameter = j.value("spin", sc.blackHole.spinParameter);
-    if (j.contains("disk")) applyDisk(j["disk"], sc.disk);
+    if (j.contains("disk")) {
+        applyDisk(j["disk"], sc.disk);
+        // "isco" resolves from the secondary's OWN spin (in the secondary's own Rs).
+        const json& dj = j["disk"];
+        if (dj.contains("innerRadius") && dj["innerRadius"].is_string() &&
+            dj["innerRadius"] == "isco")
+            sc.disk.innerRadius =
+                (float)bh3d::physics::computeISCO(sc.blackHole.spinParameter);
+    }
     if (j.contains("jet"))  applyJet (j["jet"],  sc.jet);
 }
 
@@ -154,7 +162,7 @@ inline BlackHoleProfile toProfile(const catalog::Entry& e) {
     for (const auto& b : e.bodies)
         p.galaxyBodies.push_back({ bodyType(b.type), (float)b.semiMajorRs,
                                    (float)b.eccentricity, (float)b.inclination,
-                                   b.label });
+                                   b.label, (float)b.massSolar });
     return p;
 }
 

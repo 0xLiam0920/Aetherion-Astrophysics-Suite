@@ -18,3 +18,7 @@ GLTexture2D createDiskTextureProcedural(unsigned int size = 256);
 // Uses the Planck spectrum against CIE 1931 CMFs → XYZ → sRGB.
 // for physical disc color only
 GLTexture2D createBlackbodyLUT(int nSamples = 256);
+
+// Linear-light, absolute-radiance blackbody LUT (GL_RGB32F, log-spaced
+// 300 K to 1e8 K). Sample it with blackbodyRadiance() in bh3d_physics.glsl.
+GLTexture2D createBlackbodyRadianceLUT(int nSamples = 1024);

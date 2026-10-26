@@ -31,6 +31,7 @@ struct GalaxyBody3D {
     float            eccentricity;
     float            inclination;   // Radians
     std::string      label;         // Optional display name for label-view mode (empty = derive from type)
+    float            massSolar = 0.0f; // Body mass [Msun]; 0 = unspecified (BlackHole true-scale horizon uses it)
 };
 
 // A complete black hole profile: config + metadata + default feature flags.
@@ -154,6 +155,7 @@ inline cfg::OrbitalConfig makeOrbitalBody(const GalaxyBody3D& b) {
     oc.eccentricity = b.eccentricity;
     oc.inclination  = b.inclination;
     oc.bodyType     = static_cast<int>(b.type);
+    oc.bodyMassSolar = b.massSolar;
     switch (b.type) {
         case GalaxyBody3DType::Star:
             oc.bodyRadius = 0.8f;
@@ -1290,7 +1292,7 @@ inline BlackHoleProfile oj287() {
     // accretion disk + spin-derived photon ring) it really does punch through the primary's disk every orbit,
     // which is what triggers the famous ~12yr optical outbursts.
     p.galaxyBodies = {
-        {GalaxyBody3DType::BlackHole, 24.2f, 0.65f, -0.20f, "Secondary SMBH"},  // ~1.5e8 Msun
+        {GalaxyBody3DType::BlackHole, 24.2f, 0.65f, -0.20f, "Secondary SMBH", 1.5e8f},  // ~1.5e8 Msun
         {GalaxyBody3DType::GasCloud,  22.0f, 0.30f,  0.05f},  // Accretion blob
         {GalaxyBody3DType::GasCloud,  40.0f, 0.20f,  0.30f}   // Outer gas cloud
     };
@@ -1301,7 +1303,7 @@ inline BlackHoleProfile oj287() {
     p.hasSecondaryBH = true;
     p.secondaryConfig.blackHole.radius        = 1.0f;
     p.secondaryConfig.blackHole.spinParameter = 0.5f;
-    p.secondaryConfig.disk.innerRadius        = 2.2f;
+    p.secondaryConfig.disk.innerRadius        = (float)bh3d::physics::computeISCO(p.secondaryConfig.blackHole.spinParameter); // auto-ISCO (a*=0.5 -> ~2.117 Rs)
     p.secondaryConfig.disk.outerRadius        = 9.0f;
     p.secondaryConfig.disk.displayTempInner   = 7000.0f;   // Golden-white
     p.secondaryConfig.disk.displayTempOuter   = 2600.0f;   // Deep ember red

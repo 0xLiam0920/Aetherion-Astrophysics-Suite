@@ -1,6 +1,10 @@
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <regex>
+#include <set>
+#include <sstream>
 #include <string>
 
 #include "src/2D/2D-physics/geodesic.hpp"
@@ -8,6 +12,13 @@
 #include "src/2D/2D-physics/units.hpp"
 #include "src/2D/2D-simulation/photon.hpp"
 #include "src/3D/bh3d_blackbody.hpp"
+#include "src/3D/bh3d_shaderinject.hpp"
+
+// Directory holding the .frag / .glsl sources. CMake passes the absolute path;
+// a bare `c++ -I.` CI compile run from the repo root uses the relative default.
+#ifndef AETHERION_SHADER_DIR
+#  define AETHERION_SHADER_DIR "src/3D"
+#endif
 
 // The JSON-catalog round-trip test needs glm (config.hpp) and nlohmann/json.
 // The lightweight CI job (a bare `c++ -I. …` invocation) has neither on its
@@ -778,6 +789,281 @@ bool testBlackbodyLinearRadiance() {
     return true;
 }
 
+// ===========================================================================
+// Step 0: shared-GLSL injection
+// ===========================================================================
+bool testShaderInjection() {
+    // A leading comment before #version is legal GLSL and is what the real
+    // BlackHole3D.frag looks like, so #version is NOT necessarily line 1.
+    const std::string src =
+        "// header comment\n"
+        "#version 330 core // trailing note\n"
+        "uniform float x;\n"
+        "void main() {}\n";
+    const std::string common = "uniform float shared1;\nfloat helper() { return 1.0; }\n";
+
+    const std::string out = bh3d::injectCommon(src, common, 1);
+    const size_t vPos = out.find("#version 330 core");
+    const size_t qPos = out.find("#define QUALITY 1\n");
+    const size_t cPos = out.find("uniform float shared1;");
+    const size_t lPos = out.find("#line 3\n");   // #version is line 2 -> next line is 3
+    const size_t bPos = out.find("uniform float x;");
+
+    if (vPos == std::string::npos || qPos == std::string::npos ||
+        cPos == std::string::npos || lPos == std::string::npos || bPos == std::string::npos) {
+        std::cerr << "[FAIL] shader injection: missing a piece in:\n" << out << "\n";
+        return false;
+    }
+    if (!(vPos < qPos && qPos < cPos && cPos < lPos && lPos < bPos)) {
+        std::cerr << "[FAIL] shader injection: pieces are out of order:\n" << out << "\n";
+        return false;
+    }
+    size_t occurrences = 0;
+    for (size_t p = out.find("shared1"); p != std::string::npos; p = out.find("shared1", p + 1))
+        ++occurrences;
+    if (occurrences != 1) {   // the shared block must be spliced in exactly once
+        std::cerr << "[FAIL] shader injection: shared code appears " << occurrences
+                  << " times, expected 1\n";
+        return false;
+    }
+
+    // Quality 0 flips the define; the original body must be preserved verbatim.
+    const std::string low = bh3d::injectCommon(src, common, 0);
+    if (low.find("#define QUALITY 0\n") == std::string::npos ||
+        low.find("void main() {}\n") == std::string::npos) {
+        std::cerr << "[FAIL] shader injection: quality 0 / body not preserved\n";
+        return false;
+    }
+
+    // Common without a trailing newline must not glue onto the #line directive.
+    const std::string noNl = bh3d::injectCommon(src, "float z;", 1);
+    if (noNl.find("float z;\n#line 3\n") == std::string::npos) {
+        std::cerr << "[FAIL] shader injection: missing newline after shared block\n";
+        return false;
+    }
+
+    // Failure modes return empty so callers treat them like a failed read.
+    if (!bh3d::injectCommon("void main() {}\n", common, 1).empty()) {
+        std::cerr << "[FAIL] shader injection: source without #version should fail\n";
+        return false;
+    }
+    if (!bh3d::injectCommon(src, "", 1).empty()) {
+        std::cerr << "[FAIL] shader injection: empty shared code should fail\n";
+        return false;
+    }
+
+    std::cout << "[PASS] shader injection: order, QUALITY define, #line, failure modes\n";
+    return true;
+}
+
+namespace {
+std::string readTextFile(const std::string& path) {
+    std::ifstream f(path);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+// Collects every top-level uniform name and function name declared in `src`.
+std::set<std::string> declaredNames(const std::string& src) {
+    static const std::regex uniformRe(R"(^\s*uniform\s+\w+\s+(\w+))");
+    static const std::regex funcRe(
+        R"(^(?:float|int|bool|void|vec[234]|ivec[234]|mat[234])\s+(\w+)\s*\()");
+    std::set<std::string> names;
+    std::istringstream in(src);
+    std::string line;
+    while (std::getline(in, line)) {
+        std::smatch m;
+        if (std::regex_search(line, m, uniformRe)) names.insert("uniform " + m[1].str());
+        else if (std::regex_search(line, m, funcRe)) names.insert("func " + m[1].str());
+    }
+    return names;
+}
+}  // namespace
+
+bool testSharedShaderNoDuplicates() {
+    // The shared GLSL is injected into both fragment shaders, so any symbol
+    // declared in both places is a GLSL redefinition error that only shows up
+    // on a machine with a GPU. Catch it here instead.
+    const std::string dir = AETHERION_SHADER_DIR;
+    const std::string common = readTextFile(dir + "/bh3d_physics.glsl");
+    if (common.empty()) {
+        std::cerr << "[FAIL] shared shader: could not read " << dir << "/bh3d_physics.glsl\n";
+        return false;
+    }
+    const auto sharedNames = declaredNames(common);
+    if (sharedNames.count("func getRayDir") == 0 || sharedNames.count("func hash12") == 0 ||
+        sharedNames.count("uniform spinParameter") == 0) {
+        std::cerr << "[FAIL] shared shader: expected getRayDir/hash12/spinParameter in "
+                     "bh3d_physics.glsl\n";
+        return false;
+    }
+
+    bool ok = true;
+    for (const char* name : {"BlackHole3D.frag", "BlackHole3D_PhotorealDisk.frag"}) {
+        const std::string frag = readTextFile(dir + "/" + name);
+        if (frag.empty()) {
+            std::cerr << "[FAIL] shared shader: could not read " << dir << "/" << name << "\n";
+            ok = false;
+            continue;
+        }
+        for (const auto& n : declaredNames(frag)) {
+            if (sharedNames.count(n)) {
+                std::cerr << "[FAIL] shared shader: '" << n << "' is declared in both "
+                          << name << " and bh3d_physics.glsl\n";
+                ok = false;
+            }
+        }
+        // And the shader must still be injectable (has a #version line).
+        if (bh3d::injectCommon(frag, common, 1).empty()) {
+            std::cerr << "[FAIL] shared shader: " << name << " cannot be injected\n";
+            ok = false;
+        }
+    }
+    if (ok)
+        std::cout << "[PASS] shared shader: no symbol declared in both bh3d_physics.glsl and "
+                     "either .frag (" << sharedNames.size() << " shared symbols)\n";
+    return ok;
+}
+
+// ===========================================================================
+// Steps 2 + 3: exact disk physics (CPU twins of the shader code)
+// ===========================================================================
+bool testNTSetupMatchesReference() {
+    using namespace bh3d::physics;
+    for (double a : {0.0, 0.38, 0.5, 0.9, 0.998}) {
+        const NTSetup s = ntSetup(a);
+        if (std::abs(s.isco - computeISCO(a)) > 1e-12 ||
+            std::abs(s.x0 - std::sqrt(2.0 * s.isco)) > 1e-12) {
+            std::cerr << "[FAIL] ntSetup: isco/x0 wrong at a=" << a << "\n";
+            return false;
+        }
+        double maxT = 0.0;
+        for (double r = s.isco * 1.0001; r <= 40.0; r += 0.05) {
+            const double t = ntProfileFromSetup(r, s);
+            const double ref = novikovThorneTemperature(r, a);
+            // Same math, but the reference clamps to [0,1] and normalises with its own scan.
+            if (std::abs(std::min(t, 1.0) - ref) > 1e-9) {
+                std::cerr << "[FAIL] ntSetup profile mismatch at a=" << a << " r=" << r
+                          << ": setup " << t << " vs reference " << ref << "\n";
+                return false;
+            }
+            maxT = std::max(maxT, t);
+        }
+        if (std::abs(maxT - 1.0) > 5e-3) {
+            std::cerr << "[FAIL] ntSetup: peak should normalise to 1; got " << maxT
+                      << " at a=" << a << "\n";
+            return false;
+        }
+        if (ntProfileFromSetup(s.isco, s) > 1e-6) {
+            std::cerr << "[FAIL] ntSetup: profile must be zero at the ISCO (a=" << a << ")\n";
+            return false;
+        }
+    }
+    std::cout << "[PASS] NT setup: per-spin constants reproduce the Page-Thorne profile "
+                 "(a = 0..0.998), zero at ISCO, peak = 1\n";
+    return true;
+}
+
+namespace {
+// Mirrors blackbodyRadiance() in bh3d_physics.glsl: log-mapped lookup with
+// linear texture filtering and clamp-to-edge.
+std::array<double, 3> sampleRadianceLut(const std::vector<float>& tab, double T) {
+    using namespace bh3d::physics;
+    const int n = int(tab.size() / 3);
+    const double t = std::log(std::clamp(T, kRadianceLutTmin, kRadianceLutTmax) / kRadianceLutTmin) /
+                     std::log(kRadianceLutTmax / kRadianceLutTmin);
+    const double f = t * (n - 1);
+    const int i0 = std::min(int(f), n - 2);
+    const double w = f - i0;
+    std::array<double, 3> out{};
+    for (int k = 0; k < 3; ++k)
+        out[k] = tab[std::size_t(i0) * 3 + k] * (1.0 - w) + tab[std::size_t(i0 + 1) * 3 + k] * w;
+    return out;
+}
+}  // namespace
+
+bool testRadianceLut() {
+    using namespace bh3d::physics;
+    const std::vector<float> tab = radianceLutTable(1024);
+    if (tab.size() != 1024u * 3u) {
+        std::cerr << "[FAIL] radiance LUT: wrong size " << tab.size() << "\n";
+        return false;
+    }
+    for (double T : {400.0, 1000.0, 6500.0, 12345.0, 38000.0, 2.0e5, 1.0e7}) {
+        const auto lut = sampleRadianceLut(tab, T);
+        const auto ref = blackbodyLinear(T);
+        const double yl = linearLuminance(lut), yr = linearLuminance(ref);
+        if (std::abs(yl - yr) > 0.01 * yr + 1e-12) {
+            std::cerr << "[FAIL] radiance LUT at " << T << " K: luminance " << yl
+                      << " vs direct " << yr << "\n";
+            return false;
+        }
+    }
+    // Exposure maps the unshifted hottest annulus to luminance 1.
+    for (double peak : {5000.0, 38000.0, 1.0e7}) {
+        const double y = linearLuminance(sampleRadianceLut(tab, peak)) * sciExposure(peak);
+        if (std::abs(y - 1.0) > 0.01) {
+            std::cerr << "[FAIL] sciExposure: peak " << peak << " K maps to " << y << ", expected 1\n";
+            return false;
+        }
+    }
+    // The shader must use the same range and size as the CPU table.
+    const std::string glsl = readTextFile(std::string(AETHERION_SHADER_DIR) + "/bh3d_physics.glsl");
+    if (glsl.find("clamp(T, 300.0, 1e8)") == std::string::npos ||
+        glsl.find("log(1e8 / 300.0)") == std::string::npos ||
+        glsl.find("1023.0") == std::string::npos || glsl.find("1024.0") == std::string::npos) {
+        std::cerr << "[FAIL] radiance LUT: bh3d_physics.glsl no longer matches the 300 K..1e8 K, "
+                     "1024-sample mapping\n";
+        return false;
+    }
+    std::cout << "[PASS] radiance LUT: log-mapped lookup within 1% of direct blackbody, "
+                 "exposure normalises peak to 1, shader mapping matches\n";
+    return true;
+}
+
+bool testScientificDiskEmission() {
+    using namespace bh3d::physics;
+    // Rebuilds diskEmissionPhysical() on the CPU and checks the physical signatures.
+    const double spin = 0.38, peak = 38000.0;
+    const NTSetup s = ntSetup(spin);
+    const std::vector<float> tab = radianceLutTable(1024);
+    const double expo = sciExposure(peak);
+    auto emit = [&](double r, double Lz, bool doppler) {
+        const double T = peak * ntProfileFromSetup(r, s);
+        const double g = diskRedshift(r, spin, Lz, doppler);
+        auto c = sampleRadianceLut(tab, g * T);
+        for (double& v : c) v *= expo;
+        return c;
+    };
+    const double r = 4.0;
+    const auto face = emit(r, 0.0, true);
+    const auto appr = emit(r, -4.0, true);   // approaching side: blueshifted + beamed
+    const auto rece = emit(r, +4.0, true);
+    if (!(linearLuminance(appr) > linearLuminance(face) && linearLuminance(face) > linearLuminance(rece))) {
+        std::cerr << "[FAIL] scientific emission: beaming should make approach > face-on > recede\n";
+        return false;
+    }
+    if (!(appr[2] / appr[0] > rece[2] / rece[0])) {
+        std::cerr << "[FAIL] scientific emission: approaching side should be bluer\n";
+        return false;
+    }
+    const auto off = emit(r, -4.0, false);
+    if (std::abs(linearLuminance(off) - linearLuminance(face)) > 1e-6) {
+        std::cerr << "[FAIL] scientific emission: Doppler off must ignore Lz\n";
+        return false;
+    }
+    // The disk is dark at and inside the ISCO and brightest well outside it.
+    if (linearLuminance(emit(s.isco * 0.999, 0.0, true)) > 1e-6 ||
+        !(linearLuminance(emit(s.isco * 1.4, 0.0, true)) > linearLuminance(emit(30.0, 0.0, true)))) {
+        std::cerr << "[FAIL] scientific emission: radial brightness profile wrong\n";
+        return false;
+    }
+    std::cout << "[PASS] scientific disk emission: beamed/blue approach side, dark at ISCO, "
+                 "Doppler-off ignores Lz\n";
+    return true;
+}
+
 #ifdef AETHERION_HAVE_CATALOG
 // Round-trip: the JSON catalog must reconstruct the compiled-in profiles
 // exactly. Keeps the two in lockstep until the C++ profiles are retired.
@@ -873,7 +1159,12 @@ bool testCatalogRoundTrip() {
             if (!feq(gb.eccentricity, eb.eccentricity)) fail(i, "body ecc");
             if (!feq(gb.inclination, eb.inclination)) fail(i, "body inclination");
             if (gb.label != eb.label) fail(i, "body label");
+            if (!feq(gb.massSolar, eb.massSolar)) fail(i, "body massSolar");
         }
+        if (got.hasSecondaryBH != exp.hasSecondaryBH) fail(i, "hasSecondaryBH");
+        if (exp.hasSecondaryBH &&
+            !feq(got.secondaryConfig.disk.innerRadius, exp.secondaryConfig.disk.innerRadius))
+            fail(i, "secondary disk.innerRadius");
     }
 
     if (ok)
@@ -972,6 +1263,42 @@ bool testISCOAuto() {
     }
     std::cout << "[PASS] ISCO auto: OJ 287 inner radius = " << p.config.disk.innerRadius
               << " Rs (computeISCO(0.38))\n";
+
+    // Secondary resolves "isco" from its OWN spin (a*=0.5 -> ~2.117 Rs).
+    const double expectedSec = bh3d::physics::computeISCO(0.5);
+    if (!p.hasSecondaryBH ||
+        std::abs(p.secondaryConfig.disk.innerRadius - expectedSec) > 5e-3 ||
+        std::abs(expectedSec - 2.117) > 5e-3) {
+        std::cerr << "[FAIL] ISCO auto: OJ 287 secondary inner radius expected ~" << expectedSec
+                  << " Rs, got " << p.secondaryConfig.disk.innerRadius << "\n";
+        return false;
+    }
+    std::cout << "[PASS] ISCO auto: OJ 287 secondary inner radius = "
+              << p.secondaryConfig.disk.innerRadius << " Rs (own spin 0.5)\n";
+
+    // Step 7c: the secondary BH body carries its mass for true-scale horizons.
+    bool haveMass = false;
+    for (const auto& b : p.galaxyBodies)
+        if (b.type == GalaxyBody3DType::BlackHole && std::abs(b.massSolar - 1.5e8f) < 1e3f)
+            haveMass = true;
+    if (!haveMass) {
+        std::cerr << "[FAIL] OJ 287 secondary BlackHole body is missing massSolar=1.5e8\n";
+        return false;
+    }
+    std::cout << "[PASS] OJ 287 secondary body massSolar = 1.5e8 (true-scale ratio "
+              << 1.5e8 / p.massSolar << ")\n";
+
+    // The mass must survive into the OrbitalBody the snapshot reads from.
+    for (const auto& b : p.galaxyBodies) {
+        if (b.type != GalaxyBody3DType::BlackHole) continue;
+        const OrbitalBody ob(profiles::makeOrbitalBody(b));
+        if (ob.bodyType() != static_cast<int>(GalaxyBody3DType::BlackHole) ||
+            std::abs(ob.bodyMass() - 1.5e8f) > 1e3f) {
+            std::cerr << "[FAIL] makeOrbitalBody dropped the black-hole mass: " << ob.bodyMass() << "\n";
+            return false;
+        }
+    }
+    std::cout << "[PASS] black-hole mass carried through makeOrbitalBody -> OrbitalBody\n";
     return true;
 }
 #endif  // AETHERION_HAVE_CATALOG
@@ -1001,6 +1328,15 @@ int main() {
     ok = testLowQualityShadow() && ok;
     ok = testDiskRedshift() && ok;
     ok = testBlackbodyLinearRadiance() && ok;
+
+    // Step 0: shared GLSL injection + no duplicate declarations across shaders.
+    ok = testShaderInjection() && ok;
+    ok = testSharedShaderNoDuplicates() && ok;
+
+    // Steps 2 + 3: exact Kerr redshift, NT constants, radiance LUT.
+    ok = testNTSetupMatchesReference() && ok;
+    ok = testRadianceLut() && ok;
+    ok = testScientificDiskEmission() && ok;
 
 #ifdef AETHERION_HAVE_CATALOG
     // JSON catalog must reconstruct the compiled-in profiles exactly.

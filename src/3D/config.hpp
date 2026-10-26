@@ -89,6 +89,9 @@ struct OrbitalConfig {
     // ORB_TYPE_* defines. Default 0 = Star (also used by the legacy single-body
     // path, which renders the body as a generic main-sequence star).
     int       bodyType = 0;
+    // Physical mass [Msun]; 0 = unknown. Used only by true-scale mode for
+    // bodies whose physical radius is set by mass (black holes).
+    float     bodyMassSolar = 0.0f;
 };
 
 /*--------- Black hole star (quasi-star) envelope ---------*/

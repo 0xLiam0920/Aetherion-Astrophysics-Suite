@@ -29,6 +29,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <vector>
 
 namespace bh3d {
 namespace physics {
@@ -235,6 +237,55 @@ inline double novikovThorneTemperature(double rRs, double a) {
     return std::clamp(t, 0.0, 1.0);
 }
 
+// Per-spin constants for the Page-Thorne flux, computed once on the CPU when
+// the spin changes and uploaded as uniforms (ntX0, ntA, ntX, ntC, ntPeakInv,
+// isco). This replaces the per-pixel acos/cos/17-flux-evaluation setup the
+// shader used to redo on every disk hit.
+struct NTSetup {
+    double isco    = 3.0;   // prograde ISCO [Rs]
+    double x0      = 0.0;   // sqrt(2 * isco)
+    double a       = 0.0;   // clamped spin
+    double peakInv = 1.0;   // 1 / peak of the flux shape
+    double X[3]    = {0, 0, 0};   // roots of x^3 - 3x + 2a
+    double C[3]    = {0, 0, 0};   // log coefficients
+};
+
+// CPU twin of ptFluxShape() in bh3d_physics.glsl. x = sqrt(2 r/Rs).
+inline double ntFluxShape(double x, const NTSetup& s) {
+    if (x <= s.x0) return 0.0;
+    const double Q = x - s.x0 - 1.5 * s.a * std::log(x / s.x0)
+                   - s.C[0] * std::log((x - s.X[0]) / (s.x0 - s.X[0]))
+                   - s.C[1] * std::log((x - s.X[1]) / (s.x0 - s.X[1]))
+                   - s.C[2] * std::log((x - s.X[2]) / (s.x0 - s.X[2]));
+    const double denom = x * x * x * x * (x * x * x - 3.0 * x + 2.0 * s.a);
+    return std::max(Q / denom, 0.0);
+}
+
+inline NTSetup ntSetup(double spin) {
+    NTSetup s;
+    s.a    = std::clamp(spin, 0.0, 0.9999);
+    s.isco = computeISCO(s.a);
+    s.x0   = std::sqrt(2.0 * s.isco);
+    const double ac = std::acos(s.a);
+    s.X[0] =  2.0 * std::cos(ac / 3.0 - kPi / 3.0);
+    s.X[1] =  2.0 * std::cos(ac / 3.0 + kPi / 3.0);
+    s.X[2] = -2.0 * std::cos(ac / 3.0);
+    auto cf = [&](double xi, double xj, double xk) {
+        return 3.0 * (xi - s.a) * (xi - s.a) / (xi * (xi - xj) * (xi - xk));
+    };
+    s.C[0] = cf(s.X[0], s.X[1], s.X[2]);
+    // c2 is a 0/0 as a -> 0 (x2 -> 0); the limit is 0.
+    s.C[1] = std::abs(s.X[1]) < 1e-5 ? 0.0 : cf(s.X[1], s.X[0], s.X[2]);
+    s.C[2] = cf(s.X[2], s.X[0], s.X[1]);
+    s.peakInv = 1.0 / std::max(ntPeakFlux(s.a), 1e-300);
+    return s;
+}
+
+// CPU twin of ntProfile() in the shader: normalised T(r)/T_peak in [0,1].
+inline double ntProfileFromSetup(double rRs, const NTSetup& s) {
+    return std::pow(std::max(ntFluxShape(std::sqrt(2.0 * rRs), s) * s.peakInv, 0.0), 0.25);
+}
+
 // Visible-band disk colour temperature at radius r, matching the physical
 // disk-colour path in BlackHole3D_PhotorealDisk.frag:
 //   T_colour(r) = displayTempInner × NT_profile(r; a)
@@ -262,6 +313,36 @@ inline double diskRedshift(double rRs, double a, double Lz, bool doppler) {
         (std::sqrt(s) * std::sqrt(std::max(s - 3.0 * std::sqrt(rM) + 2.0 * a, 1e-5)));
     const double LzM = doppler ? 2.0 * Lz : 0.0;
     return 1.0 / (ut * (1.0 + Om * LzM));
+}
+
+// Range of the radiance LUT (log-spaced). Shared by the LUT builder and the
+// shader's blackbodyRadiance() so both agree on the mapping.
+inline constexpr double kRadianceLutTmin = 300.0;
+inline constexpr double kRadianceLutTmax = 1.0e8;
+
+inline double linearLuminance(const std::array<double, 3>& c) {
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+
+// Exposure that maps the disk's hottest annulus (peakTemp, unshifted) to a
+// luminance of 1.0 in the radiance LUT's units (sciExposure uniform).
+inline double sciExposure(double peakTemp) {
+    const double T = std::clamp(peakTemp, kRadianceLutTmin, kRadianceLutTmax);
+    return 1.0 / std::max(linearLuminance(blackbodyLinear(T)), 1e-30);
+}
+
+// RGB32F texel data for the radiance LUT: n log-spaced samples over
+// [kRadianceLutTmin, kRadianceLutTmax]. This is exactly what is uploaded.
+inline std::vector<float> radianceLutTable(int n) {
+    n = std::max(n, 2);
+    std::vector<float> px(static_cast<std::size_t>(n) * 3);
+    const double ratio = kRadianceLutTmax / kRadianceLutTmin;
+    for (int i = 0; i < n; ++i) {
+        const double T = kRadianceLutTmin * std::pow(ratio, double(i) / double(n - 1));
+        const std::array<double, 3> c = blackbodyLinear(T);
+        for (int k = 0; k < 3; ++k) px[static_cast<std::size_t>(i) * 3 + k] = static_cast<float>(c[k]);
+    }
+    return px;
 }
 
 }  // namespace physics

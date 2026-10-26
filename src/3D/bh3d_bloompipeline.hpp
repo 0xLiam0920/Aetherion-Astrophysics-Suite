@@ -57,7 +57,8 @@ struct BloomPipeline {
     // given quad VAO is currently bound. As a side note, the final composite is written to
     // targetFBO (0 = default framebuffer / screen).
     void execute(const GLVertexArray& quad, const cfg::BloomConfig& bc,
-                 bool cinematic = false, float time = 0.0f, GLuint targetFBO = 0) {
+                 bool cinematic = false, float time = 0.0f, GLuint targetFBO = 0,
+                 bool scientific = false) {
         // Save GL state that we're about to clobber
         GLint prevProgram = 0, prevFBO = 0, prevActiveTexture = 0;
         GLint prevViewport[4] = {};
@@ -157,6 +158,7 @@ struct BloomPipeline {
 
         // Cinematic post-FX uniforms
         compositeProg.set1i("cinematicMode", cinematic ? 1 : 0);
+        compositeProg.set1i("scientificMode", scientific ? 1 : 0);
         compositeProg.set1f("uTime", time);
 
         quad.drawQuad();

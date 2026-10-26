@@ -119,6 +119,7 @@ public:
     float     bodyRadius() const { return cfg_.bodyRadius; }
     glm::vec3 bodyColor()  const { return cfg_.bodyColor; }
     int       bodyType()   const { return cfg_.bodyType; }
+    float     bodyMass()   const { return cfg_.bodyMassSolar; }
     const cfg::OrbitalConfig& config() const { return cfg_; }
 
 private:

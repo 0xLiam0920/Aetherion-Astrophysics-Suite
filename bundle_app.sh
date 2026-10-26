@@ -77,7 +77,7 @@ copy_resources() {
     mkdir -p "${dest}"
 
     # 3D shaders (prefer build-dir copies over source, as they're more up-to-date)
-    for f in BlackHole3D.frag BlackHole3D_PhotorealDisk.frag; do
+    for f in BlackHole3D.frag BlackHole3D_PhotorealDisk.frag bh3d_physics.glsl; do
         if [ -f "${BUILD_DIR}/${f}" ]; then
             cp "${BUILD_DIR}/${f}" "${dest}/${f}"
         elif [ -f "src/3D/${f}" ]; then

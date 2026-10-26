@@ -100,7 +100,7 @@ sudo apt install build-essential
    On macOS, OpenGL 3.3 is supported on all Macs from 2012 onwards.
   On Windows, check your GPU specifications or use a tool such as GPU-Z. Corrupted drivers can also cause this; reinstalling the graphics driver may help.
 
-2. **Shader files missing**, The build copies `.frag` files next to the executable. If you moved the binary, make sure `BlackHole3D.frag` and `BlackHole3D_PhotorealDisk.frag` are in the same directory as the executable, or in the project's `src/3D/` directory.
+2. **Shader files missing**, The build copies `.frag` files (and the shared `bh3d_physics.glsl`) next to the executable. If you moved the binary, make sure `BlackHole3D.frag`, `BlackHole3D_PhotorealDisk.frag` and `bh3d_physics.glsl` are in the same directory as the executable, or in the project's `src/3D/` directory.
 
 3. **Missing textures**, Background or disk textures are optional but the shader may render a black disk without them. See the [Textures](#textures-not-loading) section.
 
@@ -365,7 +365,7 @@ If you want to add support for a different version directly to this project, mak
 
 ### Can I edit shaders without recompiling?
 
-The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag` or `BlackHole3D_PhotorealDisk.frag` in the build directory and relaunch the simulator.
+The `.frag` shader files are loaded from disk at runtime. Edit `BlackHole3D.frag`, `BlackHole3D_PhotorealDisk.frag` or the shared `bh3d_physics.glsl` in the build directory and relaunch the simulator.
 
 ### What units does the simulation use?
 

@@ -825,6 +825,16 @@ inline void drawOverlaysPanel(bh3d::State& s) {
         }
 
         ImGui::SeparatorText("Disk Colour");
+        if (toggleRow("Scientific Mode  [ON]", "Scientific Mode  [OFF]",
+                      s.scientificMode, ImVec2(btnW, 24))) {
+            s.scientificMode = !s.scientificMode;
+        }
+        if (s.scientificMode) {
+            ImGui::PushStyleColor(ImGuiCol_Text, detail::textDim());
+            ImGui::TextWrapped("SCIENTIFIC: exact Kerr redshift + Novikov\u2013Thorne + blackbody radiance. "
+                               "Artistic disk layers are off; disk starts at the ISCO.");
+            ImGui::PopStyleColor();
+        }
         if (toggleRow("Physical Disk Colour  [ON]", "Physical Disk Colour  [OFF]",
                       s.physicalDiskColor, ImVec2(btnW, 24))) {
             s.physicalDiskColor = !s.physicalDiskColor;

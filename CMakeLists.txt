@@ -254,6 +254,11 @@ add_custom_command(TARGET blackhole-sim POST_BUILD
             ${CMAKE_SOURCE_DIR}/src/3D/BlackHole3D_PhotorealDisk.frag
             $<TARGET_FILE_DIR:blackhole-sim>/BlackHole3D_PhotorealDisk.frag)
 
+add_custom_command(TARGET blackhole-sim POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/src/3D/bh3d_physics.glsl
+            $<TARGET_FILE_DIR:blackhole-sim>/bh3d_physics.glsl)
+
 # == Standalone simulation executables (restored) ===========================
 add_executable(blackhole-2D src/2D/BlackHole2D.cpp)
 target_include_directories(blackhole-2D PRIVATE
@@ -322,7 +327,7 @@ endif()
 # Using add_custom_command with OUTPUT means cmake tracks the .frag as a real
 # dependency, editing the source file causes a rebuild of the copy target,
 # regardless of whether any C++ source changed.
-foreach(_frag BlackHole3D.frag BlackHole3D_PhotorealDisk.frag)
+foreach(_frag BlackHole3D.frag BlackHole3D_PhotorealDisk.frag bh3d_physics.glsl)
     add_custom_command(
         OUTPUT  ${CMAKE_BINARY_DIR}/${_frag}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -336,6 +341,7 @@ add_custom_target(sync_shaders_3D ALL
     DEPENDS
         ${CMAKE_BINARY_DIR}/BlackHole3D.frag
         ${CMAKE_BINARY_DIR}/BlackHole3D_PhotorealDisk.frag
+        ${CMAKE_BINARY_DIR}/bh3d_physics.glsl
 )
 add_dependencies(blackhole-3D sync_shaders_3D)
 
@@ -431,6 +437,7 @@ endif()
 install(FILES
     src/3D/BlackHole3D.frag
     src/3D/BlackHole3D_PhotorealDisk.frag
+    src/3D/bh3d_physics.glsl
     DESTINATION share/aetherionsuite)
 
 if(EXISTS ${CMAKE_SOURCE_DIR}/src/disk_texture.png)
@@ -495,7 +502,8 @@ elseif(DEFINED GLM_INCLUDE_DIRS)
     target_include_directories(physics-regression-tests PRIVATE ${GLM_INCLUDE_DIRS})
 endif()
 target_compile_definitions(physics-regression-tests PRIVATE
-    AETHERION_CATALOG_DIR="${CMAKE_SOURCE_DIR}/src/common/resources/catalog")
+    AETHERION_CATALOG_DIR="${CMAKE_SOURCE_DIR}/src/common/resources/catalog"
+    AETHERION_SHADER_DIR="${CMAKE_SOURCE_DIR}/src/3D")
 
 add_test(
     NAME physics-regression

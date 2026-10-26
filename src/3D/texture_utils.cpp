@@ -146,3 +146,20 @@ GLTexture2D createBlackbodyLUT(int nSamples) {
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     GLTexture2D lut; lut.adopt(tex); return lut;
 }
+
+// Linear, un-normalised blackbody radiance (Y(6500 K) == 1), NOT gamma-encoded.
+// Stored as float so the hot end (up to 1e8 K) keeps its brightness, and
+// log-spaced so one lookup at g*T covers colour, beaming and brightness.
+GLTexture2D createBlackbodyRadianceLUT(int nSamples) {
+    nSamples = std::max(nSamples, 2);
+    const std::vector<float> px = bh3d::physics::radianceLutTable(nSamples);
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, nSamples, 1, 0, GL_RGB, GL_FLOAT, px.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    GLTexture2D lut; lut.adopt(tex); return lut;
+}

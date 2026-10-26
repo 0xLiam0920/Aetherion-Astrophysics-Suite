@@ -39,6 +39,7 @@
 #include "bh3d_input.hpp"
 #include "bh3d_simulationstates.hpp"
 #include "bh3d_presets.hpp"
+#include "bh3d_shaderinject.hpp"
 #include "orbital_body.hpp"
 #include "gl_font.hpp"
 #include "hud_panel.hpp"
@@ -349,6 +350,9 @@ struct SceneUniforms {
     GLint showPhysicalDiskColor;
     GLint showCorona;
     GLint blackbodyLUTTex;
+    // Exact disk physics (scientific mode): radiance LUT + Novikov-Thorne constants
+    GLint scientificMode, blackbodyRadianceLUTTex, sciExposure;
+    GLint ntX0, ntA, ntPeakInv, isco, ntX, ntC;
 
     // Inspiralling merger BH identities
     GLint secBHActive, secBHDiskNormal, secBHSpin;
@@ -421,6 +425,15 @@ struct SceneUniforms {
         u.showPhysicalDiskColor = prog.uniform("showPhysicalDiskColor");
         u.showCorona           = prog.uniform("showCorona");
         u.blackbodyLUTTex      = prog.uniform("blackbodyLUT");
+        u.scientificMode          = prog.uniform("scientificMode");
+        u.blackbodyRadianceLUTTex = prog.uniform("blackbodyRadianceLUT");
+        u.sciExposure             = prog.uniform("sciExposure");
+        u.ntX0                    = prog.uniform("ntX0");
+        u.ntA                     = prog.uniform("ntA");
+        u.ntPeakInv               = prog.uniform("ntPeakInv");
+        u.isco                    = prog.uniform("isco");
+        u.ntX                     = prog.uniform("ntX");
+        u.ntC                     = prog.uniform("ntC");
         u.secBHActive          = prog.uniform("secBHActive");
         u.secBHDiskNormal      = prog.uniform("secBHDiskNormal");
         u.secBHSpin            = prog.uniform("secBHSpin");
@@ -440,7 +453,8 @@ struct SceneUniforms {
 inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
                              const PhysicsSnapshot& snap,
                              GLuint bgTexId, GLuint diskTexId,
-                             GLuint blackbodyLUTId)
+                             GLuint blackbodyLUTId,
+                             GLuint radianceLUTId)
 {
     prog.use();
     glUniform2f(u.resolution,     float(snap.windowW), float(snap.windowH));
@@ -456,6 +470,27 @@ inline void setSceneUniforms(GLProgram& prog, const SceneUniforms& u,
     glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, bgTexId);        glUniform1i(u.backgroundTex, 0);
     glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, diskTexId);      glUniform1i(u.diskTex, 1);
     glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, blackbodyLUTId); glUniform1i(u.blackbodyLUTTex, 2);
+    glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, radianceLUTId);  glUniform1i(u.blackbodyRadianceLUTTex, 3);
+    glActiveTexture(GL_TEXTURE0);   // leave unit 0 active for later passes
+
+    // Novikov-Thorne constants only change with spin, so cache them.
+    static float cachedSpin = -1.0f;
+    static bh3d::physics::NTSetup nt;
+    static float cachedPeak = -1.0f;
+    static float cachedExposure = 1.0f;
+    if (snap.bhSpin != cachedSpin) { nt = bh3d::physics::ntSetup(snap.bhSpin); cachedSpin = snap.bhSpin; }
+    if (snap.diskPeakTemp != cachedPeak) {
+        cachedExposure = (float)bh3d::physics::sciExposure(snap.diskPeakTemp);
+        cachedPeak = snap.diskPeakTemp;
+    }
+    glUniform1i(u.scientificMode, snap.scientificMode ? 1 : 0);
+    glUniform1f(u.sciExposure,    cachedExposure);
+    glUniform1f(u.ntX0,           (float)nt.x0);
+    glUniform1f(u.ntA,            (float)nt.a);
+    glUniform1f(u.ntPeakInv,      (float)nt.peakInv);
+    glUniform1f(u.isco,           (float)nt.isco);
+    glUniform3f(u.ntX,            (float)nt.X[0], (float)nt.X[1], (float)nt.X[2]);
+    glUniform3f(u.ntC,            (float)nt.C[0], (float)nt.C[1], (float)nt.C[2]);
 
     glUniform1f(u.diskInnerRadius,       snap.diskInnerRadius);
     glUniform1f(u.diskOuterRadius,       snap.diskOuterRadius);
@@ -703,6 +738,7 @@ struct State {
     GLTexture2D photorealDiskTex;
     GLTexture2D simpleDiskTex;
     GLTexture2D blackbodyLUT;   // CIE XYZ blackbody color LUT/spectrum table
+    GLTexture2D blackbodyRadianceLUT; // linear float radiance LUT (scientific mode)
 
     // Bloom
     BloomPipeline bloom;
@@ -744,6 +780,7 @@ struct State {
     bool showDebugHUD      = false;
     bool trueScaleMode     = false; // shrink orbital bodies to physical Rs radii, false = scale to screen space
     bool physicalDiskColor = true;  // NT+Doppler+grav colour via CIE LUT
+    bool scientificMode = false;    // exact Kerr redshift + NT + blackbody radiance; no artistic layers
 
     // Animation
     static constexpr float animSpeedPresets[3] = { 1.0f, 3.0f, 8.0f };
@@ -986,32 +1023,38 @@ inline void initFont(State& s, sf::Font& tmpFont) {
 inline bool initShaders(State& s, ResourceManager& res) {
     GLShader sharedVS(GL_VERTEX_SHADER, vertexShaderSrc);
     if (!sharedVS) { std::cerr << "[bh3d] vertex shader failed\n"; return false; }
-    {
-        std::string fragPath = res.find("BlackHole3D_PhotorealDisk.frag");
-        if (!fragPath.empty()) {
-            std::string src = readFile(fragPath.c_str());
-            if (!src.empty()) {
-                GLShader fs(GL_FRAGMENT_SHADER, src.c_str());
-                if (fs && s.photorealProgram.link(sharedVS.id(), fs.id())) {
-                    s.havePhotoreal = true;
-                    std::cerr << "[bh3d] photoreal shader compiled: " << fragPath << "\n";
-                }
-            }
-        }
+
+    // Shared physics/uniform/camera code, spliced into both fragment shaders
+    // (GLSL 330 has no #include). The .frag files no longer declare these
+    // symbols, so without this file neither shader can compile.
+    const std::string commonPath = res.find("bh3d_physics.glsl");
+    const std::string common = commonPath.empty() ? std::string()
+                                                  : readFile(commonPath.c_str());
+    if (common.empty()) {
+        std::cerr << "[bh3d] bh3d_physics.glsl not found (searched: " << res.paths() << ")\n";
+        return false;
     }
-    {
-        std::string fragPath = res.find("BlackHole3D.frag");
-        if (!fragPath.empty()) {
-            std::string src = readFile(fragPath.c_str());
-            if (!src.empty()) {
-                GLShader fs(GL_FRAGMENT_SHADER, src.c_str());
-                if (fs && s.simpleProgram.link(sharedVS.id(), fs.id())) {
-                    s.haveSimple = true;
-                    std::cerr << "[bh3d] simple shader compiled: " << fragPath << "\n";
-                }
-            }
+
+    // Loads a fragment shader, injects the shared block and a quality level
+    // (0 = simple/Verlet, 1 = photoreal/RK4), then compiles + links it.
+    auto build = [&](const char* name, int quality, GLProgram& prog, bool& ok) {
+        const std::string fragPath = res.find(name);
+        if (fragPath.empty()) return;
+        const std::string raw = readFile(fragPath.c_str());
+        if (raw.empty()) return;
+        const std::string src = bh3d::injectCommon(raw, common, quality);
+        if (src.empty()) {
+            std::cerr << "[bh3d] " << name << ": no #version line, cannot inject shared code\n";
+            return;
         }
-    }
+        GLShader fs(GL_FRAGMENT_SHADER, src.c_str());
+        if (fs && prog.link(sharedVS.id(), fs.id())) {
+            ok = true;
+            std::cerr << "[bh3d] " << name << " compiled: " << fragPath << "\n";
+        }
+    };
+    build("BlackHole3D_PhotorealDisk.frag", 1, s.photorealProgram, s.havePhotoreal);
+    build("BlackHole3D.frag",               0, s.simpleProgram,    s.haveSimple);
     if (!s.havePhotoreal && !s.haveSimple) return false;
     if (s.havePhotoreal) s.photorealUfs = SceneUniforms::lookup(s.photorealProgram);
     if (s.haveSimple)    s.simpleUfs    = SceneUniforms::lookup(s.simpleProgram);
@@ -1029,6 +1072,7 @@ inline void initTextures(State& s, ResourceManager& res) {
     }
     s.photorealDiskTex = createFallbackWhiteTexture();
     s.blackbodyLUT     = createBlackbodyLUT(256);
+    s.blackbodyRadianceLUT = createBlackbodyRadianceLUT(1024);
     {
         std::string diskPath = res.find("disk_texture.png");
         if (!diskPath.empty()) s.simpleDiskTex = loadTexture2D(diskPath.c_str());
@@ -1695,6 +1739,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.diskSatBoostInner     = s.config.disk.saturationBoostInner;
     snap.diskSatBoostOuter     = s.config.disk.saturationBoostOuter;
     snap.diskPhysicalColor     = s.physicalDiskColor;
+    snap.scientificMode        = s.scientificMode;
     snap.jetRadius         = s.config.jet.radius;
     snap.jetLength         = s.config.jet.length;
     snap.jetColor          = s.config.jet.color;
@@ -1707,6 +1752,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
     snap.orbBodyRadii.clear();
     snap.orbBodyColors.clear();
     snap.orbBodyTypes.clear();
+    snap.orbBodyMasses.clear();
     snap.orbBodyLabels.clear();
     {
         const auto& curProf = s.profilesArr[s.profileIdx];
@@ -1755,6 +1801,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
             snap.orbBodyRadii.push_back(body.bodyRadius());
             snap.orbBodyColors.push_back(body.bodyColor());
             snap.orbBodyTypes.push_back(body.bodyType());
+            snap.orbBodyMasses.push_back((double)body.bodyMass());
             if (body.bodyType() == static_cast<int>(GalaxyBody3DType::BlackHole))
                 secondaryBodyIdx = (int)i;
             std::string lbl;
@@ -1780,6 +1827,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
                 snap.orbBodyRadii.clear();
                 snap.orbBodyColors.clear();
                 snap.orbBodyTypes.clear();
+                snap.orbBodyMasses.clear();
                 snap.orbBodyLabels.clear();
                 snap.barycentricMode = false;
             }
@@ -1791,12 +1839,14 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
                 snap.orbBodyRadii.pop_back();
                 snap.orbBodyColors.pop_back();
                 snap.orbBodyTypes.pop_back();
+                snap.orbBodyMasses.pop_back();
                 snap.orbBodyLabels.pop_back();
             }
             snap.orbBodyPositions.push_back(secPos);
             snap.orbBodyRadii.push_back(s.merger.secRadius);
             snap.orbBodyColors.push_back(mergerKindColor(s.merger.kind));
             snap.orbBodyTypes.push_back(mergerBodyShaderType(s.merger.kind));
+            snap.orbBodyMasses.push_back(s.merger.massSolar);
             snap.orbBodyLabels.push_back(mergerKindLabel(s.merger.kind));
             snap.bhPosition += s.merger.primaryOffset();
 
@@ -1871,6 +1921,7 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
             float vis = snap.orbBodyRadii[i];  // Rs
             // Conservative estimate: assume a 1 M☉ star by default, scale by type.
             int   type = (i < snap.orbBodyTypes.size()) ? snap.orbBodyTypes[i] : 0;
+            const double bodyMass = (i < snap.orbBodyMasses.size()) ? snap.orbBodyMasses[i] : 0.0;
             float mEst = 1.0f;  // stellar mass estimate [M☉]
             switch (type) {
                 case 0: mEst = 1.0f;   break; // Star
@@ -1880,11 +1931,15 @@ inline void buildSnapshot(State& s, int w, int h, float dt) {
                 case 4: mEst = 1.4f;   break; // NeutronStar — 10 km ≈ 0.0014 Rs for 10M☉ BH
                 case 5: mEst = 0.6f;   break; // WhiteDwarf
                 case 6: mEst = 1.0f;   break; // CompanionStar
-                case 7: physRs = (float)(snap.orbBodyMasses[i] / snap.massSolar); break; // horizon scales with mass
-                default: mEst = 1.0f;  break;
+                default: mEst = 1.0f;  break; // (type 7 BlackHole handled below)
             }
             // R_phys ≈ RSun · mEst^0.8  for main-sequence; clamped to reality
             float physRs = RSun_Rs * std::pow(mEst, 0.8f);
+            // Black-hole body: its physical radius IS its horizon, which scales
+            // linearly with mass, so in primary-Rs units it is the mass ratio
+            // (OJ 287: ~0.0082). Unknown mass falls back to a 1% mass ratio.
+            if (type == 7)
+                physRs = (float)((bodyMass > 0.0 ? bodyMass : 0.01 * snap.massSolar) / M);
             // Compact objects: enforce plausible physical upper bound
             if (type == 4) physRs = 10.0f / Rs_km;   // ~10 km neutron star
             if (type == 5) physRs = 7000.0f / Rs_km; // ~7000 km white dwarf
@@ -1981,9 +2036,14 @@ inline void renderScene(State& s, int w, int h, GLuint finalTarget = 0) {
         glClear(GL_COLOR_BUFFER_BIT);
         setSceneUniforms(*s.activeProgram, s.activeUfs, s.snap,
                          s.bgTex.id(), s.photorealDiskTex.id(),
-                         s.blackbodyLUT.id());
+                         s.blackbodyLUT.id(), s.blackbodyRadianceLUT.id());
         s.quad.drawQuad();
-        s.bloom.execute(s.quad, cfg::cinematicBloom(), true, s.totalTime, finalTarget);
+        // Scientific mode: radiance values are already physical, so use a
+        // neutral display transform with only a faint bloom on genuinely
+        // over-bright pixels (cinematic's 0.55 threshold hazes the whole disk).
+        cfg::BloomConfig bc = cfg::cinematicBloom();
+        if (s.scientificMode) { bc.threshold = 1.5f; bc.intensity = 0.15f; bc.exposure = 1.0f; }
+        s.bloom.execute(s.quad, bc, true, s.totalTime, finalTarget, s.scientificMode);
     } else {
         glBindFramebuffer(GL_FRAMEBUFFER, finalTarget);
         glViewport(0, 0, w, h);
@@ -1991,7 +2051,7 @@ inline void renderScene(State& s, int w, int h, GLuint finalTarget = 0) {
         glClear(GL_COLOR_BUFFER_BIT);
         setSceneUniforms(*s.activeProgram, s.activeUfs, s.snap,
                          s.bgTex.id(), s.simpleDiskTex.id(),
-                         s.blackbodyLUT.id());
+                         s.blackbodyLUT.id(), s.blackbodyRadianceLUT.id());
         s.quad.drawQuad();
     }
     // bloom.execute() saves+restores prevFBO which ends up as sceneFBO; force

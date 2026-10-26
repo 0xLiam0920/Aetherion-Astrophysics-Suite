@@ -29,6 +29,7 @@ struct BodyEntry {
     double eccentricity = 0.0;
     double inclination  = 0.0;   // stored in radians; 2D program ignores this though.
     std::string label;           // optional display name
+    double massSolar    = 0.0;   // body mass [Msun]; 0 = unspecified (drives BlackHole true-scale horizon)
 };
 
 struct Entry {
@@ -75,6 +76,7 @@ inline Entry parseEntry(const nlohmann::json& j) {
         b.eccentricity = jb.value("ecc", 0.0);
         b.inclination  = jb.value("inclination", 0.0);
         b.label        = jb.value("label", "");
+        b.massSolar    = jb.value("massSolar", 0.0);
         e.bodies.push_back(std::move(b));
     }
     e.visual3d   = j.value("visual3d",   nlohmann::json::object());

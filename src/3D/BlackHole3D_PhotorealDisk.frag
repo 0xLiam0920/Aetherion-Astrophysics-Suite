@@ -22,18 +22,16 @@ out vec4 FragColor;
 
 uniform sampler2D backgroundTex;
 uniform sampler2D diskTex;       // Unused (kept for compatibility)
-uniform vec2 resolution;
+// resolution, spinParameter, blackHoleRadius, blackHolePos, disk radii,
+// showDoppler, uTime, getRayDir() and hash12() live in bh3d_physics.glsl
+// (injected after #version by initShaders(); QUALITY is 1 for this shader).
 uniform vec2 pixelJitter;         // Sub-pixel ray offset [px] for progressive/SSAA accumulation
 uniform vec3 cameraPos;
 uniform vec3 cameraDir;
 uniform vec3 cameraUp;
 uniform float fov;
-uniform float blackHoleRadius;
 uniform int   horizonlessObject;
-uniform vec3 blackHolePos;
 
-uniform float diskInnerRadius;
-uniform float diskOuterRadius;
 uniform float diskHalfThickness;
 
 uniform float jetRadius;
@@ -42,7 +40,6 @@ uniform vec3  jetColor;
 
 uniform int showJets;          // Toggle jets on/off (J key)
 uniform int showBLR;           // Toggle Broad Line Region storm cloud torus (G key)
-uniform int showDoppler;        // Toggle Doppler beaming/shift (V key)
 uniform int showBlueshift;      // Toggle gravitational blueshift of background (U key)
 
 // BLR (Broad Line Region) parameters
@@ -50,11 +47,8 @@ uniform float blrInnerRadius;  // Inner edge of torus (~100s of Rs, compressed)
 uniform float blrOuterRadius;  // Outer edge of torus
 uniform float blrThickness;    // Half-height of torus cross-section
 
-uniform float uTime;           // Elapsed time for animation
-uniform float spinParameter;   // Dimensionless spin a* (0=Schwarzschild, 1=extremal Kerr)
-
 // Per-preset disk color parameters
-uniform float diskPeakTemp;          // Physical peak temperature [K]
+// diskPeakTemp (physical peak temperature [K]) lives in bh3d_physics.glsl.
 uniform float diskDisplayTempInner;  // Display temp at inner disk [K]
 uniform float diskDisplayTempOuter;  // Display temp at outer disk [K]
 uniform float diskSatBoostInner;     // Saturation multiplier at outer edge
@@ -518,17 +512,7 @@ vec3 orbBodyEmission(int idx, vec3 ro, vec3 rd) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
-vec3 getRayDir(vec2 uv, vec3 camPos, vec3 camDir, vec3 camUp, float fovDeg) {
-    float aspect = resolution.x / resolution.y;
-    float px = (uv.x - 0.5) * 2.0 * aspect;
-    float py = (uv.y - 0.5) * 2.0;
-    float angle = radians(fovDeg * 0.5);
-    float dz = 1.0 / tan(angle);
-    vec3 right = normalize(cross(camDir, camUp));
-    vec3 up = normalize(camUp);
-    vec3 forward = normalize(camDir);
-    return normalize(px * right + py * up + dz * forward);
-}
+// getRayDir() lives in bh3d_physics.glsl (shared with the simple shader).
 
 bool rayHitsSphere(vec3 ro, vec3 rd, vec3 center, float radius) {
     vec3 oc = ro - center;
@@ -550,11 +534,7 @@ vec3 sampleBackground(vec3 dir) {
     return bg;
 }
 
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
+// hash12() lives in bh3d_physics.glsl.
 
 // === 3D HASH & NOISE for volumetric clouds ===
 float hash13(vec3 p) {
@@ -735,20 +715,7 @@ float computeISCO(float a) {
     return 0.5 * rMsOverM;   // Rs = 2M, so r/Rs = (r/M)/2
 }
 
-// Unnormalised Page-Thorne flux shape at x=sqrt(r_M), given the precomputed
-// cubic roots (x1,x2,x3) of x^3-3x+2a and their log coefficients. Relativistic
-// Kerr generalisation of the Newtonian [1-sqrt(rISCO/r)]/r^3 (Page-Thorne 1974).
-float ptFluxShape(float x, float x0, float a,
-                  float x1, float x2, float x3,
-                  float c1, float c2, float c3) {
-    if (x <= x0) return 0.0;
-    float Q = x - x0 - 1.5 * a * log(x / x0)
-            - c1 * log((x - x1) / (x0 - x1))
-            - c2 * log((x - x2) / (x0 - x2))
-            - c3 * log((x - x3) / (x0 - x3));
-    float denom = x * x * x * x * (x * x * x - 3.0 * x + 2.0 * a);
-    return max(Q / denom, 0.0);
-}
+// ptFluxShape() lives in bh3d_physics.glsl (shared with the simple shader).
 
 // Normalised relativistic Novikov-Thorne temperature in [0,1] (T proportional
 // to F^(1/4)), peaking at 1.0 at the hottest annulus. Mirrors the CPU reference
@@ -778,9 +745,16 @@ float novikovThorneProfile(float rRs, float a) {
     return clamp(pow(F / peak, 0.25), 0.0, 1.0);
 }
 
+// Photon angular momentum of the current pixel's ray (Rs units), set once in
+// main(). Conserved along the geodesic, so it is valid at every disk crossing.
+float gDiskLz = 0.0;
+
 // Disk emission with physically-motivated Doppler shift for TON 618
 vec3 diskEmission(float r, float rIn, float rOut, vec3 hitPos, vec3 rayDir, vec3 bhPos) {
     if (r < rIn || r > rOut) return vec3(0.0);
+    // Scientific mode: exact Kerr redshift + Novikov-Thorne + blackbody radiance.
+    // None of the artistic layers below (pulse, spirals, hotspot, boosts) apply.
+    if (scientificMode == 1) return diskEmissionPhysical(r, gDiskLz, cameraPos);
     
     float tRad = (r - rIn) / (rOut - rIn);
     vec3 rel = hitPos - bhPos;
@@ -1471,8 +1445,10 @@ void traceRay(
         
         // Accumulate volumetric disk atmosphere ("puffing")
         if (!diskHit) {
-            vec3 atmo = diskAtmosphere(pos, bhPos, diskInnerRadius, diskOuterRadius);
-            jetAcc += atmo * stepLen;
+            if (scientificMode == 0) {   // artistic haze: off in scientific mode
+                vec3 atmo = diskAtmosphere(pos, bhPos, diskInnerRadius, diskOuterRadius);
+                jetAcc += atmo * stepLen;
+            }
             
             // Disk self-shadowing: accumulate optical depth near disk plane
             vec3 relSh = pos - bhPos;
@@ -1581,10 +1557,10 @@ void traceRay(
             vec3 rel = hitPos - bhPos;
             float r = length(rel.xz);
             
-            if (r > diskInnerRadius * 0.95 && r < diskOuterRadius * 1.05) {
-                vec3 emission = diskEmission(r, diskInnerRadius, diskOuterRadius, hitPos, newDir, bhPos);
+            if (r > diskInner() * 0.95 && r < diskOuterRadius * 1.05) {
+                vec3 emission = diskEmission(r, diskInner(), diskOuterRadius, hitPos, newDir, bhPos);
                 
-                float tRad = clamp((r - diskInnerRadius) / (diskOuterRadius - diskInnerRadius), 0.0, 1.0);
+                float tRad = clamp((r - diskInner()) / (diskOuterRadius - diskInner()), 0.0, 1.0);
                 float tau = mix(10.0, 3.0, tRad);
                 float alpha = 1.0 - exp(-tau);
                 
@@ -1607,6 +1583,8 @@ void traceRay(
                     // Moderate boost even at larger radii (lensed secondary image)
                     naturalRingBoost += 4.0 / float(diskCrossings);
                 }
+                // These boosts are artistic; scientific mode keeps pure radiance.
+                if (scientificMode == 1) naturalRingBoost = 1.0;
                 
                 // Apply disk self-shadowing attenuation
                 float selfShadow = exp(-diskShadowTau);
@@ -1701,6 +1679,7 @@ void main() {
     vec2 juv = fragUV + pixelJitter / resolution; // sub-pixel jitter for still-frame / beauty-shot accumulation (0 while navigating)
     vec3 rayDir = getRayDir(juv, cameraPos, cameraDir, cameraUp, fov); // Compute initial ray direction from camera through pixel
     vec3 rayOrigin = cameraPos;
+    gDiskLz = photonLz(cameraPos, rayDir);
     
     // No early sphere test here, the ray marcher handles absorption
     // after accumulating any disk/BLR/jet emission in front of the BH.
@@ -1722,7 +1701,7 @@ void main() {
     // This MUST apply to both absorbed and non-absorbed rays since the ring
     // straddles the shadow boundary.
     // ================================================================
-    if (bhStarNeutronCore == 0 && horizonlessObject == 0) {
+    if (bhStarNeutronCore == 0 && horizonlessObject == 0 && scientificMode == 0) {
         // Project BH center to screen-space for proper ring placement
         vec3 toBH = blackHolePos - cameraPos;
         vec3 camRight = normalize(cross(cameraDir, cameraUp));

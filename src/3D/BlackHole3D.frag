@@ -10,29 +10,24 @@ out vec4 FragColor;
 
 uniform sampler2D backgroundTex; // Background (star field, accretion disk, etc.)
 uniform sampler2D diskTex;       // Accretion disk RGBA (polar mapped)
-uniform vec2 resolution;         // Screen resolution
+// resolution, spinParameter, blackHoleRadius, blackHolePos, disk radii,
+// showDoppler, uTime, getRayDir() and hash12() live in bh3d_physics.glsl
+// (injected after #version by initShaders(); QUALITY is 0 for this shader).
 uniform vec2 pixelJitter;         // Sub-pixel ray offset [px] for progressive/SSAA accumulation
 uniform vec3 cameraPos;          // Camera position in world space
 uniform vec3 cameraDir;          // Camera forward direction
 uniform vec3 cameraUp;           // Camera up vector
 uniform float fov;               // Field of view in degrees
-uniform float blackHoleRadius;   // Schwarzschild radius (event horizon)
 uniform int   horizonlessObject;
-uniform vec3 blackHolePos;       // Black hole position in world space
 
-uniform float diskInnerRadius;   // world units
-uniform float diskOuterRadius;   // world units
 uniform float diskHalfThickness; // world units (half thickness)
 
 uniform float jetRadius;         // world units
 uniform float jetLength;         // world units (each direction)
 uniform vec3  jetColor;          // emissive color
 
-uniform int   showDoppler;       // Toggle Doppler shift (V key)
 uniform int   showBlueshift;     // Toggle gravitational blueshift of background (U key)
-uniform float spinParameter;     // Kerr spin parameter (0-1)
 
-uniform float uTime;             // Elapsed time for animation
 uniform int   showJets;          // Toggle jet emission (J key)     [ADDED 2026-04-24: was unconditional]
 uniform int   showBLR;           // Toggle Broad Line Region          [ADDED 2026-04-24: uniform existed on CPU, never declared here]
 uniform float blrInnerRadius;    // BLR inner edge (world units)     [ADDED 2026-04-24]
@@ -152,18 +147,7 @@ const int MAX_STEPS = 320;
 const float EPSILON = 1e-4;
 const float PI = 3.14159265359;
 
-// Utility: Convert screen UV to world ray direction - standard FPS type camera behavior.
-vec3 getRayDir(vec2 uv, vec3 camPos, vec3 camDir, vec3 camUp, float fov) {
-    float aspect = resolution.x / resolution.y;
-    float px = (uv.x - 0.5) * 2.0 * aspect;
-    float py = (uv.y - 0.5) * 2.0;
-    float angle = radians(fov * 0.5);
-    float dz = 1.0 / tan(angle);
-    vec3 right = normalize(cross(camDir, camUp));
-    vec3 up = normalize(camUp);
-    vec3 forward = normalize(camDir);
-    return normalize(px * right + py * up + dz * forward);
-}
+// getRayDir() now lives in bh3d_physics.glsl (shared with the photoreal shader).
 
 bool rayHitsSphere(vec3 ro, vec3 rd, vec3 center, float radius) {
     vec3 oc = ro - center;
@@ -189,11 +173,14 @@ vec3 sampleBackground(vec3 samplePos, vec3 bhPos) {
     return bg;
 }
 
+// Photon angular momentum of the current pixel's ray (Rs units), set once in main().
+float gDiskLz = 0.0;
+
 // Disk is assumed to lie in the XZ plane at bhPos (normal = +Y).
 vec4 sampleDiskRGBA(vec3 pos, vec3 bhPos) {
     vec3 rel = pos - bhPos;
     float r = length(rel.xz);
-    if (r < diskInnerRadius || r > diskOuterRadius) return vec4(0.0);
+    if (r < diskInner() || r > diskOuterRadius) return vec4(0.0);
     if (abs(rel.y) > diskHalfThickness) return vec4(0.0);
 
     // Keplerian differential rotation: inner disk orbits faster
@@ -209,7 +196,7 @@ vec4 sampleDiskRGBA(vec3 pos, vec3 bhPos) {
     vec4 d = texture(diskTex, uv);
     // Fade by radius so the hard edge of the texture doesn't look cut-out.
     float radFade = smoothstep(diskOuterRadius, diskOuterRadius * 0.92, r) *
-                    smoothstep(diskInnerRadius, diskInnerRadius * 1.10, r);
+                    smoothstep(diskInner(), diskInner() * 1.10, r);
     d.a *= radFade;
 
     // ===============Magnetic instability / MRI turbulence knots ────────────────────────
@@ -863,6 +850,7 @@ void main() {
     vec2 juv = fragUV + pixelJitter / resolution;
     vec3 rayDir = getRayDir(juv, cameraPos, cameraDir, cameraUp, fov);
     vec3 rayOrigin = cameraPos;
+    gDiskLz = photonLz(cameraPos, rayDir);
 
     // ===============Orbiting bodies (straight-ray approximation) ──────────────────────
     // Bodies are tested against the un-bent ray: lensing of the bodies
@@ -932,7 +920,9 @@ void main() {
 
         if (diskHit.a > 0.001) {
             vec3 rel = (bentPos - blackHolePos);
-            vec3 diskCol = applyDoppler(diskHit.rgb, rel, bentDir);
+            vec3 diskCol = (scientificMode == 1)
+                ? diskEmissionPhysical(length(rel.xz), gDiskLz, cameraPos)   // exact: replaces diskTex + Doppler
+                : applyDoppler(diskHit.rgb, rel, bentDir);
             vec3 bg = sampleBackground(bentPos + bentDir * max(diskOuterRadius * 0.5, 40.0), blackHolePos);
             if (bgFreqShift > 1.01) bg = applyFrequencyShift(bg, bgFreqShift);
             color = mix(bg, diskCol, diskHit.a);

@@ -5,6 +5,7 @@
       "ecc": 0.65,
       "inclination": -0.2,
       "label": "Secondary SMBH",
+      "massSolar": 150000000.0,
       "semiMajorRs": 24.2,
       "type": "BlackHole"
     },
@@ -85,7 +86,7 @@
       "disk": {
         "displayTempInner": 7000.0,
         "displayTempOuter": 2600.0,
-        "innerRadius": 2.2,
+        "innerRadius": "isco",
         "outerRadius": 9.0,
         "saturationBoostInner": 1.6,
         "saturationBoostOuter": 2.4

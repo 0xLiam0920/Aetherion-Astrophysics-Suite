@@ -88,6 +88,7 @@ uniform float bloom3Weight;
 uniform float bloom4Weight;
 uniform float exposure;
 uniform int   cinematicMode;
+uniform int   scientificMode;   // 1 = neutral display transform: no tint, grade, vignette, grain or CA
 uniform float uTime;
 vec3 ACESFilm(vec3 x) {
     const float a = 2.51;
@@ -132,7 +133,8 @@ vec3 anamorphicStreak(sampler2D tex, vec2 uv, float spread) {
 }
 void main() {
     vec3 scene;
-    if (cinematicMode == 1) {
+    bool fx = (cinematicMode == 1) && (scientificMode == 0);   // artistic post-FX
+    if (fx) {
         scene = chromaticAberration(sceneTex, fragUV, 0.003);
     } else {
         scene = texture(sceneTex, fragUV).rgb;
@@ -142,9 +144,10 @@ void main() {
     vec3 b3 = texture(bloom3Tex, fragUV).rgb;
     vec3 b4 = texture(bloom4Tex, fragUV).rgb;
     vec3 bloom = b1 * bloom1Weight + b2 * bloom2Weight + b3 * bloom3Weight + b4 * bloom4Weight;
-    vec3 warmTint = (cinematicMode == 1) ? vec3(1.0, 0.88, 0.62) : vec3(1.0, 0.85, 0.65);
+    vec3 warmTint = (scientificMode == 1) ? vec3(1.0)
+        : (cinematicMode == 1) ? vec3(1.0, 0.88, 0.62) : vec3(1.0, 0.85, 0.65);
     bloom *= warmTint;
-    if (cinematicMode == 1) {
+    if (fx) {
         vec3 streak = anamorphicStreak(bloom1Tex, fragUV, 0.004) * bloom1Weight
                     + anamorphicStreak(bloom2Tex, fragUV, 0.006) * bloom2Weight;
         bloom += streak * 0.35 * warmTint;
@@ -152,7 +155,7 @@ void main() {
     vec3 color = scene + bloom * bloomIntensity;
     color *= exposure;
     color = ACESFilm(color);
-    if (cinematicMode == 1) {
+    if (fx) {
         vec3 shadowTint = vec3(0.03, 0.05, 0.07);
         vec3 highlightTint = vec3(1.02, 0.96, 0.88);
         float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
